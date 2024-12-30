@@ -11,78 +11,143 @@ let pageTheme state =
     state |> ignore
     theme.light
 
-let footer () =
-    Daisy.footer [
-        prop.id "footer"
-        prop.className "p-2 text-base-content flex flex-row"
+let private navbar state dispatch =
+    Daisy.navbar [
+        prop.classes [ "bg-base-300"; "shadow-lg" ]
+        prop.id "navbar"
         prop.children [
-            Html.aside [
-                prop.className "w-full align-center"
-                prop.children [
-                    Html.a [
-                        prop.className "link link-hover link-primary text-lg font-bold"
-                        prop.href "https://efps.com/"
-                        prop.text "© 2024, EFPS, Inc."
-                    ]
-                ]
-            ]
+            Html.div [ prop.className "flex-1" ]
             Html.div [
-                prop.className "w-full justify-end min-h-10"
+                prop.className "flex-none"
                 prop.children [
-                    Html.a [
-                        prop.className "link link-hover link-primary text-lg font-bold"
-                        prop.href "https://efps.com/"
-                        prop.children [ Html.span [ prop.children [ bulbElectricEnergySvg 32 ] ] ]
+                    Daisy.menu [
+                        menu.horizontal
+                        menu.sm
+                        prop.children [
+                            Html.li [
+                                prop.id "menu-item-project"
+                                prop.key "menu-item-project"
+                                prop.children [
+                                    Html.a [
+                                        prop.className (
+                                            if state.currentUrl = [] || state.currentUrl = [ "projects" ] then
+                                                "active"
+                                            else
+                                                ""
+                                        )
+                                        prop.href "#projects"
+                                        prop.children [ Html.text "Projects" ]
+                                    ]
+                                ]
+                            ]
+                            Html.li [
+                                prop.id "menu-item-about"
+                                prop.key "menu-item-about"
+                                prop.children [
+                                    Html.a [
+                                        prop.className (if state.currentUrl = [ "about" ] then "active" else "")
+                                        prop.href "#about"
+                                        prop.children [ Html.text "About" ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ] // Menu
+                ]
+            ] // Navbar children flex-none
+        ] // Navbar children
+    ] // Navbar
+
+
+let project (prj: ProjectData) dispatch =
+    let title = sprintf "%s [%s]" prj.name prj.ide
+
+    Daisy.card [
+        prop.classes [ "shadow-lg"; "p-2" ]
+        prop.children [
+            Daisy.cardBody [
+                Daisy.cardTitle [ prop.children [ Html.text title ] ]
+                Html.p [ prop.children [ Html.text prj.description ] ]
+                Html.p [ prop.children [ Html.text prj.path ] ]
+                Daisy.cardActions [
+                    Daisy.button.button [
+                        prop.classes [ "btn-xs"; "btn-outline" ]
+                        prop.children [ Html.text "Open" ]
+                        prop.onClick (fun _ -> printfn "Open project: %s" prj.path)
                     ]
                 ]
             ]
         ]
     ]
 
+let private projects state dispatch =
+    Html.div [
+        prop.classes [ "flex"; "flex-col"; "p-4"; "gap-4" ]
+
+        prop.id "projects"
+        prop.children [
+            Html.div [
+                prop.id "projects-cards-grid"
+                prop.classes [ "grid"; "grid-cols-3"; "gap-4" ]
+                prop.children [
+                    for prj in state.projects do
+                        yield project prj dispatch
+                ]
+            ]
+        ]
+    ]
+
+let private about state =
+    Html.div [
+        prop.className "p-10"
+        prop.id "about"
+        prop.key "about"
+        prop.children [
+            Html.h1 [ prop.className "text-4xl font-bold"; prop.children [ Html.text "About" ] ]
+            Html.p [
+                prop.className "text-lg"
+                prop.children [ Html.text "This is the about page" ]
+            ]
+        ]
+    ]
+
+let private page404 state =
+
+    let p = sprintf "Page `%A` not found." state.currentUrl
+
+    Html.div [
+        prop.className "p-10"
+        prop.id "404"
+        prop.children [
+            Html.h1 [ prop.className "text-4xl font-bold"; prop.children [ Html.text "404" ] ]
+            Html.p [ prop.className "text-lg"; prop.children [ Html.text p ] ]
+        ]
+    ]
+
 let view state dispatch =
     let page =
         Html.div [
-            prop.className "font-mono bg-base-100 text-base-content h-screen"
+            prop.classes [
+                "flex"
+                "flex-col"
+                "h-screen"
+                "overflow-hidden"
+                "bg-base-100"
+                "text-base-content"
+                "font-mono"
+            ]
+            prop.id "app"
             pageTheme state // Apply the theme
             prop.children [
-                Daisy.drawer [
-                    prop.id "drawer"
-                    prop.className "lg:drawer-open"
+                navbar state dispatch
+                Html.div [
+                    prop.classes [ "mt-0"; "overflow-y-auto"; "h-screen" ]
                     prop.children [
-                        Daisy.drawerToggle [
-                            prop.id "drawer-toggle"
-                            prop.label "Open drawer"
-                            prop.title "Open drawer"
-                        ]
-                        Daisy.drawerContent [
-                            prop.className "flex flex-col h-full justify-center"
-                            prop.children [
-                                // navbar here
-                                Html.div [ // content
-                                    prop.className "max-w-screen-lg mx-auto"
-                                    prop.id "content"
-                                    prop.children [
-                                        Html.h1 [ prop.text "Drawer" ]
-                                        Html.p [ prop.text "This is a drawer component" ]
-                                    ]
-                                ]
-                                Html.div [ prop.className "flex-grow" ]
-                                Html.div [ prop.className "w-full h-0.5 bg-gray-400" ]
-                                footer ()
-                            ]
-                        ]
-                        Daisy.drawerSide [
-                            prop.children [
-                                Daisy.drawerOverlay [ prop.htmlFor "drawer-toggle" ]
-                                Html.div [
-                                    prop.className "p-4"
-                                    prop.children [
-                                        Html.h1 [ prop.text "Drawer" ]
-                                        Html.p [ prop.text "This is a drawer overlay" ]
-                                    ]
-                                ]
-                            ]
-                        ]
+                        match state.currentUrl with
+                        | []
+                        | [ "projects" ] -> projects state dispatch
+                        | [ "about" ] -> about state
+                        | _ -> page404 state
                     ]
                 ]
             ]

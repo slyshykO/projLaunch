@@ -1,0 +1,3 @@
+# Apply specific settings for a targeted subfolder
+[src/View.fs]
+fsharp_experimental_elmish = true
