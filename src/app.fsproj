@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="index.html" />
+    <None Include="index.css" />
+
+    <Compile Include="AsyncOps.fs" />
+    <Compile Include="Extensions.fs" />
+    <Compile Include="ReactVersion.fs" />
+    <Compile Include="State.fs" />
+    <Compile Include="SvgIcons.fs" />
+    <Compile Include="View.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Fable.Core" Version="4.3.0" />
+    <PackageReference Include="Fable.Elmish" Version="4.2.0" />
+    <PackageReference Include="Fable.Elmish.React" Version="4.0.0" />
+    <PackageReference Include="Feliz" Version="2.9.0" />
+    <PackageReference Include="Feliz.DaisyUI" Version="4.2.1" />
+    <PackageReference Include="Feliz.Router" Version="4.0.0" />
+    <PackageReference Include="Thoth.Json" Version="10.4.0" />
+  </ItemGroup>
+
+</Project>
