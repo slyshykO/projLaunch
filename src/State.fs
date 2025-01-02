@@ -5,6 +5,8 @@ open Feliz.Router
 open System
 open Thoth.Json
 
+open Tauri
+
 module Debug =
 
 #if DEBUG

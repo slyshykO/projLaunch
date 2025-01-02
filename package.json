@@ -4,12 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev":   "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js -e .js --sourceMaps --configuration Debug --run vite --mode development",
+    "dev": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js -e .js --sourceMaps --configuration Debug --run vite --mode development",
     "start": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js --run vite serve",
     "build": "dotnet tool restore && dotnet fable src -o ./src/bin/fable-js --run vite build",
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.1.1",
     "daisyui": "^4.12.23",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
