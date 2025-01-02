@@ -4,12 +4,15 @@ open Elmish
 open Feliz.Router
 open System
 open Thoth.Json
+open Fable.Core.JsInterop
+
 
 open Tauri
 
 module Debug =
 
 #if DEBUG
+    [<Literal>]
     let Debug = true
 
     let projectsJsonStr =
@@ -74,7 +77,9 @@ module Debug =
     ]
     """
 #else
+    [<Literal>]
     let Debug = false
+
     let projectsJsonStr = ""
 #endif
 
@@ -121,11 +126,15 @@ let listOfProjectDataFromJsonStr (jsonStr: string) =
     with ex ->
         failwith ex.Message
 
-type SignIn = { nik: string; role: string }
+type SignIn = { nick: string; role: string }
 
 type Msg =
     | Empty
     | UrlChanged of string list
+    | Greet of string
+    | OnGreetSuccess of string
+
+
 
 type State =
     { currentUrl: string list
@@ -158,3 +167,15 @@ let update msg state =
     match msg with
     | Empty -> state, Cmd.none
     | UrlChanged url -> { state with currentUrl = url }, Cmd.none
+
+    | Greet nick ->
+        let greetPromise n =
+            promise {
+                let! (response: string) = (Tauri.invoke ("greet", (createObj [ "name" ==> n ])))
+                return response
+            }
+
+        state, Cmd.OfPromise.perform greetPromise nick OnGreetSuccess
+    | OnGreetSuccess response ->
+        let newState = { state with value = response }
+        newState, Cmd.none

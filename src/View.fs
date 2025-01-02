@@ -16,10 +16,15 @@ let private navbar state dispatch =
         prop.classes [ "bg-base-300"; "shadow-lg" ]
         prop.id "navbar"
         prop.children [
-            Html.div [ prop.className "flex-1" ]
+            Html.div [ prop.className "flex-1"; prop.children [ Html.text state.value ] ]
             Html.div [
                 prop.className "flex-none"
                 prop.children [
+                    Daisy.button.button [
+                        prop.classes [ "btn"; "btn-square"; "btn-ghost" ]
+                        prop.children [ Html.text "greet" ]
+                        prop.onClick (fun _ -> dispatch (Greet "Alex"))
+                    ]
                     Daisy.menu [
                         menu.horizontal
                         menu.sm
