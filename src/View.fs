@@ -16,15 +16,16 @@ let private navbar state dispatch =
         prop.classes [ "bg-base-300"; "shadow-lg" ]
         prop.id "navbar"
         prop.children [
-            Html.div [ prop.className "flex-1"; prop.children [ Html.text state.value ] ]
+            //Html.div [ prop.className "flex-1"; prop.children [ Html.text state.value ] ]
+            Html.div [ prop.className "flex-1" ]
             Html.div [
                 prop.className "flex-none"
                 prop.children [
-                    Daisy.button.button [
-                        prop.classes [ "btn"; "btn-square"; "btn-ghost" ]
-                        prop.children [ Html.text "greet" ]
-                        prop.onClick (fun _ -> dispatch (Greet "Alex"))
-                    ]
+                    // Daisy.button.button [
+                    //     prop.classes [ "btn"; "btn-square"; "btn-ghost" ]
+                    //     prop.children [ Html.text "greet" ]
+                    //     prop.onClick (fun _ -> dispatch (Greet "Alex"))
+                    // ]
                     Daisy.menu [
                         menu.horizontal
                         menu.sm
@@ -68,7 +69,7 @@ let project (prj: ProjectData) dispatch =
     let title = sprintf "%s [%s]" prj.name prj.ide
 
     Daisy.card [
-        prop.classes [ "shadow-lg"; "p-2" ]
+        prop.classes [ "shadow-lg"; "p-2"; "bg-base-200" ]
         prop.children [
             Daisy.cardBody [
                 Daisy.cardTitle [ prop.children [ Html.text title ] ]
@@ -112,6 +113,10 @@ let private about state =
             Html.p [
                 prop.className "text-lg"
                 prop.children [ Html.text "This is the about page" ]
+            ]
+            Html.p [
+                prop.className "text-lg"
+                prop.children [ Html.text (sprintf "Data dir: %s" state.dataDir) ]
             ]
         ]
     ]

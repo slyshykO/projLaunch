@@ -130,9 +130,13 @@ type SignIn = { nick: string; role: string }
 
 type Msg =
     | Empty
+    | Start
     | UrlChanged of string list
     | Greet of string
     | OnGreetSuccess of string
+    | GetDataDir
+    | OnGetDataDir of string
+    | OnGetDataDirError of exn
 
 
 
@@ -140,6 +144,7 @@ type State =
     { currentUrl: string list
       signIn: option<SignIn>
       value: string
+      dataDir: string
       projects: ProjectData list }
 
 let getCurrentUrl () = Browser.Dom.window.location.href
@@ -157,25 +162,52 @@ let init () =
     printfn "Projects: %A" pd
 
     // Initial state
-    { currentUrl = currentUrl
-      signIn = None
-      value = "Feliz"
-      projects = pd },
-    Cmd.ofMsg Empty
+    let state =
+        { currentUrl = currentUrl
+          signIn = None
+          value = "Feliz"
+          dataDir = ""
+          projects = pd }
+
+    state, Cmd.ofMsg Start
 
 let update msg state =
     match msg with
     | Empty -> state, Cmd.none
+    | Start ->
+        if Tauri.isTauri () then
+            state, Cmd.batch [ Cmd.ofMsg GetDataDir ]
+        else
+            state, Cmd.none
+
     | UrlChanged url -> { state with currentUrl = url }, Cmd.none
 
     | Greet nick ->
         let greetPromise n =
             promise {
-                let! (response: string) = (Tauri.invoke ("greet", (createObj [ "name" ==> n ])))
+                let! (response: string) = (Tauri.invoke ("greet", (Some(createObj [ "name" ==> n ]))))
                 return response
             }
 
         state, Cmd.OfPromise.perform greetPromise nick OnGreetSuccess
     | OnGreetSuccess response ->
         let newState = { state with value = response }
+        newState, Cmd.none
+
+    | GetDataDir ->
+        let getDataDirPromise () =
+            promise {
+                let! (response: string) = (Tauri.invoke ("get_data_dir", None))
+                return response
+            }
+
+        state, Cmd.OfPromise.either getDataDirPromise () OnGetDataDir OnGetDataDirError
+
+    | OnGetDataDir response ->
+        let newState = { state with dataDir = response }
+        newState, Cmd.none
+
+    | OnGetDataDirError exn ->
+        let e = sprintf "Error: %A" exn
+        let newState = { state with dataDir = e }
         newState, Cmd.none

@@ -16,6 +16,8 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "ts2fable": "^0.7.1",
+    "@glutinum/cli": "^0.12.0",
     "@tauri-apps/cli": "^2",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.20",
