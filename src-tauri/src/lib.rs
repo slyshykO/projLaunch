@@ -100,6 +100,10 @@ fn ide_to_command(ide: &str) -> String {
         "code" => "code".to_string(),
         "vscode" => "code".to_string(),
         "idea" => "idea".to_string(),
+        s if s.contains("studio") && s.contains("2022") => {
+            r"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\devenv.exe"
+                .to_string()
+        }
         _ => "code".to_string(),
     }
 }
@@ -139,7 +143,7 @@ async fn rewrite_project_file(
     let dir = app_handle.path().app_data_dir()?;
     let projects_dir = dir.join("projects");
     // get filename of project with id
-    let project_file: Vec<_> = fs_err::read_dir(projects_dir)?
+    let project_file: Vec<_> = fs_err::read_dir(&projects_dir)?
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
@@ -153,7 +157,8 @@ async fn rewrite_project_file(
         })
         .collect();
     if project_file.len() == 0 {
-        rewrite_file_content(id, content)?; // create new file
+        let new_file = projects_dir.join(id);
+        rewrite_file_content(new_file, content)?; // create new file
     } else {
         let project_file = project_file[0].clone();
         rewrite_file_content(project_file, content)?;

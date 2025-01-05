@@ -5,7 +5,24 @@ open Feliz.Router
 open Feliz.DaisyUI
 
 open state
-open svgIcons
+
+module JsInterop =
+    open Fable.Core
+
+    [<Emit("$0.showModal()")>]
+    let inline showModal (modalId: string) : unit = jsNative
+
+    [<Emit("modal-add-project.showModal()")>]
+    let inline showModalAddProject () : unit = jsNative
+
+    [<Import("_showModalDialog", "./_ReactVersion.js")>]
+    let _showModalDialog: unit -> unit = jsNative
+
+    [<Import("_closeModalDialog", "./_ReactVersion.js")>]
+    let _closeModalDialog: unit -> unit = jsNative
+
+    let inline showModalDialog () = _showModalDialog ()
+    let inline closeModalDialog () = _closeModalDialog ()
 
 let pageTheme state =
     state |> ignore
@@ -15,9 +32,20 @@ let private navbar state dispatch =
     Daisy.navbar [
         prop.classes [ "bg-base-300"; "shadow-lg" ]
         prop.id "navbar"
+        prop.key "navbar"
         prop.children [
             //Html.div [ prop.className "flex-1"; prop.children [ Html.text state.value ] ]
-            Html.div [ prop.className "flex-1" ]
+            Html.div [
+                prop.className "flex-1"
+                prop.children [
+                    Daisy.button.button [
+                        button.primary
+                        button.sm
+                        prop.text "Add project"
+                        prop.onClick (fun _ -> JsInterop.showModalDialog ())
+                    ]
+                ]
+            ]
             Html.div [
                 prop.className "flex-none"
                 prop.children [
@@ -148,6 +176,136 @@ let private page404 state =
         ]
     ]
 
+let private modalAddProject state dispatch =
+    Html.dialog [
+        prop.id "modal-add-project"
+        prop.key "modal-add-project"
+        prop.classes [ "modal"; "active" ]
+        prop.children [
+            Html.div [
+                prop.classes [ "modal-box" ]
+                prop.children [
+                    Html.form [
+                        prop.method "dialog"
+                        prop.children [
+                            Html.button [
+                                prop.classes [
+                                    "btn"
+                                    "btn-xs"
+                                    "btn-square"
+                                    "btn-ghost"
+                                    "absolute"
+                                    "top-2"
+                                    "right-2"
+                                ]
+                                prop.children [ Html.text "✕" ]
+                            ]
+                        ]
+                    ]
+                    Html.h3 [ prop.children [ Html.text "Add project" ] ]
+                    Html.form [
+                        prop.id "form-add-project"
+                        prop.children [
+                            Daisy.formControl [
+                                Daisy.label [ Daisy.labelText [ Html.text "Name" ] ]
+                                Daisy.input [
+                                    input.bordered
+                                    input.sm
+                                    prop.id "form-add-project-name"
+                                    prop.placeholder "Project name"
+                                    prop.required true
+                                ]
+                                Daisy.label [ Daisy.labelText [ Html.text "Description" ] ]
+                                Daisy.input [
+                                    prop.id "form-add-project-description"
+                                    input.bordered
+                                    input.sm
+                                    prop.placeholder "Project description"
+                                ]
+                                Daisy.label [ Daisy.labelText [ Html.text "Solution/Workspace" ] ]
+                                Daisy.input [
+                                    prop.id "form-add-project-file"
+                                    input.bordered
+                                    input.sm
+                                    prop.placeholder "Solution/Workspace file"
+                                ]
+                                Daisy.label [ Daisy.labelText [ Html.text "IDE" ] ]
+                                Daisy.select [
+                                    select.bordered
+                                    select.sm
+                                    prop.id "form-add-project-ide"
+                                    prop.children [
+                                        Html.option [ prop.value "vscode"; prop.children [ Html.text "VSCode" ] ]
+                                        Html.option [
+                                            prop.value "visualstudio2022"
+                                            prop.children [ Html.text "Visual Studio 2022" ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                    Html.div [
+                        prop.classes [ "modal-action" ]
+                        prop.children [
+                            Daisy.button.label [
+                                button.primary
+                                button.sm
+                                prop.text "Accept"
+                                prop.onClick (fun _ ->
+                                    printfn "Accept"
+                                    //get form values
+                                    let nameEl =
+                                        Browser.Dom.document.getElementById "form-add-project-name"
+                                        :?> Browser.Types.HTMLInputElement
+
+                                    let descriptionEl =
+                                        Browser.Dom.document.getElementById "form-add-project-description"
+                                        :?> Browser.Types.HTMLInputElement
+
+                                    let fileEl =
+                                        Browser.Dom.document.getElementById "form-add-project-file"
+                                        :?> Browser.Types.HTMLInputElement
+
+                                    let ideEl =
+                                        Browser.Dom.document.getElementById "form-add-project-ide"
+                                        :?> Browser.Types.HTMLSelectElement
+
+                                    let name = nameEl.value
+                                    let description = descriptionEl.value
+                                    let file = fileEl.value
+                                    let ide = ideEl.value
+
+                                    let pd =
+                                        { id = System.Guid.NewGuid().ToString()
+                                          name = name
+                                          lastOpened = System.DateTime.Now
+                                          description = description
+                                          path = file
+                                          ide = ide
+                                          environment = Map.empty }
+
+                                    let file_name = sprintf "%s-%s.%s" pd.name pd.id "json"
+                                    let pd_json = pd |> ProjectData.toJson
+
+                                    JsInterop.closeModalDialog ()
+                                    dispatch (AddOrUpdateProject(file_name, pd_json)))
+                            ]
+                            Daisy.button.label [
+                                button.primary
+                                button.sm
+                                prop.text "Cancel"
+                                prop.onClick (fun _ ->
+                                    printfn "Cancel"
+                                    JsInterop.closeModalDialog ())
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+
 let view state dispatch =
     let page =
         Html.div [
@@ -161,14 +319,17 @@ let view state dispatch =
                 "font-mono"
             ]
             prop.id "app"
+            prop.key "app"
             pageTheme state // Apply the theme
             prop.children [
                 navbar state dispatch
+                modalAddProject state dispatch
                 Html.div [
+                    prop.key "page-internal-div"
                     prop.classes [ "mt-0"; "overflow-y-auto"; "h-screen" ]
                     prop.children [
                         match state.currentUrl with
-                        | []
+                        | [] -> projects state dispatch
                         | [ "projects" ] -> projects state dispatch
                         | [ "about" ] -> about state
                         | _ -> page404 state

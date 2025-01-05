@@ -306,9 +306,8 @@ let update msg state =
                 err <- List.append err [ s ]
                 ()
 
-        // let newProjects = List.append state.projects prj
-        // //make new projects unique
-        // let prj = newProjects |> List.distinct
+        // sort by last opened
+        prj <- prj |> List.sortBy (fun p -> p.lastOpened)
 
         let newState =
             { state with
