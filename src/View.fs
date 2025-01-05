@@ -69,7 +69,7 @@ let project (prj: ProjectData) dispatch =
     let title = sprintf "%s [%s]" prj.name prj.ide
 
     Daisy.card [
-        prop.classes [ "shadow-lg"; "p-2"; "bg-base-200" ]
+        prop.classes [ "shadow-lg"; "p-2"; "bg-base-200"; "min-w-[350px]" ]
         prop.children [
             Daisy.cardBody [
                 Daisy.cardTitle [ prop.children [ Html.text title ] ]
@@ -79,7 +79,9 @@ let project (prj: ProjectData) dispatch =
                     Daisy.button.button [
                         prop.classes [ "btn-xs"; "btn-outline" ]
                         prop.children [ Html.text "Open" ]
-                        prop.onClick (fun _ -> printfn "Open project: %s" prj.path)
+                        prop.onClick (fun _ ->
+                            printfn "Open project: %s" prj.id
+                            dispatch (OpenProject prj.id))
                     ]
                 ]
             ]
@@ -107,19 +109,31 @@ let private about state =
     Html.div [
         prop.className "p-10"
         prop.id "about"
-        prop.key "about"
         prop.children [
             Html.h1 [ prop.className "text-4xl font-bold"; prop.children [ Html.text "About" ] ]
             Html.p [
                 prop.className "text-lg"
-                prop.children [ Html.text "This is the about page" ]
+                prop.children [ Html.text (sprintf "Version   : %s" state.appVersion) ]
             ]
             Html.p [
                 prop.className "text-lg"
-                prop.children [ Html.text (sprintf "Data dir: %s" state.dataDir) ]
+                prop.children [ Html.text (sprintf "Data dir  : %s" state.appDataDir) ]
+            ]
+            Html.p [
+                prop.className "text-lg"
+                prop.children [ Html.text (sprintf "Config dir: %s" state.appConfigDir) ]
+            ]
+            Daisy.divider []
+            Html.div [
+                prop.children [
+                    for e in state.errors do
+                        yield Html.p [ Html.text (sprintf "%s" e) ]
+                ]
             ]
         ]
+
     ]
+
 
 let private page404 state =
 

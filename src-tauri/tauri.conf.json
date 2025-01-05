@@ -1,6 +1,5 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-
   "productName": "projlaunch",
   "version": "0.1.0",
   "identifier": "com.projlaunch.app",
@@ -8,16 +7,15 @@
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
     "devUrl": "http://localhost:5173",
-    
     "frontendDist": "../dist"
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "projlaunch",
-        "width": 800,
-        "height": 600
+        "title": "Project Launcher",
+        "width": 1000,
+        "height": 800
       }
     ],
     "security": {
