@@ -307,7 +307,7 @@ let update msg state =
                 ()
 
         // sort by last opened
-        prj <- prj |> List.sortBy (fun p -> p.lastOpened)
+        prj <- prj |> List.sortByDescending (fun p -> p.lastOpened)
 
         let newState =
             { state with
