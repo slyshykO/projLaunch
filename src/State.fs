@@ -211,7 +211,7 @@ let update msg state =
         if Tauri.isTauri () then
             state,
             Cmd.batch
-                [ Cmd.ofMsg (GetProjects 0)
+                [ Cmd.ofMsg (GetProjects 50)
                   Cmd.ofMsg GetConfigDir
                   Cmd.ofMsg GetDataDir
                   Cmd.ofMsg GetAppVersion ]
