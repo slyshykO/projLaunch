@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -30,7 +30,7 @@
     <PackageReference Include="Feliz" Version="2.9.0" />
     <PackageReference Include="Feliz.DaisyUI" Version="4.2.1" />
     <PackageReference Include="Feliz.Router" Version="4.0.0" />
-    <PackageReference Include="Thoth.Json" Version="10.4.0" />
+    <PackageReference Include="Thoth.Json" Version="10.4.1" />
   </ItemGroup>
 
 </Project>
