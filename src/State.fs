@@ -140,6 +140,7 @@ type SignIn = { nick: string; role: string }
 type Msg =
     | Empty
     | Start
+    | OnStart of unit
     | UrlChanged of string list
     | Greet of string
     | OnGreetSuccess of string
@@ -208,6 +209,15 @@ let update msg state =
     match msg with
     | Empty -> state, Cmd.none
     | Start ->
+        let delayPromise () =
+            promise {
+                do! Promise.sleep 100
+                return ()
+            }
+
+        state, Cmd.OfPromise.perform delayPromise () OnStart
+
+    | OnStart() ->
         if Tauri.isTauri () then
             state,
             Cmd.batch
@@ -235,6 +245,7 @@ let update msg state =
     | GetDataDir ->
         let getDataDirPromise () =
             promise {
+                do! Promise.sleep 50
                 let! (response: string) = Tauri.appDataDir ()
                 return response
             }
@@ -253,6 +264,7 @@ let update msg state =
     | GetConfigDir ->
         let getConfigDirPromise () =
             promise {
+                do! Promise.sleep 50
                 let! (response: string) = Tauri.appConfigDir ()
                 return response
             }
@@ -269,6 +281,7 @@ let update msg state =
     | GetAppVersion ->
         let getAppVersionPromise () =
             promise {
+                do! Promise.sleep 50
                 let! (response: string) = Tauri.getVersion ()
                 return response
             }
