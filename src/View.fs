@@ -28,7 +28,7 @@ let pageTheme state =
     state |> ignore
     theme.light
 
-let private navbar state dispatch =
+let private navbar state _dispatch =
     Daisy.navbar [
         prop.classes [ "bg-base-300"; "shadow-lg" ]
         prop.id "navbar"

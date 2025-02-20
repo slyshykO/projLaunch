@@ -242,7 +242,7 @@ let update msg state =
     | Greet nick ->
         let greetPromise n =
             promise {
-                let! (response: string) = (Tauri.invoke ("greet", (Some(createObj [ "name" ==> n ]))))
+                let! (response: string) = Tauri.invoke ("greet", Some(createObj [ "name" ==> n ]))
                 return response
             }
 
@@ -346,7 +346,7 @@ let update msg state =
     | OpenProject id ->
         let openProjectPromise p =
             promise {
-                do! (Tauri.invoke ("open_project", (Some(createObj [ "id" ==> p ]))))
+                do! Tauri.invoke ("open_project", Some(createObj [ "id" ==> p ]))
                 return id
             }
 
@@ -362,7 +362,7 @@ let update msg state =
         let prjJson = ProjectData.toJson prj
 
         let newState = { state with projects = newProjects }
-        newState, (Cmd.ofMsg (AddOrUpdateProject(id, prjJson)))
+        newState, Cmd.ofMsg (AddOrUpdateProject(id, prjJson))
 
     | OnOpenProjectError exn ->
         let e = sprintf "Error: %A" exn
@@ -373,13 +373,13 @@ let update msg state =
     | AddOrUpdateProject(id, json) ->
         let addOrUpdateProjectPromise (i, j) =
             promise {
-                do! Tauri.invoke ("rewrite_project_file", (Some(createObj [ "id" ==> i; "content" ==> j ])))
+                do! Tauri.invoke ("rewrite_project_file", Some(createObj [ "id" ==> i; "content" ==> j ]))
                 return id
             }
 
         state,
         Cmd.OfPromise.either addOrUpdateProjectPromise (id, json) OnAddOrUpdateProjectSuccess OnAddOrUpdateProjectError
-    | OnAddOrUpdateProjectSuccess id ->
+    | OnAddOrUpdateProjectSuccess _id ->
         let newState =
             { state with
                 formAddProjectName = ""
