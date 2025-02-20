@@ -213,7 +213,9 @@ let private modalAddProject state dispatch =
                                     input.sm
                                     prop.id "form-add-project-name"
                                     prop.placeholder "Project name"
+                                    prop.value state.formAddProjectName
                                     prop.required true
+                                    prop.onChange (fun newValue -> dispatch (FormAddProjectNameChanged newValue))
                                 ]
                                 Daisy.label [ Daisy.labelText [ Html.text "Description" ] ]
                                 Daisy.input [
@@ -221,6 +223,8 @@ let private modalAddProject state dispatch =
                                     input.bordered
                                     input.sm
                                     prop.placeholder "Project description"
+                                    prop.value state.formAddProjectDescription
+                                    prop.onChange (fun newValue -> dispatch (FormAddProjectDescriptionChanged newValue))
                                 ]
                                 Daisy.label [ Daisy.labelText [ Html.text "Solution/Workspace" ] ]
                                 Daisy.input [
@@ -228,6 +232,8 @@ let private modalAddProject state dispatch =
                                     input.bordered
                                     input.sm
                                     prop.placeholder "Solution/Workspace file"
+                                    prop.value state.formAddProjectPath
+                                    prop.onChange (fun newValue -> dispatch (FormAddProjectPathChanged newValue))
                                 ]
                                 Daisy.label [ Daisy.labelText [ Html.text "IDE" ] ]
                                 Daisy.select [

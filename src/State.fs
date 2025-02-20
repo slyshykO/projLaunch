@@ -110,7 +110,7 @@ type ProjectData =
     static member Default() =
         { id = ""
           name = ""
-          lastOpened = (DateTime.Now)
+          lastOpened = DateTime.Now
           description = ""
           path = ""
           ide = ""
@@ -166,6 +166,9 @@ type Msg =
     | OnAddOrUpdateProjectSuccess of string
     | OnAddOrUpdateProjectError of exn
 
+    | FormAddProjectNameChanged of string
+    | FormAddProjectPathChanged of string
+    | FormAddProjectDescriptionChanged of string
 
 
 type State =
@@ -176,7 +179,10 @@ type State =
       appDataDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
       appConfigDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
       errors: string list
-      projects: ProjectData list }
+      projects: ProjectData list
+      formAddProjectName: string
+      formAddProjectPath: string
+      formAddProjectDescription: string }
 
 let getCurrentUrl () = Browser.Dom.window.location.href
 
@@ -201,7 +207,10 @@ let init () =
           appDataDir = ""
           appConfigDir = ""
           errors = []
-          projects = pd }
+          projects = pd
+          formAddProjectName = ""
+          formAddProjectPath = ""
+          formAddProjectDescription = "" }
 
     state, Cmd.ofMsg Start
 
@@ -370,9 +379,33 @@ let update msg state =
 
         state,
         Cmd.OfPromise.either addOrUpdateProjectPromise (id, json) OnAddOrUpdateProjectSuccess OnAddOrUpdateProjectError
-    | OnAddOrUpdateProjectSuccess id -> state, Cmd.ofMsg (GetProjects 1000)
+    | OnAddOrUpdateProjectSuccess id ->
+        let newState =
+            { state with
+                formAddProjectName = ""
+                formAddProjectPath = ""
+                formAddProjectDescription = "" }
+
+        newState, Cmd.ofMsg (GetProjects 1000)
     | OnAddOrUpdateProjectError exn ->
         let e = sprintf "Error: %A" exn
         let newErrors = List.append state.errors [ e ]
         let newState = { state with errors = newErrors }
+        newState, Cmd.none
+
+    | FormAddProjectNameChanged v ->
+        let newState = { state with formAddProjectName = v }
+
+        newState, Cmd.none
+
+    | FormAddProjectDescriptionChanged v ->
+        let newState =
+            { state with
+                formAddProjectDescription = v }
+
+        newState, Cmd.none
+
+    | FormAddProjectPathChanged v ->
+        let newState = { state with formAddProjectPath = v }
+
         newState, Cmd.none
