@@ -42,8 +42,6 @@ let private navbar state _dispatch =
                         button.primary
                         button.sm
                         prop.text "Add project"
-                        prop.id "btn-add-project"
-                        prop.type' "button"
                         prop.onClick (fun _ -> JsInterop.showModalDialog ())
                     ]
                 ]
@@ -208,9 +206,10 @@ let private modalAddProject state dispatch =
                     Html.form [
                         prop.id "form-add-project"
                         prop.children [
-                            Daisy.fieldset [
-                                Daisy.fieldsetLabel "Name"
+                            Daisy.formControl [
+                                Daisy.label [ Daisy.labelText [ Html.text "Name" ] ]
                                 Daisy.input [
+                                    input.bordered
                                     input.sm
                                     prop.id "form-add-project-name"
                                     prop.placeholder "Project name"
@@ -218,24 +217,27 @@ let private modalAddProject state dispatch =
                                     prop.required true
                                     prop.onChange (fun newValue -> dispatch (FormAddProjectNameChanged newValue))
                                 ]
-                                Daisy.fieldsetLabel "Description"
+                                Daisy.label [ Daisy.labelText [ Html.text "Description" ] ]
                                 Daisy.input [
                                     prop.id "form-add-project-description"
+                                    input.bordered
                                     input.sm
                                     prop.placeholder "Project description"
                                     prop.value state.formAddProjectDescription
                                     prop.onChange (fun newValue -> dispatch (FormAddProjectDescriptionChanged newValue))
                                 ]
-                                Daisy.fieldsetLabel "Solution/Workspace"
+                                Daisy.label [ Daisy.labelText [ Html.text "Solution/Workspace" ] ]
                                 Daisy.input [
                                     prop.id "form-add-project-file"
+                                    input.bordered
                                     input.sm
                                     prop.placeholder "Solution/Workspace file"
                                     prop.value state.formAddProjectPath
                                     prop.onChange (fun newValue -> dispatch (FormAddProjectPathChanged newValue))
                                 ]
-                                Daisy.fieldsetLabel "IDE"
+                                Daisy.label [ Daisy.labelText [ Html.text "IDE" ] ]
                                 Daisy.select [
+                                    select.bordered
                                     select.sm
                                     prop.id "form-add-project-ide"
                                     prop.children [
