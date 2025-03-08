@@ -1,15 +1,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { viteSingleFile } from 'vite-plugin-singlefile'
-import { compression } from 'vite-plugin-compression2'
-import { readFileSync} from 'node:fs'
+//import { compression } from 'vite-plugin-compression2'
+import { readFileSync } from 'node:fs'
 import { globSync } from 'glob'
+import tailwindcss from '@tailwindcss/vite';
 
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
     //plugins: [react(), viteTest(), viteSingleFile(), compression()],
-    plugins: [react(), viteTest(), viteSingleFile()],
+    plugins: [tailwindcss(), react(), viteTest(), viteSingleFile()],
     root: "./src",
     build: {
         outDir: "../dist",

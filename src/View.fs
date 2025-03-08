@@ -39,6 +39,7 @@ let private navbar state _dispatch =
                 prop.className "flex-1"
                 prop.children [
                     Daisy.button.button [
+                        button.active
                         button.primary
                         button.sm
                         prop.text "Add project"
@@ -51,14 +52,9 @@ let private navbar state _dispatch =
             Html.div [
                 prop.className "flex-none"
                 prop.children [
-                    // Daisy.button.button [
-                    //     prop.classes [ "btn"; "btn-square"; "btn-ghost" ]
-                    //     prop.children [ Html.text "greet" ]
-                    //     prop.onClick (fun _ -> dispatch (Greet "Alex"))
-                    // ]
                     Daisy.menu [
-                        menu.horizontal
-                        menu.sm
+                        menu.xs
+                        prop.classes [ "sm:menu-horizontal" ]
                         prop.children [
                             Html.li [
                                 prop.id "menu-item-project"
@@ -67,7 +63,7 @@ let private navbar state _dispatch =
                                     Html.a [
                                         prop.className (
                                             if state.currentUrl = [] || state.currentUrl = [ "projects" ] then
-                                                "active"
+                                                "menu-active"
                                             else
                                                 ""
                                         )
@@ -81,7 +77,7 @@ let private navbar state _dispatch =
                                 prop.key "menu-item-about"
                                 prop.children [
                                     Html.a [
-                                        prop.className (if state.currentUrl = [ "about" ] then "active" else "")
+                                        prop.className (if state.currentUrl = [ "about" ] then "menu-active" else "")
                                         prop.href "#about"
                                         prop.children [ Html.text "About" ]
                                     ]
