@@ -39,7 +39,6 @@ let private navbar state _dispatch =
                 prop.className "flex-1"
                 prop.children [
                     Daisy.button.button [
-                        button.active
                         button.primary
                         button.sm
                         prop.text "Add project"
@@ -166,6 +165,7 @@ let private page404 state =
     let p = sprintf "Page `%A` not found." state.currentUrl
 
     Html.div [
+        prop.key "page-404"
         prop.className "p-10"
         prop.id "404"
         prop.children [
@@ -181,12 +181,16 @@ let private modalAddProject state dispatch =
         prop.classes [ "modal"; "active" ]
         prop.children [
             Html.div [
+                prop.key "modal-add-project-content"
                 prop.classes [ "modal-box" ]
                 prop.children [
                     Html.form [
+                        prop.id "form-add-project-close"
                         prop.method "dialog"
                         prop.children [
                             Html.button [
+                                prop.key "modal-add-project-close"
+                                prop.type' "button"
                                 prop.classes [
                                     "btn"
                                     "btn-xs"
@@ -202,6 +206,7 @@ let private modalAddProject state dispatch =
                     ]
                     Html.h3 [ prop.children [ Html.text "Add project" ] ]
                     Html.form [
+                        prop.key "form-add-project"
                         prop.id "form-add-project"
                         prop.children [
                             Daisy.fieldset [

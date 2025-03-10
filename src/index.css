@@ -1,5 +1,7 @@
 @charset "utf-8";
 
-@import 'tailwindcss';
+@import "tailwindcss";
 
-@plugin 'daisyui';
+@plugin "daisyui" {
+    themes: light --default;
+}
