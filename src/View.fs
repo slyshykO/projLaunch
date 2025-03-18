@@ -201,6 +201,7 @@ let private modalAddProject state dispatch =
                                     "right-2"
                                 ]
                                 prop.children [ Html.text "✕" ]
+                                prop.onClick (fun _ -> JsInterop.closeModalDialog ())
                             ]
                         ]
                     ]
