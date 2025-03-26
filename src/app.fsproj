@@ -20,7 +20,7 @@
 
   <ItemGroup>
     <PackageReference Include="Fable.Core" Version="4.5.0" />
-    <PackageReference Include="Fable.Elmish" Version="4.2.0" />
+    <PackageReference Include="Fable.Elmish" Version="4.3.0" />
     <PackageReference Include="Fable.Elmish.React" Version="4.0.0" />
     <PackageReference Include="Fable.Form" Version="3.0.0" />
     <PackageReference Include="Fable.Form.Simple" Version="5.0.1" />
