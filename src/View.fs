@@ -34,11 +34,12 @@ let private navbar state _dispatch =
         prop.id "navbar"
         prop.key "navbar"
         prop.children [
-            //Html.div [ prop.className "flex-1"; prop.children [ Html.text state.value ] ]
             Html.div [
+                prop.key "h2hhh3eh34h3h"
                 prop.className "flex-1"
                 prop.children [
                     Daisy.button.button [
+                        prop.key "btn-add-project-navbar"
                         button.primary
                         button.sm
                         prop.text "Add project"
@@ -49,9 +50,11 @@ let private navbar state _dispatch =
                 ]
             ]
             Html.div [
+                prop.key "h2hhh3eh34h3h222"
                 prop.className "flex-none"
                 prop.children [
                     Daisy.menu [
+                        prop.key "menu-navbar"
                         menu.xs
                         prop.classes [ "sm:menu-horizontal" ]
                         prop.children [
@@ -60,6 +63,7 @@ let private navbar state _dispatch =
                                 prop.key "menu-item-project"
                                 prop.children [
                                     Html.a [
+                                        prop.key "1"
                                         prop.className (
                                             if state.currentUrl = [] || state.currentUrl = [ "projects" ] then
                                                 "menu-active"
@@ -76,6 +80,7 @@ let private navbar state _dispatch =
                                 prop.key "menu-item-about"
                                 prop.children [
                                     Html.a [
+                                        prop.key "2"
                                         prop.className (if state.currentUrl = [ "about" ] then "menu-active" else "")
                                         prop.href "#about"
                                         prop.children [ Html.text "About" ]
@@ -102,7 +107,10 @@ let project (prj: ProjectData) dispatch =
                 Html.p [ prop.children [ Html.text prj.path ] ]
                 Daisy.cardActions [
                     Daisy.button.button [
-                        prop.classes [ "btn-xs"; "btn-outline" ]
+                        button.xs
+                        button.outline
+                        button.primary
+                        prop.type' "button"
                         prop.children [ Html.text "Open" ]
                         prop.onClick (fun _ ->
                             printfn "Open project: %s" prj.id
@@ -185,6 +193,7 @@ let private modalAddProject state dispatch =
                 prop.classes [ "modal-box" ]
                 prop.children [
                     Html.form [
+                        prop.key "modal-add-project-form"
                         prop.id "form-add-project-close"
                         prop.method "dialog"
                         prop.children [
@@ -205,7 +214,10 @@ let private modalAddProject state dispatch =
                             ]
                         ]
                     ]
-                    Html.h3 [ prop.children [ Html.text "Add project" ] ]
+                    Html.h3 [
+                        prop.key "modal-add-project-title"
+                        prop.children [ Html.text "Add project" ]
+                    ]
                     Html.form [
                         prop.key "form-add-project"
                         prop.id "form-add-project"
@@ -213,6 +225,7 @@ let private modalAddProject state dispatch =
                             Daisy.fieldset [
                                 Daisy.fieldsetLabel "Name"
                                 Daisy.input [
+                                    prop.key "form-add-project-name"
                                     input.sm
                                     prop.id "form-add-project-name"
                                     prop.placeholder "Project name"
@@ -222,6 +235,7 @@ let private modalAddProject state dispatch =
                                 ]
                                 Daisy.fieldsetLabel "Description"
                                 Daisy.input [
+                                    prop.key "form-add-project-description"
                                     prop.id "form-add-project-description"
                                     input.sm
                                     prop.placeholder "Project description"
@@ -230,6 +244,7 @@ let private modalAddProject state dispatch =
                                 ]
                                 Daisy.fieldsetLabel "Solution/Workspace"
                                 Daisy.input [
+                                    prop.key "form-add-project-file"
                                     prop.id "form-add-project-file"
                                     input.sm
                                     prop.placeholder "Solution/Workspace file"
@@ -239,6 +254,7 @@ let private modalAddProject state dispatch =
                                 Daisy.fieldsetLabel "IDE"
                                 Daisy.select [
                                     select.sm
+                                    prop.key "form-add-project-ide"
                                     prop.id "form-add-project-ide"
                                     prop.children [
                                         Html.option [ prop.value "vscode"; prop.children [ Html.text "VSCode" ] ]
@@ -253,10 +269,12 @@ let private modalAddProject state dispatch =
                     ]
                     Html.div [
                         prop.classes [ "modal-action" ]
+                        prop.key "modal-add-project-action"
                         prop.children [
                             Daisy.button.label [
                                 button.primary
                                 button.sm
+                                prop.key "btn-add-project-accept"
                                 prop.text "Accept"
                                 prop.onClick (fun _ ->
                                     printfn "Accept"
@@ -300,6 +318,7 @@ let private modalAddProject state dispatch =
                             Daisy.button.label [
                                 button.primary
                                 button.sm
+                                prop.key "btn-add-project-cancel"
                                 prop.text "Cancel"
                                 prop.onClick (fun _ ->
                                     printfn "Cancel"
