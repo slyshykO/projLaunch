@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { viteSingleFile } from 'vite-plugin-singlefile'
-//import { compression } from 'vite-plugin-compression2'
 import { readFileSync } from 'node:fs'
 import { globSync } from 'glob'
 import tailwindcss from '@tailwindcss/vite';

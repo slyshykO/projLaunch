@@ -1,7 +1,8 @@
-@charset "utf-8";
-
 @import "tailwindcss";
 
+@source './bin/fable-js/fable_modules/Feliz.DaisyUI.5.0.0/DaisyUI.fs';
+@source './bin/fable-js/fable_modules/Feliz.DaisyUI.5.0.0/Modifiers.fs';
+
 @plugin "daisyui" {
-    themes: light --default;
+    logs: true;
 }
