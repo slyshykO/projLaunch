@@ -107,7 +107,6 @@ let private navbar state _dispatch =
         ] // Navbar children
     ] // Navbar
 
-
 let project (prj: ProjectData) dispatch =
     let title = sprintf "%s [%s]" prj.name prj.ide
 
@@ -179,7 +178,6 @@ let private about state =
         ]
 
     ]
-
 
 let private page404 state =
 
