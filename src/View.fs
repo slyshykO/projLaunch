@@ -39,6 +39,7 @@ let private navbar state _dispatch =
                 prop.className "flex-1"
                 prop.children [
                     Daisy.button.button [
+                        prop.classes [ "text-sm" ]
                         prop.key "btn-add-project-navbar"
                         button.primary
                         button.sm
@@ -71,7 +72,13 @@ let private navbar state _dispatch =
                                                 ""
                                         )
                                         prop.href "#projects"
-                                        prop.children [ Html.text "Projects" ]
+                                        prop.children [
+                                            Html.span [
+                                                prop.key "menu-item-project-span"
+                                                prop.classes [ "text-sm"; "font-bold"; "font-mono" ]
+                                                prop.children [ Html.text "Projects" ]
+                                            ]
+                                        ]
                                     ]
                                 ]
                             ]
@@ -83,7 +90,13 @@ let private navbar state _dispatch =
                                         prop.key "2"
                                         prop.className (if state.currentUrl = [ "about" ] then "menu-active" else "")
                                         prop.href "#about"
-                                        prop.children [ Html.text "About" ]
+                                        prop.children [
+                                            Html.span [
+                                                prop.key "menu-item-about-span"
+                                                prop.classes [ "text-sm"; "font-bold"; "font-mono" ]
+                                                prop.children [ Html.text "About" ]
+                                            ]
+                                        ]
                                     ]
                                 ]
                             ]
@@ -140,10 +153,10 @@ let private projects state dispatch =
 
 let private about state =
     Html.div [
-        prop.className "p-10"
+        prop.className "p-10 font-mono"
         prop.id "about"
         prop.children [
-            Html.h1 [ prop.className "text-4xl font-bold"; prop.children [ Html.text "About" ] ]
+            Html.h1 [ prop.className "text-3xl font-bold"; prop.children [ Html.text "About" ] ]
             Html.p [
                 prop.className "text-lg"
                 prop.children [ Html.text (sprintf "Version   : %s" state.appVersion) ]
