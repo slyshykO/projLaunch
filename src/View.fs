@@ -32,15 +32,12 @@ let private navbar state _dispatch =
     Daisy.navbar [
         prop.classes [ "bg-base-300"; "shadow-lg" ]
         prop.id "navbar"
-        prop.key "navbar"
         prop.children [
             Html.div [
-                prop.key "h2hhh3eh34h3h"
                 prop.className "flex-1"
                 prop.children [
                     Daisy.button.button [
                         prop.classes [ "text-sm" ]
-                        prop.key "btn-add-project-navbar"
                         button.primary
                         button.sm
                         prop.text "Add project"
@@ -51,20 +48,16 @@ let private navbar state _dispatch =
                 ]
             ]
             Html.div [
-                prop.key "h2hhh3eh34h3h222"
                 prop.className "flex-none"
                 prop.children [
                     Daisy.menu [
-                        prop.key "menu-navbar"
                         menu.xs
                         prop.classes [ "sm:menu-horizontal" ]
                         prop.children [
                             Html.li [
                                 prop.id "menu-item-project"
-                                prop.key "menu-item-project"
                                 prop.children [
                                     Html.a [
-                                        prop.key "1"
                                         prop.className (
                                             if state.currentUrl = [] || state.currentUrl = [ "projects" ] then
                                                 "menu-active"
@@ -74,7 +67,6 @@ let private navbar state _dispatch =
                                         prop.href "#projects"
                                         prop.children [
                                             Html.span [
-                                                prop.key "menu-item-project-span"
                                                 prop.classes [ "text-sm"; "font-bold"; "font-mono" ]
                                                 prop.children [ Html.text "Projects" ]
                                             ]
@@ -84,15 +76,12 @@ let private navbar state _dispatch =
                             ]
                             Html.li [
                                 prop.id "menu-item-about"
-                                prop.key "menu-item-about"
                                 prop.children [
                                     Html.a [
-                                        prop.key "2"
                                         prop.className (if state.currentUrl = [ "about" ] then "menu-active" else "")
                                         prop.href "#about"
                                         prop.children [
                                             Html.span [
-                                                prop.key "menu-item-about-span"
                                                 prop.classes [ "text-sm"; "font-bold"; "font-mono" ]
                                                 prop.children [ Html.text "About" ]
                                             ]
@@ -136,7 +125,6 @@ let project (prj: ProjectData) dispatch =
 let private projects state dispatch =
     Html.div [
         prop.classes [ "flex"; "flex-col"; "p-4"; "gap-4" ]
-
         prop.id "projects"
         prop.children [
             Html.div [
@@ -184,7 +172,6 @@ let private page404 state =
     let p = sprintf "Page `%A` not found." state.currentUrl
 
     Html.div [
-        prop.key "page-404"
         prop.className "p-10"
         prop.id "404"
         prop.children [
@@ -196,20 +183,16 @@ let private page404 state =
 let private modalAddProject state dispatch =
     Html.dialog [
         prop.id "modal-add-project"
-        prop.key "modal-add-project"
         prop.classes [ "modal"; "active" ]
         prop.children [
             Html.div [
-                prop.key "modal-add-project-content"
                 prop.classes [ "modal-box" ]
                 prop.children [
                     Html.form [
-                        prop.key "modal-add-project-form"
                         prop.id "form-add-project-close"
                         prop.method "dialog"
                         prop.children [
                             Html.button [
-                                prop.key "modal-add-project-close"
                                 prop.type' "button"
                                 prop.classes [
                                     "btn"
@@ -225,18 +208,13 @@ let private modalAddProject state dispatch =
                             ]
                         ]
                     ]
-                    Html.h3 [
-                        prop.key "modal-add-project-title"
-                        prop.children [ Html.text "Add project" ]
-                    ]
+                    Html.h3 [ prop.children [ Html.text "Add project" ] ]
                     Html.form [
-                        prop.key "form-add-project"
                         prop.id "form-add-project"
                         prop.children [
                             Daisy.fieldset [
                                 Daisy.fieldsetLabel "Name"
                                 Daisy.input [
-                                    prop.key "form-add-project-name"
                                     input.sm
                                     prop.id "form-add-project-name"
                                     prop.placeholder "Project name"
@@ -246,7 +224,6 @@ let private modalAddProject state dispatch =
                                 ]
                                 Daisy.fieldsetLabel "Description"
                                 Daisy.input [
-                                    prop.key "form-add-project-description"
                                     prop.id "form-add-project-description"
                                     input.sm
                                     prop.placeholder "Project description"
@@ -255,7 +232,6 @@ let private modalAddProject state dispatch =
                                 ]
                                 Daisy.fieldsetLabel "Solution/Workspace"
                                 Daisy.input [
-                                    prop.key "form-add-project-file"
                                     prop.id "form-add-project-file"
                                     input.sm
                                     prop.placeholder "Solution/Workspace file"
@@ -265,7 +241,7 @@ let private modalAddProject state dispatch =
                                 Daisy.fieldsetLabel "IDE"
                                 Daisy.select [
                                     select.sm
-                                    prop.key "form-add-project-ide"
+
                                     prop.id "form-add-project-ide"
                                     prop.children [
                                         Html.option [ prop.value "vscode"; prop.children [ Html.text "VSCode" ] ]
@@ -280,12 +256,10 @@ let private modalAddProject state dispatch =
                     ]
                     Html.div [
                         prop.classes [ "modal-action" ]
-                        prop.key "modal-add-project-action"
                         prop.children [
                             Daisy.button.label [
                                 button.primary
                                 button.sm
-                                prop.key "btn-add-project-accept"
                                 prop.text "Accept"
                                 prop.onClick (fun _ ->
                                     printfn "Accept"
@@ -329,7 +303,6 @@ let private modalAddProject state dispatch =
                             Daisy.button.label [
                                 button.primary
                                 button.sm
-                                prop.key "btn-add-project-cancel"
                                 prop.text "Cancel"
                                 prop.onClick (fun _ ->
                                     printfn "Cancel"
@@ -355,13 +328,12 @@ let view state dispatch =
                 "font-mono"
             ]
             prop.id "app"
-            prop.key "app"
             pageTheme state // Apply the theme
             prop.children [
                 navbar state dispatch
                 modalAddProject state dispatch
                 Html.div [
-                    prop.key "page-internal-div"
+                    prop.id "main-view"
                     prop.classes [ "mt-0"; "overflow-y-auto"; "h-screen" ]
                     prop.children [
                         match state.currentUrl with
