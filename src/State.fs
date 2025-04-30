@@ -182,7 +182,8 @@ type State =
       projects: ProjectData list
       formAddProjectName: string
       formAddProjectPath: string
-      formAddProjectDescription: string }
+      formAddProjectDescription: string
+      randomSalt: string }
 
 let getCurrentUrl () = Browser.Dom.window.location.href
 
@@ -198,6 +199,9 @@ let init () =
 
     printfn "Projects: %A" pd
 
+    // generate a random salt
+    let randomSalt = Guid.NewGuid().ToString()
+
     // Initial state
     let state =
         { currentUrl = currentUrl
@@ -210,7 +214,8 @@ let init () =
           projects = pd
           formAddProjectName = ""
           formAddProjectPath = ""
-          formAddProjectDescription = "" }
+          formAddProjectDescription = ""
+          randomSalt = randomSalt }
 
     state, Cmd.ofMsg Start
 

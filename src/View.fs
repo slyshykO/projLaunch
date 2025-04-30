@@ -31,7 +31,7 @@ let pageTheme state =
 let private navbar state _dispatch =
     Daisy.navbar [
         prop.classes [ "bg-base-300"; "shadow-lg" ]
-        prop.id "navbar"
+        prop.id $"navbar-{state.randomSalt}"
         prop.children [
             Html.div [
                 prop.className "flex-1"
@@ -41,7 +41,7 @@ let private navbar state _dispatch =
                         button.primary
                         button.sm
                         prop.text "Add project"
-                        prop.id "btn-add-project"
+                        prop.id $"btn-add-project-{state.randomSalt}"
                         prop.type' "button"
                         prop.onClick (fun _ -> JsInterop.showModalDialog ())
                     ]
@@ -125,10 +125,10 @@ let project (prj: ProjectData) dispatch =
 let private projects state dispatch =
     Html.div [
         prop.classes [ "flex"; "flex-col"; "p-4"; "gap-4" ]
-        prop.id "projects"
+        prop.id $"projects-{state.randomSalt}"
         prop.children [
             Html.div [
-                prop.id "projects-cards-grid"
+                prop.id $"projects-cards-grid-{state.randomSalt}"
                 prop.classes [ "grid"; "grid-cols-3"; "gap-4" ]
                 prop.children [
                     for prj in state.projects do
@@ -141,7 +141,7 @@ let private projects state dispatch =
 let private about state =
     Html.div [
         prop.className "p-10 font-mono"
-        prop.id "about"
+        prop.id $"about-{state.randomSalt}"
         prop.children [
             Html.h1 [ prop.className "text-3xl font-bold"; prop.children [ Html.text "About" ] ]
             Html.p [
@@ -173,7 +173,7 @@ let private page404 state =
 
     Html.div [
         prop.className "p-10"
-        prop.id "404"
+        prop.id $"404-{state.randomSalt}"
         prop.children [
             Html.h1 [ prop.className "text-4xl font-bold"; prop.children [ Html.text "404" ] ]
             Html.p [ prop.className "text-lg"; prop.children [ Html.text p ] ]
@@ -327,7 +327,7 @@ let view state dispatch =
                 "text-base-content"
                 "font-mono"
             ]
-            prop.id "app"
+            prop.id $"app-{state.randomSalt}"
             pageTheme state // Apply the theme
             prop.children [
                 navbar state dispatch
