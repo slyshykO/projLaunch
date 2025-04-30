@@ -1,8 +1,7 @@
 module Tauri
 
 open Fable.Core
-open Fable.Core.JsInterop
-open Browser.Dom
+
 
 [<Erase>]
 type Tauri =

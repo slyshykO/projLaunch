@@ -21,8 +21,18 @@ module JsInterop =
     [<Import("_closeModalDialog", "./_ReactVersion.js")>]
     let _closeModalDialog: unit -> unit = jsNative
 
+    [<Import("_showModalDialogById", "./_ReactVersion.js")>]
+    let _showModalDialogById: string -> unit = jsNative
+
+    [<Import("_closeModalDialogById", "./_ReactVersion.js")>]
+    let _closeModalDialogById: string -> unit = jsNative
+
+
     let inline showModalDialog () = _showModalDialog ()
     let inline closeModalDialog () = _closeModalDialog ()
+
+    let inline showModalDialogById (id: string) = _showModalDialogById id
+    let inline closeModalDialogById (id: string) = _closeModalDialogById id
 
 let pageTheme state =
     state |> ignore
@@ -43,7 +53,7 @@ let private navbar state _dispatch =
                         prop.text "Add project"
                         prop.id $"btn-add-project-{state.randomSalt}"
                         prop.type' "button"
-                        prop.onClick (fun _ -> JsInterop.showModalDialog ())
+                        prop.onClick (fun _ -> JsInterop.showModalDialogById $"modal-add-project-{state.randomSalt}")
                     ]
                 ]
             ]
@@ -182,7 +192,7 @@ let private page404 state =
 
 let private modalAddProject state dispatch =
     Html.dialog [
-        prop.id "modal-add-project"
+        prop.id $"modal-add-project-{state.randomSalt}"
         prop.classes [ "modal"; "active" ]
         prop.children [
             Html.div [
@@ -204,7 +214,8 @@ let private modalAddProject state dispatch =
                                     "right-2"
                                 ]
                                 prop.children [ Html.text "✕" ]
-                                prop.onClick (fun _ -> JsInterop.closeModalDialog ())
+                                prop.onClick (fun _ ->
+                                    JsInterop.closeModalDialogById $"modal-add-project-{state.randomSalt}")
                             ]
                         ]
                     ]
@@ -297,7 +308,7 @@ let private modalAddProject state dispatch =
                                     let file_name = sprintf "%s-%s.%s" pd.name pd.id "json"
                                     let pd_json = pd |> ProjectData.toJson
 
-                                    JsInterop.closeModalDialog ()
+                                    JsInterop.closeModalDialogById $"modal-add-project-{state.randomSalt}"
                                     dispatch (AddOrUpdateProject(file_name, pd_json)))
                             ]
                             Daisy.button.label [
@@ -306,7 +317,7 @@ let private modalAddProject state dispatch =
                                 prop.text "Cancel"
                                 prop.onClick (fun _ ->
                                     printfn "Cancel"
-                                    JsInterop.closeModalDialog ())
+                                    JsInterop.closeModalDialogById $"modal-add-project-{state.randomSalt}")
                             ]
                         ]
                     ]
