@@ -24,6 +24,10 @@ type HTMLDialogElement =
     /// The closedBy property of the HTMLDialogElement interface indicates the types of user actions that can be used to close the associated <dialog> element. It sets or returns the dialog's closedby attribute value.
     abstract closedBy: string with get, set
 
+    abstract oncancel: (Event -> unit) with get, set
+    abstract onclose: (Event -> unit) with get, set
+
+
     /// <dialog>.show() – shows non‑modal
     abstract show: unit -> unit
 
