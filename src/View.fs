@@ -38,6 +38,24 @@ let pageTheme state =
     state |> ignore
     theme.light
 
+let private showModal id =
+    let modal = Browser.Dom.document.getElementById id :?> Browser.HTMLDialogElement
+
+    if modal <> null then
+        modal.showModal ()
+    else
+        // Fallback for older browsers or if the dialog is not found
+        printfn "Dialog with id %s not found." id
+
+let private closeModal id =
+    let modal = Browser.Dom.document.getElementById id :?> Browser.HTMLDialogElement
+
+    if modal <> null then
+        modal.close ()
+    else
+        // Fallback for older browsers or if the dialog is not found
+        printfn "Dialog with id %s not found." id
+
 let private navbar state _dispatch =
     Daisy.navbar [
         prop.classes [ "bg-base-300"; "shadow-lg" ]
@@ -53,7 +71,7 @@ let private navbar state _dispatch =
                         prop.text "Add project"
                         prop.id $"btn-add-project-{state.randomSalt}"
                         prop.type' "button"
-                        prop.onClick (fun _ -> JsInterop.showModalDialogById $"modal-add-project-{state.randomSalt}")
+                        prop.onClick (fun _ -> showModal $"modal-add-project-{state.randomSalt}")
                     ]
                 ]
             ]
@@ -214,8 +232,7 @@ let private modalAddProject state dispatch =
                                     "right-2"
                                 ]
                                 prop.children [ Html.text "✕" ]
-                                prop.onClick (fun _ ->
-                                    JsInterop.closeModalDialogById $"modal-add-project-{state.randomSalt}")
+                                prop.onClick (fun _ -> closeModal $"modal-add-project-{state.randomSalt}")
                             ]
                         ]
                     ]
@@ -308,7 +325,7 @@ let private modalAddProject state dispatch =
                                     let file_name = sprintf "%s-%s.%s" pd.name pd.id "json"
                                     let pd_json = pd |> ProjectData.toJson
 
-                                    JsInterop.closeModalDialogById $"modal-add-project-{state.randomSalt}"
+                                    closeModal $"modal-add-project-{state.randomSalt}"
                                     dispatch (AddOrUpdateProject(file_name, pd_json)))
                             ]
                             Daisy.button.label [
@@ -317,7 +334,7 @@ let private modalAddProject state dispatch =
                                 prop.text "Cancel"
                                 prop.onClick (fun _ ->
                                     printfn "Cancel"
-                                    JsInterop.closeModalDialogById $"modal-add-project-{state.randomSalt}")
+                                    closeModal $"modal-add-project-{state.randomSalt}")
                             ]
                         ]
                     ]
