@@ -168,20 +168,23 @@ let private projects state dispatch =
 
 let private about state =
     Html.div [
-        prop.className "p-10 font-mono"
+        prop.classes [ "p-10"; "font-mono" ]
         prop.id $"about-{state.randomSalt}"
         prop.children [
-            Html.h1 [ prop.className "text-3xl font-bold"; prop.children [ Html.text "About" ] ]
+            Html.h1 [
+                prop.classes [ "text-3xl"; "font-bold" ]
+                prop.children [ Html.text "About" ]
+            ]
             Html.p [
-                prop.className "text-lg"
+                prop.classes [ "text-lg" ]
                 prop.children [ Html.text (sprintf "Version   : %s" state.appVersion) ]
             ]
             Html.p [
-                prop.className "text-lg"
+                prop.classes [ "text-lg" ]
                 prop.children [ Html.text (sprintf "Data dir  : %s" state.appDataDir) ]
             ]
             Html.p [
-                prop.className "text-lg"
+                prop.classes [ "text-lg" ]
                 prop.children [ Html.text (sprintf "Config dir: %s" state.appConfigDir) ]
             ]
             Daisy.divider []
