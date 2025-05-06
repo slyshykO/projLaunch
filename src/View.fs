@@ -39,7 +39,8 @@ let pageTheme state =
     theme.light
 
 let private showModal id =
-    let modal = Browser.Dom.document.getElementById id :?> Browser.HTMLDialogElement
+    let modal =
+        Browser.Dom.document.getElementById id :?> Browser.Types.HTMLDialogElement
 
     if modal <> null then
         modal.showModal ()
@@ -48,7 +49,8 @@ let private showModal id =
         printfn "Dialog with id %s not found." id
 
 let private closeModal id =
-    let modal = Browser.Dom.document.getElementById id :?> Browser.HTMLDialogElement
+    let modal =
+        Browser.Dom.document.getElementById id :?> Browser.Types.HTMLDialogElement
 
     if modal <> null then
         modal.close ()
