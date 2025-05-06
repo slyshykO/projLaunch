@@ -176,15 +176,15 @@ let private about state =
                 prop.children [ Html.text "About" ]
             ]
             Html.p [
-                prop.classes [ "text-lg" ]
+                prop.classes [ "text-lg"; "font-mono" ]
                 prop.children [ Html.text (sprintf "Version   : %s" state.appVersion) ]
             ]
             Html.p [
-                prop.classes [ "text-lg" ]
+                prop.classes [ "text-lg"; "font-mono" ]
                 prop.children [ Html.text (sprintf "Data dir  : %s" state.appDataDir) ]
             ]
             Html.p [
-                prop.classes [ "text-lg" ]
+                prop.classes [ "text-lg"; "font-mono" ]
                 prop.children [ Html.text (sprintf "Config dir: %s" state.appConfigDir) ]
             ]
             Daisy.divider []
