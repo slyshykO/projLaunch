@@ -123,7 +123,6 @@ fn open_project(app_handle: tauri::AppHandle, id: String) -> Result<(), tauri::E
     let environment = project_data.environment;
     let app = ide_to_command(ide.as_str());
     let mut cmd = std::process::Command::new(app.as_str());
-    //let mut cmd = std::process::Command::new("code.cmd");
     cmd.args(&[path.as_str()]);
     for (key, value) in environment {
         if key == "PATH" {
