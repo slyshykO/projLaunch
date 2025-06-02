@@ -96,15 +96,20 @@ where
 
 fn ide_to_command(ide: &str) -> String {
     let ide = ide.to_lowercase();
+    let code_exe = if cfg!(windows) {
+        "code.cmd".to_string()
+    } else {
+        "code".to_string()
+    };
     match ide.as_str() {
-        "code" => "code".to_string(),
-        "vscode" => "code".to_string(),
+        "code" => code_exe,
+        "vscode" => code_exe,
         "idea" => "idea".to_string(),
         s if s.contains("studio") && s.contains("2022") => {
             r"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\devenv.exe"
                 .to_string()
         }
-        _ => "code".to_string(),
+        _ => code_exe,
     }
 }
 
@@ -117,13 +122,18 @@ fn open_project(app_handle: tauri::AppHandle, id: String) -> Result<(), tauri::E
     let path = project_data.path;
     let environment = project_data.environment;
     let app = ide_to_command(ide.as_str());
-    let mut cmd = std::process::Command::new("cmd.exe");
-    cmd.args(&["/C", app.as_str(), path.as_str()]);
+    let mut cmd = std::process::Command::new(app.as_str());
+    //let mut cmd = std::process::Command::new("code.cmd");
+    cmd.args(&[path.as_str()]);
     for (key, value) in environment {
         if key == "PATH" {
             let path = std::env::var("PATH").unwrap_or_default();
             let path_delimiter = if cfg!(windows) { ";" } else { ":" };
-            let value = format!("{}{}{}", value, path_delimiter, path);
+            let value = if path.is_empty() {
+                value
+            } else {
+                format!("{}{}{}", value, path_delimiter, path)
+            };
             cmd.env(key, value);
         } else {
             cmd.env(key, value);
