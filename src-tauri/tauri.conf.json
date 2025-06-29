@@ -15,7 +15,8 @@
       {
         "title": "Project Launcher",
         "width": 1100,
-        "height": 900
+        "height": 900,
+        "visible": false
       }
     ],
     "security": {
