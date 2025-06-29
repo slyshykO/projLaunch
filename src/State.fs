@@ -7,7 +7,7 @@ open Thoth.Json
 open Fable.Core.JsInterop
 
 
-open Tauri
+open Tauri.Tauri
 
 module Debug =
 
@@ -139,17 +139,23 @@ type SignIn = { nick: string; role: string }
 
 type Msg =
     | Empty
+
     | Start
     | OnStart of unit
+
     | UrlChanged of string list
+
     | Greet of string
     | OnGreetSuccess of string
+
     | GetDataDir
     | OnGetDataDir of string
     | OnGetDataDirError of exn
+
     | GetConfigDir
     | OnGetConfigDir of string
     | OnGetConfigDirError of exn
+
     | GetAppVersion
     | OnAppVersion of string
     | OnAppVersionError of exn
@@ -170,9 +176,17 @@ type Msg =
     | FormAddProjectPathChanged of string
     | FormAddProjectDescriptionChanged of string
 
+    | WindowSave
+
+    | WindowResized
+    | OnWindowResizedSuccess of Tauri.Dpi.PhysicalSize * Tauri.Dpi.PhysicalPosition
+
+    | Tick of DateTime
+
 
 type State =
     { currentUrl: string list
+      currentTime: DateTime
       signIn: option<SignIn>
       value: string
       appVersion: string
@@ -183,7 +197,9 @@ type State =
       formAddProjectName: string
       formAddProjectPath: string
       formAddProjectDescription: string
-      randomSalt: string }
+      randomSalt: string
+      appWindowSize: Tauri.Dpi.PhysicalSize option
+      appWindowPosition: Tauri.Dpi.PhysicalPosition option }
 
 let getCurrentUrl () = Browser.Dom.window.location.href
 
@@ -205,6 +221,7 @@ let init () =
     // Initial state
     let state =
         { currentUrl = currentUrl
+          currentTime = DateTime.Now
           signIn = None
           value = "Feliz"
           appVersion = ""
@@ -215,7 +232,9 @@ let init () =
           formAddProjectName = ""
           formAddProjectPath = ""
           formAddProjectDescription = ""
-          randomSalt = randomSalt }
+          randomSalt = randomSalt
+          appWindowSize = None
+          appWindowPosition = None }
 
     state, Cmd.ofMsg Start
 
@@ -413,4 +432,31 @@ let update msg state =
     | FormAddProjectPathChanged v ->
         let newState = { state with formAddProjectPath = v }
 
+        newState, Cmd.none
+
+    | WindowSave -> state, Cmd.none
+
+    | WindowResized ->
+        let onWindowResizedPromise () =
+            promise {
+
+                let! (size: Tauri.Dpi.PhysicalSize) = Tauri.Window.Window.getCurrent().innerSize ()
+                let! (position: Tauri.Dpi.PhysicalPosition) = Tauri.Window.Window.getCurrent().outerPosition ()
+                return (size, position)
+            }
+
+        state, Cmd.OfPromise.perform onWindowResizedPromise () OnWindowResizedSuccess
+
+    | OnWindowResizedSuccess(size, position) ->
+        let newState =
+            { state with
+                appWindowSize = Some size
+                appWindowPosition = Some position }
+
+        // Log the new size and position
+        printfn "Window resized to: %A, Position: %A" size position
+        newState, Cmd.none
+
+    | Tick time ->
+        let newState = { state with currentTime = time }
         newState, Cmd.none

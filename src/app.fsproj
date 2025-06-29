@@ -12,6 +12,9 @@
     <Compile Include="Extensions.fs" />
     <Compile Include="ReactVersion.fs" />
     <Compile Include="Browser.fs" />
+    <Compile Include="Tauri.Dpi.fs" />
+    <Compile Include="Tauri.Event.fs" />
+    <Compile Include="Tauri.Window.fs" />
     <Compile Include="Tauri.fs" />
     <Compile Include="State.fs" />
     <Compile Include="SvgIcons.fs" />

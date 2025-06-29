@@ -4,6 +4,7 @@ open Feliz
 open Feliz.Router
 open Feliz.DaisyUI
 
+
 open state
 
 module JsInterop =
@@ -169,6 +170,7 @@ let private projects state dispatch =
     ]
 
 let private about state =
+
     Html.div [
         prop.classes [ "p-10"; "font-mono" ]
         prop.id $"about-{state.randomSalt}"
@@ -189,6 +191,20 @@ let private about state =
                 prop.classes [ "text-lg"; "font-mono" ]
                 prop.children [ Html.text (sprintf "Config dir: %s" state.appConfigDir) ]
             ]
+
+            Html.p [
+                prop.classes [ "text-lg"; "font-mono" ]
+                prop.children [ Html.text (sprintf "Wnd sz : %A" state.appWindowSize) ]
+            ]
+            Html.p [
+                prop.classes [ "text-lg"; "font-mono" ]
+                prop.children [ Html.text (sprintf "Wnd pos: %A" state.appWindowPosition) ]
+            ]
+            Html.p [
+                prop.classes [ "text-lg"; "font-mono" ]
+                prop.children [ Html.text (sprintf "Time: %A" state.currentTime) ]
+            ]
+
             Daisy.divider []
             Html.div [
                 prop.children [
