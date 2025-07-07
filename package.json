@@ -1,7 +1,7 @@
 {
   "name": "projlaunch",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js -e .js --sourceMaps --configuration Debug --run vite --mode development",
