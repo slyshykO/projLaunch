@@ -1,16 +1,14 @@
 namespace Tauri
 
 module rec Event =
+
     open Fable.Core
-    open Fable.Core.JsInterop
-    open System
 
     [<AllowNullLiteral>]
     [<Interface>]
     type EventTarget =
         abstract member kind: string with get, set
         abstract member label: string with get, set
-
 
     [<AllowNullLiteral>]
     [<Interface>]

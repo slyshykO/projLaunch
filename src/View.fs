@@ -4,14 +4,13 @@ open Feliz
 open Feliz.Router
 open Feliz.DaisyUI
 
-
 open state
 
 module JsInterop =
     open Fable.Core
 
     [<Emit("$0.showModal()")>]
-    let inline showModal (modalId: string) : unit = jsNative
+    let inline showModal (_modalId: string) : unit = jsNative
 
     [<Emit("modal-add-project.showModal()")>]
     let inline showModalAddProject () : unit = jsNative

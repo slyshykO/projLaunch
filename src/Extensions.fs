@@ -1,7 +1,6 @@
 [<AutoOpen>]
 module Extensions
 
-open System
 open Fable.Core
 open Fable.Core.JsInterop
 

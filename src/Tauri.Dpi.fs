@@ -3,8 +3,6 @@ namespace Tauri
 module rec Dpi =
 
     open Fable.Core
-    open Fable.Core.JsInterop
-    open System
 
     [<Import("SERIALIZE_TO_IPC_FN", "@tauri-apps/api/core")>]
     let SERIALIZE_TO_IPC_FN: string = jsNative

@@ -1,7 +1,6 @@
 namespace Browser
 
 open Fable.Core
-open Fable.Core.JsInterop
 open Browser.Types
 
 // ─────────────────────────────────────────────────────────────────────────────
