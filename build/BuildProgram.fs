@@ -183,6 +183,22 @@ module Build =
             Print.printlnRed $"Error during update: {ex.Message}"
             AppResult.Failure
 
+    let clean () =
+        try
+            let cargoRes =
+                BuildUtils.runCmd
+                    (Config.shell ())
+                    [ Config.shellCmdArg ()
+                      "cargo"
+                      "clean"
+                      "--manifest-path"
+                      "./src-tauri/Cargo.toml" ]
+
+            cargoRes
+        with ex ->
+            Print.printlnRed $"Error during clean: {ex.Message}"
+            AppResult.Failure
+
 module Main =
     open System
 
@@ -198,6 +214,7 @@ module Main =
                     match Args.subCommand argv with
                     | Some Args.SubCommand.Build -> Build.build ()
                     | Some Args.SubCommand.Update -> Build.update ()
+                    | Some Args.SubCommand.Clean -> Build.clean ()
                     | _ -> AppResult.Failure
             with ex ->
                 Print.printlnRed $"Error during build start: {ex.Message}"
