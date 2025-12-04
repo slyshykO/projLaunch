@@ -184,6 +184,14 @@ let private about state =
             ]
             Html.p [
                 prop.classes [ "text-lg"; "font-mono" ]
+                prop.children [ Html.text (sprintf "Tauri Ver: %s" state.tauriVersion) ]
+            ]
+            Html.p [
+                prop.classes [ "text-lg"; "font-mono" ]
+                prop.children [ Html.text (sprintf "React Ver: %s" (ReactVersion.reactVersion ())) ]
+            ]
+            Html.p [
+                prop.classes [ "text-lg"; "font-mono" ]
                 prop.children [ Html.text (sprintf "Data dir  : %s" state.appDataDir) ]
             ]
             Html.p [

@@ -160,6 +160,10 @@ type Msg =
     | OnAppVersion of string
     | OnAppVersionError of exn
 
+    | GetTauriVersion
+    | OnGetTauriVersion of string
+    | OnGetTauriVersionError of exn
+
     | GetProjects of int
     | OnGetProjectsSuccess of string array
     | OnGetProjectsError of exn
@@ -190,6 +194,7 @@ type State =
       signIn: option<SignIn>
       value: string
       appVersion: string
+      tauriVersion: string
       appDataDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
       appConfigDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
       errors: string list
@@ -225,6 +230,7 @@ let init () =
           signIn = None
           value = "Feliz"
           appVersion = ""
+          tauriVersion = ""
           appDataDir = ""
           appConfigDir = ""
           errors = []
@@ -257,7 +263,8 @@ let update msg state =
                 [ Cmd.ofMsg (GetProjects 50)
                   Cmd.ofMsg GetConfigDir
                   Cmd.ofMsg GetDataDir
-                  Cmd.ofMsg GetAppVersion ]
+                  Cmd.ofMsg GetAppVersion
+                  Cmd.ofMsg GetTauriVersion ]
         else
             state, Cmd.none
 
@@ -326,6 +333,24 @@ let update msg state =
     | OnAppVersionError exn ->
         let e = sprintf "Error: %A" exn
         let newState = { state with appVersion = e }
+        newState, Cmd.none
+
+    | GetTauriVersion ->
+        let getTauriVersionPromise () =
+            promise {
+                do! Promise.sleep 50
+                let! (response: string) = Tauri.getTauriVersion ()
+                return response
+            }
+
+        state, Cmd.OfPromise.either getTauriVersionPromise () OnGetTauriVersion OnGetTauriVersionError
+
+    | OnGetTauriVersion response ->
+        let newState = { state with tauriVersion = response }
+        newState, Cmd.none
+    | OnGetTauriVersionError exn ->
+        let e = sprintf "Error: %A" exn
+        let newState = { state with tauriVersion = e }
         newState, Cmd.none
 
     | GetProjects timeout ->

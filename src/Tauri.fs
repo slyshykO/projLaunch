@@ -51,3 +51,15 @@ module Tauri =
         /// </example>
         [<Import("getVersion", "@tauri-apps/api/app")>]
         static member getVersion() : JS.Promise<string> = nativeOnly
+
+        /// <summary>
+        /// Gets the Tauri framework version used by this application.
+        /// </summary>
+        /// <example>
+        /// <code lang="typescript">
+        /// import { getTauriVersion } from '@tauri-apps/api/app';
+        /// const tauriVersion = await getTauriVersion();
+        /// </code>
+        /// </example>
+        [<Import("getTauriVersion", "@tauri-apps/api/app")>]
+        static member getTauriVersion() : JS.Promise<string> = nativeOnly
