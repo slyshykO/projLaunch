@@ -15,6 +15,7 @@ target/
 
 # Editor directories and files
 .vscode/*
+.vs/*
 bin/
 obj/
 !.vscode/extensions.json
