@@ -2,5 +2,6 @@
   <Folder Name="/src/">
     <Project Path="src/app.fsproj" />
   </Folder>
+  <Project Path="build/build.fsproj" />
   <Project Path="src-test/src-test.fsproj" Id="ce3a2662-093b-497f-913a-5925f8d66175" />
 </Solution>
