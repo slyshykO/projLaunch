@@ -11,7 +11,7 @@
     <Compile Include="BuildProgram.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Gapotchenko.FX.Console" Version="2024.2.5" />
+    <PackageReference Include="Gapotchenko.FX.Console" Version="2026.4.2" />
   </ItemGroup>
 
 </Project>
