@@ -1,13 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
-
   <ItemGroup>
     <None Include="index.html" />
     <None Include="index.css" />
-
     <Compile Include="AsyncOps.fs" />
     <Compile Include="Extensions.fs" />
     <Compile Include="ReactVersion.fs" />
@@ -21,8 +19,7 @@
     <Compile Include="View.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
-
-  <ItemGroup>
+  <!-- <ItemGroup>
     <PackageReference Include="Fable.Core" Version="4.5.0" />
     <PackageReference Include="Fable.Elmish" Version="5.0.2" />
     <PackageReference Include="Fable.Elmish.React" Version="5.0.1" />
@@ -32,6 +29,6 @@
     <PackageReference Include="Feliz.Router" Version="4.0.0" />
     <PackageReference Include="Thoth.Json" Version="10.4.1" />
     <PackageReference Include="Fable.Browser.Dom" Version="2.20.0" />
-  </ItemGroup>
-
+  </ItemGroup> -->
+  <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>

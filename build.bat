@@ -32,7 +32,8 @@ if "%1%" == "self-build" (
 
 cd %~dp0
 
-"%PROJECT_DIR%\bin\Release\%PROJECT_FRAMEWORK%\%PROJECT_RUNTIME%\publish\%PROJECT_NAME%.exe" %* || goto :error
+rem "%PROJECT_DIR%\bin\Release\%PROJECT_FRAMEWORK%\%PROJECT_RUNTIME%\publish\%PROJECT_NAME%.exe" %* || goto :error
+dotnet run --project %PROJECT_DIR%\%PROJECT_NAME%.fsproj -f %PROJECT_FRAMEWORK% --runtime %PROJECT_RUNTIME% -- %* || goto :error
 
 :ok
 PATH=%OLD_PATH%
