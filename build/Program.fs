@@ -12,6 +12,7 @@ module Args =
         | Test = 2
         | Update = 3
         | BuildDaisyUI = 4
+        | Help = 5
 
     let extractSubCommandStr (args: string array) =
         if args.Length = 0 then
@@ -26,7 +27,20 @@ module Args =
         | "test" -> Some SubCommand.Test
         | "update" -> Some SubCommand.Update
         | "build-daisyui" -> Some SubCommand.BuildDaisyUI
+        | "help" -> Some SubCommand.Help
         | _ -> None
+
+module Help =
+    let print () =
+        Print.println "Usage: build <subcommand>"
+        Print.println ""
+        Print.println "Available subcommands:"
+        Print.println "  build         Build the app"
+        Print.println "  clean         Clean generated artifacts"
+        Print.println "  test          Reserved for test workflow"
+        Print.println "  update        Update dependencies"
+        Print.println "  build-daisyui Build local Feliz.DaisyUI"
+        Print.println "  help          Show this help"
 
 module Config =
 
@@ -217,9 +231,13 @@ module Main =
                     | Some Args.SubCommand.Update -> Build.update ()
                     | Some Args.SubCommand.Clean -> Build.clean ()
                     | Some Args.SubCommand.BuildDaisyUI -> Build.buildDaisyUI ()
+                    | Some Args.SubCommand.Help ->
+                        Help.print ()
+                        AppResult.Success
                     | _ ->
-                        Print.printlnRed
-                            $"`{Args.extractSubCommandStr argv}`. Use 'build', 'clean', 'test', 'update' or 'build-daisyui'."
+                        Print.printlnRed $"Unknown subcommand: `{Args.extractSubCommandStr argv}`"
+                        Print.println ""
+                        Help.print ()
 
                         AppResult.Failure
             with ex ->
