@@ -12,7 +12,7 @@ nuget alex312.Feliz.Router
 nuget Thoth.Json
 nuget Fable.Browser.Dom
 //nuget Feliz.DaisyUI
-git https://github.com/slyshykO/Feliz.DaisyUI.git update-feliz build: "../../../../build.bat build-daisyui", Packages: src/Feliz.DaisyUI/bin/Release
+//git https://github.com/slyshykO/Feliz.DaisyUI.git update-feliz build: "../../../../build.bat build-daisyui", Packages: src/Feliz.DaisyUI/bin/Release
 nuget Feliz.DaisyUI
 
 group Build

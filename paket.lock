@@ -52,20 +52,15 @@ NUGET
       Feliz.CompilerPlugins (>= 3.0)
     Feliz.CompilerPlugins (3.0)
       Fable.AST (>= 5.0.0-beta.3)
+    Feliz.DaisyUI (5.3)
+      Fable.Core (>= 4.5)
+      Feliz (>= 3.1.1)
+      FSharp.Core (>= 4.7.2)
     FSharp.Core (6.0.7)
     Thoth.Json (10.4.1)
       Fable.Core (>= 4.1)
       FSharp.Core (>= 5.0.2)
-  remote: paket-files/github.com/slyshykO/Feliz.DaisyUI/src/Feliz.DaisyUI/bin/Release
-    Feliz.DaisyUI (5.2.99)
-      Fable.Core (>= 4.5)
-      Feliz (>= 3.1.1)
-      FSharp.Core (>= 4.7.2)
-GIT
-  remote: https://github.com/slyshykO/Feliz.DaisyUI.git
-     (ae574d0e75685d85a687a9d606c6c62ec0f77224)
-      build: ../../../../build.bat build-daisyui
-      path: src/Feliz.DaisyUI/bin/Release
+
 GROUP Build
 STORAGE: NONE
 RESTRICTION: == net10.0

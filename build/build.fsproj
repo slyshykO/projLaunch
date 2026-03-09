@@ -15,5 +15,4 @@
   <ItemGroup>
     <PackageReference Include="Gapotchenko.FX.Console" Version="2026.5.3" />
   </ItemGroup>
-  <!-- <Import Project="..\.paket\Paket.Restore.targets" /> -->
 </Project>
