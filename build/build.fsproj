@@ -12,8 +12,8 @@
     <Compile Include="Print.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
-  <!-- <ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Gapotchenko.FX.Console" Version="2026.5.3" />
-  </ItemGroup> -->
-  <Import Project="..\.paket\Paket.Restore.targets" />
+  </ItemGroup>
+  <!-- <Import Project="..\.paket\Paket.Restore.targets" /> -->
 </Project>
