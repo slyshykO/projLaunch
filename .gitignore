@@ -30,3 +30,6 @@ obj/
 #Paket dependency manager
 paket-files/
 .paket/
+
+#ionide
+.fake
