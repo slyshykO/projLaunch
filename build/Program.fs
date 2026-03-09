@@ -107,9 +107,96 @@ module State =
 
 module Build =
 
+    let private normalizeNugetVersionForJsModulePath (version: string) =
+        let split = version.Split([| '-' |], 2, System.StringSplitOptions.None)
+        let coreVersion = split.[0]
+        let suffix = if split.Length = 2 then $"-{split.[1]}" else ""
+
+        let coreParts =
+            coreVersion.Split([| '.' |], System.StringSplitOptions.RemoveEmptyEntries)
+            |> Array.toList
+
+        let normalizedCore =
+            match coreParts with
+            | [ major ] -> $"{major}.0.0"
+            | [ major; minor ] -> $"{major}.{minor}.0"
+            | _ -> coreVersion
+
+        $"{normalizedCore}{suffix}"
+
+    let private syncFelizDaisyUiSources () =
+        try
+            let projectRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(__SOURCE_DIRECTORY__, ".."))
+            let paketLockPath = System.IO.Path.Combine(projectRoot, "paket.lock")
+            let indexCssPath = System.IO.Path.Combine(projectRoot, "src", "index.css")
+
+            if not (System.IO.File.Exists paketLockPath) then
+                failwith $"Could not find paket lock file: `{paketLockPath}`"
+
+            if not (System.IO.File.Exists indexCssPath) then
+                failwith $"Could not find index.css file: `{indexCssPath}`"
+
+            let paketLockContent = System.IO.File.ReadAllText paketLockPath
+
+            let lockVersionMatch =
+                System.Text.RegularExpressions.Regex.Match(
+                    paketLockContent,
+                    @"^\s*Feliz\.DaisyUI\s+\(([^)]+)\)\s*$",
+                    System.Text.RegularExpressions.RegexOptions.Multiline
+                )
+
+            if not lockVersionMatch.Success then
+                failwith "Could not extract Feliz.DaisyUI version from paket.lock"
+
+            let lockedVersion = lockVersionMatch.Groups.[1].Value.Trim()
+            let moduleVersion = normalizeNugetVersionForJsModulePath lockedVersion
+
+            let expectedDaisyUiLine =
+                $"@source './bin/fable-js/fable_modules/Feliz.DaisyUI.{moduleVersion}/DaisyUI.fs';"
+
+            let expectedModifiersLine =
+                $"@source './bin/fable-js/fable_modules/Feliz.DaisyUI.{moduleVersion}/Modifiers.fs';"
+
+            let cssContent = System.IO.File.ReadAllText indexCssPath
+
+            let daisyUiPattern =
+                System.Text.RegularExpressions.Regex(
+                    @"@source\s+'\.\/bin\/fable-js\/fable_modules\/Feliz\.DaisyUI\.[^\/']+\/DaisyUI\.fs';"
+                )
+
+            let modifiersPattern =
+                System.Text.RegularExpressions.Regex(
+                    @"@source\s+'\.\/bin\/fable-js\/fable_modules\/Feliz\.DaisyUI\.[^\/']+\/Modifiers\.fs';"
+                )
+
+            if not (daisyUiPattern.IsMatch cssContent) then
+                failwith "Could not find DaisyUI @source line in src/index.css"
+
+            if not (modifiersPattern.IsMatch cssContent) then
+                failwith "Could not find Modifiers @source line in src/index.css"
+
+            let updatedCssContent =
+                cssContent
+                |> fun content -> daisyUiPattern.Replace(content, expectedDaisyUiLine)
+                |> fun content -> modifiersPattern.Replace(content, expectedModifiersLine)
+
+            if updatedCssContent <> cssContent then
+                System.IO.File.WriteAllText(indexCssPath, updatedCssContent)
+                Print.printlnYellow $"Updated src/index.css to use Feliz.DaisyUI.{moduleVersion}"
+            else
+                Print.printlnBlue $"Verified src/index.css already uses Feliz.DaisyUI.{moduleVersion}"
+
+            AppResult.Success
+        with ex ->
+            Print.printlnRed $"Error while syncing Feliz.DaisyUI sources: {ex.Message}"
+            AppResult.Failure
+
     let build () =
         try
-            BuildUtils.runCmd (Config.shell ()) [ Config.shellCmdArg (); "npm"; "run"; "tauri"; "build" ]
+            if syncFelizDaisyUiSources () <> AppResult.Success then
+                AppResult.Failure
+            else
+                BuildUtils.runCmd (Config.shell ()) [ Config.shellCmdArg (); "npm"; "run"; "tauri"; "build" ]
         with ex ->
             Print.printlnRed $"Error during build: {ex.Message}"
             AppResult.Failure
