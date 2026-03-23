@@ -7,7 +7,7 @@
     "prebuild": "dotnet tool restore && dotnet paket restore",
     "dev": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js -e .js --sourceMaps --configuration Debug --run vite --mode development",
     "start": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js --run vite serve",
-    "build": "dotnet tool restore && dotnet fable src -o ./src/bin/fable-js --run vite build",
+    "build": "dotnet tool restore && dotnet fable src -o ./src/bin/fable-js --run vite build --emptyOutDir",
     "tauri": "tauri"
   },
   "overrides": {
