@@ -1,7 +1,7 @@
 module Print
 
 module private Internal =
-    let lockObj = obj ()
+    let lockObj = System.Threading.Lock()
 
     let IsColorEnabled () =
         Gapotchenko.FX.Console.ConsoleTraits.IsColorEnabled
