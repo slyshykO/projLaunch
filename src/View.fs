@@ -58,7 +58,8 @@ let private closeModal id =
         // Fallback for older browsers or if the dialog is not found
         printfn "Dialog with id %s not found." id
 
-let private navbar state _dispatch =
+[<ReactMemoComponent>]
+let private Navbar state _dispatch =
     Daisy.navbar [
         prop.classes [ "bg-base-300"; "shadow-lg" ]
         prop.id $"navbar-{state.randomSalt}"
@@ -73,7 +74,7 @@ let private navbar state _dispatch =
                         prop.text "Add project"
                         prop.id $"btn-add-project-{state.randomSalt}"
                         prop.type' "button"
-                        prop.onClick (fun _ -> showModal $"modal-add-project-{state.randomSalt}")
+                        prop.onClick (React.useCallback (fun _ -> showModal $"modal-add-project-{state.randomSalt}"))
                     ]
                 ]
             ]
@@ -126,7 +127,8 @@ let private navbar state _dispatch =
         ] // Navbar children
     ] // Navbar
 
-let project (prj: ProjectData) dispatch =
+[<ReactComponent>]
+let Project (prj: ProjectData) dispatch =
     let title = sprintf "%s [%s]" prj.name prj.ide
 
     Daisy.card [
@@ -143,16 +145,19 @@ let project (prj: ProjectData) dispatch =
                         button.primary
                         prop.type' "button"
                         prop.children [ Html.text "Open" ]
-                        prop.onClick (fun _ ->
-                            printfn "Open project: %s" prj.id
-                            dispatch (OpenProject prj.id))
+                        prop.onClick (
+                            React.useCallback (fun _ ->
+                                printfn "Open project: %s" prj.id
+                                dispatch (OpenProject prj.id))
+                        )
                     ]
                 ]
             ]
         ]
     ]
 
-let private projects state dispatch =
+[<ReactComponent>]
+let private Projects state dispatch =
     Html.div [
         prop.classes [ "flex"; "flex-col"; "p-4"; "gap-4" ]
         prop.id $"projects-{state.randomSalt}"
@@ -162,13 +167,14 @@ let private projects state dispatch =
                 prop.classes [ "grid"; "grid-cols-3"; "gap-4" ]
                 prop.children [
                     for prj in state.projects do
-                        yield project prj dispatch
+                        yield Project prj dispatch
                 ]
             ]
         ]
     ]
 
-let private about state =
+[<ReactComponent>]
+let About state =
 
     Html.div [
         prop.classes [ "p-10"; "font-mono" ]
@@ -223,7 +229,8 @@ let private about state =
 
     ]
 
-let private page404 state =
+[<ReactComponent>]
+let private Page404 state =
 
     let p = sprintf "Page `%A` not found." state.currentUrl
 
@@ -236,7 +243,8 @@ let private page404 state =
         ]
     ]
 
-let private modalAddProject state dispatch =
+[<ReactComponent>]
+let private ModalAddProject state dispatch =
     Html.dialog [
         prop.id $"modal-add-project-{state.randomSalt}"
         prop.classes [ "modal"; "active" ]
@@ -371,7 +379,8 @@ let private modalAddProject state dispatch =
         ]
     ]
 
-let view state dispatch =
+[<ReactComponent>]
+let View state dispatch =
     let page =
         Html.div [
             prop.classes [
@@ -386,17 +395,17 @@ let view state dispatch =
             prop.id $"app-{state.randomSalt}"
             pageTheme state // Apply the theme
             prop.children [
-                navbar state dispatch
-                modalAddProject state dispatch
+                Navbar state dispatch
+                ModalAddProject state dispatch
                 Html.div [
                     prop.id "main-view"
                     prop.classes [ "mt-0"; "overflow-y-auto"; "h-screen" ]
                     prop.children [
                         match state.currentUrl with
-                        | [] -> projects state dispatch
-                        | [ "projects" ] -> projects state dispatch
-                        | [ "about" ] -> about state
-                        | _ -> page404 state
+                        | [] -> Projects state dispatch
+                        | [ "projects" ] -> Projects state dispatch
+                        | [ "about" ] -> About state
+                        | _ -> Page404 state
                     ]
                 ]
             ]

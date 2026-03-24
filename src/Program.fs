@@ -53,7 +53,7 @@ let timer onTick =
 
 let subscriptions model : Sub<Msg> = [ [ "timer" ], timer Tick ]
 
-Program.mkProgram init update view
+Program.mkProgram init update View
 |> Program.withSubscription subscriptions
 |> Program.withReactSynchronous "feliz-app-364e6a85-5c8c-4f74-a6c4-470c3700aadb"
 |> Program.run
