@@ -35,13 +35,18 @@ function viteTest() {
         enforce: 'post',
         generateBundle(_, bundle) {
             console.log('changing favicon with base64...')
+            console.log(`work dir: ${process.cwd()}`);
             const html = bundle["index.html"] /*as OutputAsset*/;
             const htmlDir = html.fileName.replace(/[^/]*$/, '');
-            const imagesAlt = globSync(`{css,public,dist,${htmlDir}}/*.{png,jpeg}`)
-            imagesAlt.forEach((img) => {
-                var imgR = img.replace(/^.*[\\\/]/, '');
-                console.log(`convert \`${img}\` (${imgR}) to base64`)
-                const imgData = readFileSync(img)
+            console.log(`html: ${html.fileName}, htmlDir: ${htmlDir}`);
+            console.log(`{css,public,dist${htmlDir ? `,${htmlDir}` : ''}}/*.{png,jpeg}`);
+            const imageAssets = Object.values(bundle).filter(
+                asset => asset.type === 'asset' && /\.(png|jpe?g)$/i.test(asset.fileName)
+            );
+            imageAssets.forEach((asset) => {
+                const imgR = asset.fileName.replace(/^.*[\\\/]/, '');
+                console.log(`convert \`${asset.fileName}\` (${imgR}) to base64`);
+                const imgData = Buffer.from(asset.source);
                 html.source = html.source.replaceAll(
                     `./${imgR}`,
                     "data:image/png;base64," + imgData.toString("base64"),
