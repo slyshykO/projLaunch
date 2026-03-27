@@ -22,6 +22,9 @@
     <Compile Include="View.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\serde-probe-lib\serde-probe-lib.fsproj" />
+  </ItemGroup>
   <!-- <ItemGroup>
     <PackageReference Include="Fable.Core" Version="4.5.0" />
     <PackageReference Include="Fable.Elmish" Version="5.0.2" />
@@ -35,4 +38,3 @@
   </ItemGroup> -->
   <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>
-

@@ -48,13 +48,9 @@ type ProjectData =
 
     static member fromJson(json: string) =
         try
-#if FABLE_COMPILER
             match Decode.Auto.fromString<ProjectData> (json, extra = jsExtra) with
             | Ok pd -> pd
             | Error err -> failwith err
-#else
-            SerdeJson.deserialize<ProjectData> json
-#endif
         with ex ->
             printfn "Error deserializing JSON: %s" ex.Message
             failwith ex.Message
@@ -68,4 +64,5 @@ let listOfProjectDataFromJsonStr (jsonStr: string) =
         | Ok pd -> pd
         | Error err -> failwith err
     with ex ->
+        printfn "Error deserializing JSON: %s" ex.Message
         failwith ex.Message
