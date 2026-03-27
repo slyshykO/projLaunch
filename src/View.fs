@@ -368,7 +368,8 @@ let private ModalAddProject state dispatch =
                                           description = description
                                           path = file
                                           ide = ide
-                                          environment = Map.empty }
+                                          environment = Map.empty
+                                          remote = None }
 
                                     let file_name = sprintf "%s-%s.%s" pd.name pd.id "json"
                                     let pd_json = pd |> ProjectData.toJson
@@ -424,4 +425,3 @@ let View state dispatch =
         ]
 
     React.router [ router.onUrlChanged (UrlChanged >> dispatch); router.children [ page ] ]
-

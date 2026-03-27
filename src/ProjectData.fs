@@ -2,6 +2,8 @@ module projectData
 
 open System
 open Thoth.Json
+open Serde.FS
+open Serde.FS.Json
 
 let jsExtra =
     Extra.empty
@@ -10,6 +12,20 @@ let jsExtra =
     |> Extra.withDecimal
     |> Extra.withBigInt
 
+(*
+#[derive(Debug, Clone, Deserialize, Serialize)]
+enum Remote {
+    Ssh { host: String, username: String },
+    Wsl(String),
+}
+*)
+
+[<Serde>]
+type Remote =
+    | Ssh of host: string * username: string
+    | Wsl of string
+
+[<Serde>]
 type ProjectData =
     { id: string
       name: string
@@ -17,7 +33,8 @@ type ProjectData =
       description: string
       path: string
       ide: string
-      environment: Map<string, string> }
+      environment: Map<string, string>
+      remote: Remote option }
 
     static member Default() =
         { id = ""
@@ -26,14 +43,20 @@ type ProjectData =
           description = ""
           path = ""
           ide = ""
-          environment = Map.empty }
+          environment = Map.empty
+          remote = None }
 
     static member fromJson(json: string) =
         try
+#if FABLE_COMPILER
             match Decode.Auto.fromString<ProjectData> (json, extra = jsExtra) with
             | Ok pd -> pd
             | Error err -> failwith err
+#else
+            SerdeJson.deserialize<ProjectData> json
+#endif
         with ex ->
+            printfn "Error deserializing JSON: %s" ex.Message
             failwith ex.Message
 
     static member toJson(pd: ProjectData) =
