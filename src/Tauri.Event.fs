@@ -26,12 +26,7 @@ module rec Event =
         /// </summary>
         abstract member payload: 'T with get, set
 
-    [<AllowNullLiteral>]
-    [<Interface>]
-    type EventCallback<'T> =
-        [<Emit("$0($1...)")>]
-        abstract member Invoke: event: Event<'T> -> unit
-
+    type EventCallback<'T> = Event<'T> -> unit
 
     type UnlistenFn = unit -> unit
 
@@ -55,3 +50,5 @@ module rec Event =
         | [<CompiledName("tauri://drag-leave")>] DRAG_LEAVE
 
     type EventName = U2<string, obj>
+
+

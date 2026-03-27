@@ -182,8 +182,7 @@ type Msg =
 
     | WindowSave
 
-    | WindowResized
-    | OnWindowResizedSuccess of Tauri.Dpi.PhysicalSize * Tauri.Dpi.PhysicalPosition
+    | WindowResized of Tauri.Dpi.PhysicalSize
 
     | Tick of DateTime
 
@@ -461,27 +460,16 @@ let update msg state =
 
     | WindowSave -> state, Cmd.none
 
-    | WindowResized ->
-        let onWindowResizedPromise () =
-            promise {
-
-                let! (size: Tauri.Dpi.PhysicalSize) = Tauri.Window.Window.getCurrent().innerSize ()
-                let! (position: Tauri.Dpi.PhysicalPosition) = Tauri.Window.Window.getCurrent().outerPosition ()
-                return (size, position)
-            }
-
-        state, Cmd.OfPromise.perform onWindowResizedPromise () OnWindowResizedSuccess
-
-    | OnWindowResizedSuccess(size, position) ->
+    | WindowResized size ->
         let newState =
             { state with
-                appWindowSize = Some size
-                appWindowPosition = Some position }
+                appWindowSize = Some size }
 
-        // Log the new size and position
-        printfn "Window resized to: %A, Position: %A" size position
+        printfn "Window resized to: w:%f, h:%f" size.width size.height
         newState, Cmd.none
 
     | Tick time ->
         let newState = { state with currentTime = time }
         newState, Cmd.none
+
+

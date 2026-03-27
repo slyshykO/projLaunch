@@ -1,4 +1,4 @@
-﻿module Main
+module Main
 
 // import *css
 //Fable.Core.JsInterop.importAll "./index.css"
@@ -17,26 +17,42 @@ let appWindow = Tauri.Window.Window.getCurrent ()
 let onCloseRequested () =
 
     let start dispatch =
-        // This is where you can handle the close request
-        // For example, you can dispatch a message to save state or confirm closing
-        appWindow?on ("close-requested", fun _ -> dispatch WindowSave)
+        let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
+
+        let closeRequestedHandler (_: Tauri.Window.CloseRequestedEvent) =
+            printfn "Close requested, dispatching WindowSave message"
+            dispatch WindowSave
+            U2.Case1 ()
+
+        promise {
+            let! unlisten = appWindow.onCloseRequested closeRequestedHandler
+            unsubscribe <- Some unlisten
+        }
+        |> ignore
 
         { new IDisposable with
-            member _.Dispose() = appWindow?off ("close-requested") }
+            member _.Dispose() = unsubscribe |> Option.iter (fun unlisten -> unlisten ()) }
 
     start
-
 let onWindowResized () =
     let start dispatch =
-        // This is where you can handle the window resize event
-        // For example, you can dispatch a message to update the state with the new size
-        appWindow?on ("resized", fun _ -> dispatch WindowResized)
+        let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
+        let resizeHandler (event: Tauri.Event.Event<Tauri.Dpi.PhysicalSize>) =
+            printfn "Window resized, dispatching WindowResized message"
+            dispatch (WindowResized event.payload)
+
+        promise {
+            let! unlisten = appWindow.onResized resizeHandler
+            unsubscribe <- Some unlisten
+        }
+        |> ignore
 
         { new IDisposable with
-            member _.Dispose() = appWindow?off ("resized") }
+            member _.Dispose() =
+                printfn "Unsubscribing from window resized event"
+                unsubscribe |> Option.iter (fun unlisten -> unlisten ()) }
 
     start
-
 let timer onTick =
     let start dispatch =
         let intervalId = JS.setInterval (fun _ -> dispatch (onTick DateTime.Now)) 1000
@@ -46,14 +62,16 @@ let timer onTick =
 
     start
 
-// let subscriptions model : Sub<Msg> =
-//     [ [ "timer" ], timer Tick
-//       [ "window-resized" ], onWindowResized ()
-//       [ "close-requested" ], onCloseRequested () ]
+let subscriptions model : Sub<Msg> =
+    [ [ "timer" ], timer Tick
+      [ "window-resized" ], onWindowResized ()
+      //[ "close-requested" ], onCloseRequested () 
+      ]
 
-let subscriptions model : Sub<Msg> = [ [ "timer" ], timer Tick ]
+// let subscriptions model : Sub<Msg> = [ [ "timer" ], timer Tick ]
 
 Program.mkProgram init update View
 |> Program.withSubscription subscriptions
 |> Program.withReactSynchronous "feliz-app-364e6a85-5c8c-4f74-a6c4-470c3700aadb"
 |> Program.run
+
