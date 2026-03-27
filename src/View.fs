@@ -206,11 +206,23 @@ let About state =
 
             Html.p [
                 prop.classes [ "text-lg"; "font-mono" ]
-                prop.children [ Html.text (sprintf "Wnd sz : %A" state.appWindowSize) ]
+                prop.children [
+                    Html.text (
+                        match state.appWindowSize with
+                        | Some size -> sprintf "Wnd sz : %.1f x %.1f" size.width size.height
+                        | None -> "Wnd sz : N/A"
+                    )
+                ]
             ]
             Html.p [
                 prop.classes [ "text-lg"; "font-mono" ]
-                prop.children [ Html.text (sprintf "Wnd pos: %A" state.appWindowPosition) ]
+                prop.children [
+                    Html.text (
+                        match state.appWindowPosition with
+                        | Some pos -> sprintf "Wnd pos: %.1f x %.1f" pos.x pos.y
+                        | None -> "Wnd pos: N/A"
+                    )
+                ]
             ]
             Html.p [
                 prop.classes [ "text-lg"; "font-mono" ]

@@ -61,6 +61,27 @@ let onWindowResized () =
 
     start
 
+let onWindowMoved () =
+    let start dispatch =
+        let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
+
+        let moveHandler (event: Tauri.Event.Event<Tauri.Dpi.PhysicalPosition>) =
+            printfn "Window moved, dispatching WindowMoved message"
+            dispatch (WindowMoved event.payload)
+
+        promise {
+            let! unlisten = appWindow.onMoved moveHandler
+            unsubscribe <- Some unlisten
+        }
+        |> ignore
+
+        { new IDisposable with
+            member _.Dispose() =
+                printfn "Unsubscribing from window moved event"
+                unsubscribe |> Option.iter (fun unlisten -> unlisten ()) }
+
+    start
+
 let timer onTick =
     let start dispatch =
         let intervalId = JS.setInterval (fun _ -> dispatch (onTick DateTime.Now)) 1000
@@ -73,9 +94,8 @@ let timer onTick =
 let subscriptions model : Sub<Msg> =
     [ [ "timer" ], timer Tick
       [ "window-resized" ], onWindowResized ()
+      [ "window-moved" ], onWindowMoved ()
       [ "close-requested" ], onCloseRequested () ]
-
-// let subscriptions model : Sub<Msg> = [ [ "timer" ], timer Tick ]
 
 Program.mkProgram init update View
 |> Program.withSubscription subscriptions

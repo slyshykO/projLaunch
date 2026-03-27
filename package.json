@@ -10,14 +10,6 @@
     "build": "dotnet tool restore && dotnet fable src -o ./src/bin/fable-js --run vite build --emptyOutDir",
     "tauri": "tauri"
   },
-  "overrides": {
-    "@tailwindcss/vite": {
-      "vite": "^8.0.0"
-    },
-    "vite-plugin-singlefile": {
-      "vite": "^8.0.0"
-    }
-  },
   "dependencies": {
     "@tauri-apps/api": "^2.3",
     "@tauri-apps/plugin-window-state": "^2.3.0",

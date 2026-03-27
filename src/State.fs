@@ -186,6 +186,7 @@ type Msg =
     | OnWindowCloseError of exn
 
     | WindowResized of Tauri.Dpi.PhysicalSize
+    | WindowMoved of Tauri.Dpi.PhysicalPosition
 
     | Tick of DateTime
 
@@ -513,7 +514,19 @@ let update msg state =
     | WindowResized size ->
         let newState = { state with appWindowSize = Some size }
 
+#if DEBUG
         printfn "Window resized to: w:%f, h:%f" size.width size.height
+#endif
+        newState, Cmd.none
+
+    | WindowMoved position ->
+        let newState =
+            { state with
+                appWindowPosition = Some position }
+
+#if DEBUG
+        printfn "Window moved to: x:%f, y:%f" position.x position.y
+#endif
         newState, Cmd.none
 
     | Tick time ->
