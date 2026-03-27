@@ -264,7 +264,7 @@ let update msg state =
         state, Cmd.OfPromise.perform delayPromise () OnStart
 
     | OnStart() ->
-        if Tauri.isTauri () then
+        if AppTauri.Core.isAvailable () then
             state,
             Cmd.batch
                 [ Cmd.ofMsg (GetProjects 50)
@@ -280,7 +280,7 @@ let update msg state =
     | Greet nick ->
         let greetPromise n =
             promise {
-                let! (response: string) = Tauri.invoke ("greet", Some(createObj [ "name" ==> n ]))
+                let! (response: string) = AppTauri.Core.greet n
                 return response
             }
 
@@ -293,7 +293,7 @@ let update msg state =
         let getDataDirPromise () =
             promise {
                 do! Promise.sleep 50
-                let! (response: string) = Tauri.appDataDir ()
+                let! (response: string) = AppTauri.Core.getDataDir ()
                 return response
             }
 
@@ -312,7 +312,7 @@ let update msg state =
         let getConfigDirPromise () =
             promise {
                 do! Promise.sleep 50
-                let! (response: string) = Tauri.appConfigDir ()
+                let! (response: string) = AppTauri.Core.getConfigDir ()
                 return response
             }
 
@@ -329,7 +329,7 @@ let update msg state =
         let getAppVersionPromise () =
             promise {
                 do! Promise.sleep 50
-                let! (response: string) = Tauri.getVersion ()
+                let! (response: string) = AppTauri.Core.getAppVersion ()
                 return response
             }
 
@@ -346,7 +346,7 @@ let update msg state =
         let getTauriVersionPromise () =
             promise {
                 do! Promise.sleep 50
-                let! (response: string) = Tauri.getTauriVersion ()
+                let! (response: string) = AppTauri.Core.getTauriVersion ()
                 return response
             }
 
@@ -394,7 +394,7 @@ let update msg state =
     | OpenProject id ->
         let openProjectPromise p =
             promise {
-                do! Tauri.invoke ("open_project", Some(createObj [ "id" ==> p ]))
+                do! AppTauri.Projects.openProject p
                 return id
             }
 
@@ -421,7 +421,7 @@ let update msg state =
     | AddOrUpdateProject(id, json) ->
         let addOrUpdateProjectPromise (i, j) =
             promise {
-                do! Tauri.invoke ("rewrite_project_file", Some(createObj [ "id" ==> i; "content" ==> j ]))
+                do! AppTauri.Projects.rewriteProjectFile i j
                 return id
             }
 
@@ -459,11 +459,11 @@ let update msg state =
         newState, Cmd.none
 
     | WindowSave ->
-        if state.isWindowClosePending || not (Tauri.isTauri ()) then
+        if state.isWindowClosePending || not (AppTauri.Core.isAvailable ()) then
             state, Cmd.none
         else
             let saveWindowStatePromise () =
-                promise { do! Tauri.WindowState.saveWindowState Tauri.WindowState.StateFlags.ALL }
+                promise { do! AppTauri.Window.saveState () }
 
             let newState =
                 { state with
@@ -476,7 +476,7 @@ let update msg state =
         let closeWindowPromise () =
             promise {
                 allowWindowClose <- true
-                do! Tauri.Window.Window.getCurrent().close ()
+                do! AppTauri.Window.closeCurrent ()
             }
 
         state, Cmd.OfPromise.either closeWindowPromise () (fun () -> Empty) OnWindowCloseError
@@ -524,3 +524,5 @@ let update msg state =
     | Tick time ->
         let newState = { state with currentTime = time }
         newState, Cmd.none
+
+

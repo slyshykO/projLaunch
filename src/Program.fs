@@ -11,8 +11,6 @@ open System
 open state
 open view
 
-let appWindow = Tauri.Window.Window.getCurrent ()
-
 let onCloseRequested () =
 
     let start dispatch =
@@ -28,7 +26,7 @@ let onCloseRequested () =
                 dispatch WindowSave
 
         promise {
-            let! unlisten = appWindow.onCloseRequested closeRequestedHandler
+            let! unlisten = AppTauri.Window.onCloseRequested closeRequestedHandler
             unsubscribe <- Some unlisten
         }
         |> ignore
@@ -43,12 +41,12 @@ let onWindowResized () =
     let start dispatch =
         let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
 
-        let resizeHandler (event: Tauri.Event.Event<Tauri.Dpi.PhysicalSize>) =
+        let resizeHandler (size: Tauri.Dpi.PhysicalSize) =
             printfn "Window resized, dispatching WindowResized message"
-            dispatch (WindowResized event.payload)
+            dispatch (WindowResized size)
 
         promise {
-            let! unlisten = appWindow.onResized resizeHandler
+            let! unlisten = AppTauri.Window.onResized resizeHandler
             unsubscribe <- Some unlisten
         }
         |> ignore
@@ -64,12 +62,12 @@ let onWindowMoved () =
     let start dispatch =
         let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
 
-        let moveHandler (event: Tauri.Event.Event<Tauri.Dpi.PhysicalPosition>) =
+        let moveHandler (position: Tauri.Dpi.PhysicalPosition) =
             printfn "Window moved, dispatching WindowMoved message"
-            dispatch (WindowMoved event.payload)
+            dispatch (WindowMoved position)
 
         promise {
-            let! unlisten = appWindow.onMoved moveHandler
+            let! unlisten = AppTauri.Window.onMoved moveHandler
             unsubscribe <- Some unlisten
         }
         |> ignore
