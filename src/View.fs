@@ -175,7 +175,6 @@ let private Projects state dispatch =
 
 [<ReactComponent>]
 let About state =
-
     Html.div [
         prop.classes [ "p-10"; "font-mono" ]
         prop.id $"about-{state.randomSalt}"

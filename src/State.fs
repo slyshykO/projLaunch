@@ -470,11 +470,12 @@ let update msg state =
             state, Cmd.none
         else
             let saveWindowStatePromise () =
-                promise {
-                    do! Tauri.WindowState.saveWindowState Tauri.WindowState.StateFlags.ALL
-                }
+                promise { do! Tauri.WindowState.saveWindowState Tauri.WindowState.StateFlags.ALL }
 
-            let newState = { state with isWindowClosePending = true }
+            let newState =
+                { state with
+                    isWindowClosePending = true }
+
             allowWindowClose <- false
             newState, Cmd.OfPromise.either saveWindowStatePromise () (fun () -> OnWindowSaveSuccess) OnWindowSaveError
 
@@ -490,6 +491,7 @@ let update msg state =
     | OnWindowSaveError exn ->
         let e = sprintf "Error while saving window state before close: %A" exn
         allowWindowClose <- false
+
         let newState =
             { state with
                 errors = List.append state.errors [ e ]
@@ -500,6 +502,7 @@ let update msg state =
     | OnWindowCloseError exn ->
         let e = sprintf "Error while closing window after save: %A" exn
         allowWindowClose <- false
+
         let newState =
             { state with
                 errors = List.append state.errors [ e ]
@@ -508,9 +511,7 @@ let update msg state =
         newState, Cmd.none
 
     | WindowResized size ->
-        let newState =
-            { state with
-                appWindowSize = Some size }
+        let newState = { state with appWindowSize = Some size }
 
         printfn "Window resized to: w:%f, h:%f" size.width size.height
         newState, Cmd.none
@@ -518,9 +519,3 @@ let update msg state =
     | Tick time ->
         let newState = { state with currentTime = time }
         newState, Cmd.none
-
-
-
-
-
-
