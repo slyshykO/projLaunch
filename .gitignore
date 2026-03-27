@@ -33,3 +33,7 @@ paket-files/
 
 #ionide
 .fake
+
+# Local Codex/.NET helper caches
+.config/.dotnet/
+.config/.nuget/

@@ -46,6 +46,8 @@ type Msg =
     | AddOrUpdateProject of string * string
     | OnAddOrUpdateProjectSuccess of string
     | OnAddOrUpdateProjectError of exn
+    | OpenAddProjectModal
+    | CloseAddProjectModal
 
     | FormAddProjectNameChanged of string
     | FormAddProjectPathChanged of string
@@ -76,6 +78,7 @@ type State =
       formAddProjectName: string
       formAddProjectPath: string
       formAddProjectDescription: string
+      isAddProjectModalOpen: bool
       randomSalt: string
       appWindowSize: Tauri.Dpi.PhysicalSize option
       appWindowPosition: Tauri.Dpi.PhysicalPosition option
@@ -115,6 +118,7 @@ let init () =
           formAddProjectName = ""
           formAddProjectPath = ""
           formAddProjectDescription = ""
+          isAddProjectModalOpen = false
           randomSalt = randomSalt
           appWindowSize = None
           appWindowPosition = None
@@ -303,13 +307,28 @@ let update msg state =
             { state with
                 formAddProjectName = ""
                 formAddProjectPath = ""
-                formAddProjectDescription = "" }
+                formAddProjectDescription = ""
+                isAddProjectModalOpen = false }
 
         newState, Cmd.ofMsg (GetProjects 1000)
     | OnAddOrUpdateProjectError exn ->
         let e = sprintf "Error: %A" exn
         let newErrors = List.append state.errors [ e ]
         let newState = { state with errors = newErrors }
+        newState, Cmd.none
+
+    | OpenAddProjectModal ->
+        let newState =
+            { state with
+                isAddProjectModalOpen = true }
+
+        newState, Cmd.none
+
+    | CloseAddProjectModal ->
+        let newState =
+            { state with
+                isAddProjectModalOpen = false }
+
         newState, Cmd.none
 
     | FormAddProjectNameChanged v ->
