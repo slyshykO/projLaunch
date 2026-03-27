@@ -710,4 +710,3 @@ module rec Window =
                 member val green: float = nativeOnly with get, set
                 member val blue: float = nativeOnly with get, set
                 member val alpha: float = nativeOnly with get, set
-

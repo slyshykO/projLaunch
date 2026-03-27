@@ -50,5 +50,3 @@ module rec Event =
         | [<CompiledName("tauri://drag-leave")>] DRAG_LEAVE
 
     type EventName = U2<string, obj>
-
-

@@ -63,6 +63,7 @@ module Tauri =
         /// </example>
         [<Import("getTauriVersion", "@tauri-apps/api/app")>]
         static member getTauriVersion() : JS.Promise<string> = nativeOnly
+
 module WindowState =
 
     open Fable.Core
