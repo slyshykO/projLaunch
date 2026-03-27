@@ -111,11 +111,20 @@ module rec Window =
         /// <returns>
         /// The <see href="Window">Window</see> instance to communicate with the window.
         /// </returns>
+        [<Import("Window", "@tauri-apps/api/window")>]
+        static member WindowType: WindowStatic = nativeOnly
+
         [<Import("Window", "@tauri-apps/api/window"); EmitConstructor>]
         static member Window(label: WindowLabel, options: WindowOptions) : Window = nativeOnly
 
 
 
+
+    [<AllowNullLiteral>]
+    [<Interface>]
+    type WindowStatic =
+        abstract member getByLabel: label: string -> JS.Promise<Window option>
+        abstract member getFocusedWindow: unit -> JS.Promise<Window option>
 
     [<AllowNullLiteral>]
     [<Interface>]
@@ -280,33 +289,13 @@ module rec Window =
         /// </summary>
         abstract member listeners: Window.listeners with get, set
 
-        static member inline getByLabel(label: string) : JS.Promise<Window option> =
-            emitJsExpr
-                (label)
-                $$"""
-        import { Window } from "@tauri-apps/api/window";
-        Window.getByLabel($0)"""
+        static member getByLabel(label: string) : JS.Promise<Window option> = Exports.WindowType.getByLabel(label)
 
-        static member inline getCurrent() : Window =
-            emitJsExpr
-                ()
-                $$"""
-        import { Window } from "@tauri-apps/api/window";
-        Window.getCurrent()"""
+        static member getCurrent() : Window = Exports.getCurrentWindow()
 
-        static member inline getAll() : JS.Promise<ResizeArray<Window>> =
-            emitJsExpr
-                ()
-                $$"""
-        import { Window } from "@tauri-apps/api/window";
-        Window.getAll()"""
+        static member getAll() : JS.Promise<ResizeArray<Window>> = Exports.getAllWindows()
 
-        static member inline getFocusedWindow() : JS.Promise<Window option> =
-            emitJsExpr
-                ()
-                $$"""
-        import { Window } from "@tauri-apps/api/window";
-        Window.getFocusedWindow()"""
+        static member getFocusedWindow() : JS.Promise<Window option> = Exports.WindowType.getFocusedWindow()
 
         abstract member listen: event: EventName * handler: EventCallback<'T> -> JS.Promise<UnlistenFn>
         abstract member once: event: EventName * handler: EventCallback<'T> -> JS.Promise<UnlistenFn>
@@ -710,3 +699,5 @@ module rec Window =
                 member val green: float = nativeOnly with get, set
                 member val blue: float = nativeOnly with get, set
                 member val alpha: float = nativeOnly with get, set
+
+

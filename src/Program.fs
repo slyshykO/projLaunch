@@ -5,7 +5,6 @@ module Main
 
 open Elmish
 open Elmish.React
-open Fable.Core.JsInterop
 open Fable.Core
 open System
 
