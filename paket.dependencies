@@ -14,6 +14,7 @@ nuget Fable.Browser.Dom
 //nuget Feliz.DaisyUI
 //git https://github.com/slyshykO/Feliz.DaisyUI.git update-feliz build: "../../../../build.bat build-daisyui", Packages: src/Feliz.DaisyUI/bin/Release
 nuget Feliz.DaisyUI
+nuget Serde.FS
 
 group Build
     source https://api.nuget.org/v3/index.json

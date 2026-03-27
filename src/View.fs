@@ -4,6 +4,7 @@ open Feliz
 open Feliz.Router
 open Feliz.DaisyUI
 
+open projectData
 open state
 
 module JsInterop =
@@ -423,3 +424,4 @@ let View state dispatch =
         ]
 
     React.router [ router.onUrlChanged (UrlChanged >> dispatch); router.children [ page ] ]
+

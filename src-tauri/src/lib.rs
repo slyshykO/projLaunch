@@ -1,9 +1,15 @@
 use fs_err::{File, OpenOptions};
+use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
 use tauri::Manager;
 
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+enum Remote {
+    Ssh { host: String, username: String },
+    Wsl(String),
+}
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct ProjectData {
     id: String,
     name: String,
@@ -13,6 +19,7 @@ struct ProjectData {
     path: String,
     ide: String,
     environment: std::collections::HashMap<String, String>,
+    remote: Option<Remote>,
 }
 
 fn file_content<P>(file_name: P) -> std::io::Result<String>
@@ -40,6 +47,58 @@ where
     Ok(())
 }
 
+fn gen_test_project_data() -> anyhow::Result<Vec<String>> {
+    let project1 = ProjectData {
+        id: "project1".to_string(),
+        name: "Project 1".to_string(),
+        last_opened: "2023-01-01T00:00:00Z".to_string(),
+        description: "This is project 1".to_string(),
+        path: "/path/to/project1".to_string(),
+        ide: "vscode".to_string(),
+        environment: std::collections::HashMap::new(),
+        remote: None,
+    };
+
+    let project2 = ProjectData {
+        id: "project2".to_string(),
+        name: "Project 2".to_string(),
+        last_opened: "2023-01-02T00:00:00Z".to_string(),
+        description: "This is project 2".to_string(),
+        path: "/path/to/project2".to_string(),
+        ide: "vscode".to_string(),
+        environment: {
+            let mut env = std::collections::HashMap::new();
+            env.insert("PATH".to_string(), "/path/to/project2/bin".to_string());
+            env
+        },
+        remote: Some(Remote::Ssh {
+            host: "example.com".to_string(),
+            username: "user".to_string(),
+        }),
+    };
+
+    let project3 = ProjectData {
+        id: "project3".to_string(),
+        name: "Project 3".to_string(),
+        last_opened: "2023-01-03T00:00:00Z".to_string(),
+        description: "This is project 3".to_string(),
+        path: "/path/to/project3".to_string(),
+        ide: "vscode".to_string(),
+        environment: {
+            let mut env = std::collections::HashMap::new();
+            env.insert("PATH".to_string(), "/path/to/project3/bin".to_string());
+            env
+        },
+        remote: Some(Remote::Wsl("Ubuntu".to_string())),
+    };
+
+    Ok(vec![
+        serde_json::to_string(&project1)?,
+        serde_json::to_string(&project2)?,
+        serde_json::to_string(&project3)?,
+    ])
+}
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -60,7 +119,7 @@ fn get_data_dir(app_handle: tauri::AppHandle) -> Result<String, tauri::Error> {
 fn get_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, tauri::Error> {
     let dir = app_handle.path().app_data_dir()?;
     let projects_dir = dir.join("projects");
-    let projects: Vec<String> = std::fs::read_dir(&projects_dir)?
+    let mut projects: Vec<String> = std::fs::read_dir(&projects_dir)?
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
@@ -68,6 +127,14 @@ fn get_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, tauri::Erro
             Some(file)
         })
         .collect();
+    match gen_test_project_data() {
+        Ok(test_data) => {
+            for data in test_data {
+                projects.push(data);
+            }
+        }
+        Err(_) => {}
+    }
     Ok(projects)
 }
 
