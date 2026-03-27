@@ -3,7 +3,6 @@ namespace Tauri
 module rec Window =
 
     open Fable.Core
-    open Fable.Core.JsInterop
     open Tauri.Dpi
     open Tauri.Event
 
@@ -289,13 +288,13 @@ module rec Window =
         /// </summary>
         abstract member listeners: Window.listeners with get, set
 
-        static member getByLabel(label: string) : JS.Promise<Window option> = Exports.WindowType.getByLabel(label)
+        static member getByLabel(label: string) : JS.Promise<Window option> = Exports.WindowType.getByLabel (label)
 
-        static member getCurrent() : Window = Exports.getCurrentWindow()
+        static member getCurrent() : Window = Exports.getCurrentWindow ()
 
-        static member getAll() : JS.Promise<ResizeArray<Window>> = Exports.getAllWindows()
+        static member getAll() : JS.Promise<ResizeArray<Window>> = Exports.getAllWindows ()
 
-        static member getFocusedWindow() : JS.Promise<Window option> = Exports.WindowType.getFocusedWindow()
+        static member getFocusedWindow() : JS.Promise<Window option> = Exports.WindowType.getFocusedWindow ()
 
         abstract member listen: event: EventName * handler: EventCallback<'T> -> JS.Promise<UnlistenFn>
         abstract member once: event: EventName * handler: EventCallback<'T> -> JS.Promise<UnlistenFn>
@@ -699,5 +698,3 @@ module rec Window =
                 member val green: float = nativeOnly with get, set
                 member val blue: float = nativeOnly with get, set
                 member val alpha: float = nativeOnly with get, set
-
-
