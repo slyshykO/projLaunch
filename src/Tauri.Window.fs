@@ -387,8 +387,7 @@ module rec Window =
         abstract member onResized: handler: EventCallback<PhysicalSize> -> JS.Promise<UnlistenFn>
         abstract member onMoved: handler: EventCallback<PhysicalPosition> -> JS.Promise<UnlistenFn>
 
-        abstract member onCloseRequested:
-            handler: (CloseRequestedEvent -> U2<unit, JS.Promise<unit>>) -> JS.Promise<UnlistenFn>
+        abstract member onCloseRequested: handler: (CloseRequestedEvent -> unit) -> JS.Promise<UnlistenFn>
 
         //abstract member onDragDropEvent: handler: EventCallback<DragDropEvent> -> JS.Promise<UnlistenFn>
         abstract member onFocusChanged: handler: EventCallback<bool> -> JS.Promise<UnlistenFn>
@@ -711,3 +710,4 @@ module rec Window =
                 member val green: float = nativeOnly with get, set
                 member val blue: float = nativeOnly with get, set
                 member val alpha: float = nativeOnly with get, set
+

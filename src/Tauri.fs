@@ -63,3 +63,13 @@ module Tauri =
         /// </example>
         [<Import("getTauriVersion", "@tauri-apps/api/app")>]
         static member getTauriVersion() : JS.Promise<string> = nativeOnly
+module WindowState =
+
+    open Fable.Core
+
+    [<RequireQualifiedAccess>]
+    type StateFlags =
+        | ALL = 63
+
+    [<Import("saveWindowState", "@tauri-apps/plugin-window-state")>]
+    let saveWindowState (_flags: StateFlags) : JS.Promise<unit> = jsNative

@@ -19,10 +19,14 @@ let onCloseRequested () =
     let start dispatch =
         let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
 
-        let closeRequestedHandler (_: Tauri.Window.CloseRequestedEvent) =
-            printfn "Close requested, dispatching WindowSave message"
-            dispatch WindowSave
-            U2.Case1 ()
+        let closeRequestedHandler (event: Tauri.Window.CloseRequestedEvent) =
+            if allowWindowClose then
+                printfn "Close requested after save, allowing window to close"
+                allowWindowClose <- false
+            else
+                printfn "Close requested, dispatching WindowSave message"
+                event.preventDefault ()
+                dispatch WindowSave
 
         promise {
             let! unlisten = appWindow.onCloseRequested closeRequestedHandler
@@ -31,12 +35,15 @@ let onCloseRequested () =
         |> ignore
 
         { new IDisposable with
-            member _.Dispose() = unsubscribe |> Option.iter (fun unlisten -> unlisten ()) }
+            member _.Dispose() =
+                unsubscribe |> Option.iter (fun unlisten -> unlisten ()) }
 
     start
+
 let onWindowResized () =
     let start dispatch =
         let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
+
         let resizeHandler (event: Tauri.Event.Event<Tauri.Dpi.PhysicalSize>) =
             printfn "Window resized, dispatching WindowResized message"
             dispatch (WindowResized event.payload)
@@ -53,6 +60,7 @@ let onWindowResized () =
                 unsubscribe |> Option.iter (fun unlisten -> unlisten ()) }
 
     start
+
 let timer onTick =
     let start dispatch =
         let intervalId = JS.setInterval (fun _ -> dispatch (onTick DateTime.Now)) 1000
@@ -65,8 +73,7 @@ let timer onTick =
 let subscriptions model : Sub<Msg> =
     [ [ "timer" ], timer Tick
       [ "window-resized" ], onWindowResized ()
-      //[ "close-requested" ], onCloseRequested () 
-      ]
+      [ "close-requested" ], onCloseRequested () ]
 
 // let subscriptions model : Sub<Msg> = [ [ "timer" ], timer Tick ]
 
@@ -74,4 +81,5 @@ Program.mkProgram init update View
 |> Program.withSubscription subscriptions
 |> Program.withReactSynchronous "feliz-app-364e6a85-5c8c-4f74-a6c4-470c3700aadb"
 |> Program.run
+
 

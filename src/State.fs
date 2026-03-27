@@ -181,6 +181,9 @@ type Msg =
     | FormAddProjectDescriptionChanged of string
 
     | WindowSave
+    | OnWindowSaveSuccess
+    | OnWindowSaveError of exn
+    | OnWindowCloseError of exn
 
     | WindowResized of Tauri.Dpi.PhysicalSize
 
@@ -203,7 +206,10 @@ type State =
       formAddProjectDescription: string
       randomSalt: string
       appWindowSize: Tauri.Dpi.PhysicalSize option
-      appWindowPosition: Tauri.Dpi.PhysicalPosition option }
+      appWindowPosition: Tauri.Dpi.PhysicalPosition option
+      isWindowClosePending: bool }
+
+let mutable allowWindowClose = false
 
 let getCurrentUrl () = Browser.Dom.window.location.href
 
@@ -239,7 +245,8 @@ let init () =
           formAddProjectDescription = ""
           randomSalt = randomSalt
           appWindowSize = None
-          appWindowPosition = None }
+          appWindowPosition = None
+          isWindowClosePending = false }
 
     state, Cmd.ofMsg Start
 
@@ -458,7 +465,47 @@ let update msg state =
 
         newState, Cmd.none
 
-    | WindowSave -> state, Cmd.none
+    | WindowSave ->
+        if state.isWindowClosePending || not (Tauri.isTauri ()) then
+            state, Cmd.none
+        else
+            let saveWindowStatePromise () =
+                promise {
+                    do! Tauri.WindowState.saveWindowState Tauri.WindowState.StateFlags.ALL
+                }
+
+            let newState = { state with isWindowClosePending = true }
+            allowWindowClose <- false
+            newState, Cmd.OfPromise.either saveWindowStatePromise () (fun () -> OnWindowSaveSuccess) OnWindowSaveError
+
+    | OnWindowSaveSuccess ->
+        let closeWindowPromise () =
+            promise {
+                allowWindowClose <- true
+                do! Tauri.Window.Window.getCurrent().close ()
+            }
+
+        state, Cmd.OfPromise.either closeWindowPromise () (fun () -> Empty) OnWindowCloseError
+
+    | OnWindowSaveError exn ->
+        let e = sprintf "Error while saving window state before close: %A" exn
+        allowWindowClose <- false
+        let newState =
+            { state with
+                errors = List.append state.errors [ e ]
+                isWindowClosePending = false }
+
+        newState, Cmd.none
+
+    | OnWindowCloseError exn ->
+        let e = sprintf "Error while closing window after save: %A" exn
+        allowWindowClose <- false
+        let newState =
+            { state with
+                errors = List.append state.errors [ e ]
+                isWindowClosePending = false }
+
+        newState, Cmd.none
 
     | WindowResized size ->
         let newState =
@@ -471,5 +518,9 @@ let update msg state =
     | Tick time ->
         let newState = { state with currentTime = time }
         newState, Cmd.none
+
+
+
+
 
 
