@@ -361,16 +361,8 @@ let update msg state =
         newState, Cmd.none
 
     | GetProjects timeout ->
-        let getProjectsPromise () =
-            promise {
-                if timeout > 0 then
-                    do! Promise.sleep timeout
-
-                let! (response: string array) = Tauri.invoke ("get_projects", None)
-                return response
-            }
-
-        state, Cmd.OfPromise.either getProjectsPromise () OnGetProjectsSuccess OnGetProjectsError
+        state,
+        Cmd.OfPromise.either AppTauri.Projects.getProjectsAfterStartup timeout OnGetProjectsSuccess OnGetProjectsError
     | OnGetProjectsSuccess response ->
         let mutable err = []
         let mutable prj: ProjectData list = []
