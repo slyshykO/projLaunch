@@ -47,6 +47,7 @@ where
     Ok(())
 }
 
+#[allow(dead_code)]
 fn gen_test_project_data() -> anyhow::Result<Vec<String>> {
     let project1 = ProjectData {
         id: "project1".to_string(),
@@ -119,7 +120,7 @@ fn get_data_dir(app_handle: tauri::AppHandle) -> Result<String, tauri::Error> {
 fn get_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, tauri::Error> {
     let dir = app_handle.path().app_data_dir()?;
     let projects_dir = dir.join("projects");
-    let mut projects: Vec<String> = std::fs::read_dir(&projects_dir)?
+    let /*mut*/ projects: Vec<String> = std::fs::read_dir(&projects_dir)?
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
@@ -127,14 +128,14 @@ fn get_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, tauri::Erro
             Some(file)
         })
         .collect();
-    match gen_test_project_data() {
-        Ok(test_data) => {
-            for data in test_data {
-                projects.push(data);
-            }
-        }
-        Err(_) => {}
-    }
+    // match gen_test_project_data() {
+    //     Ok(test_data) => {
+    //         for data in test_data {
+    //             projects.push(data);
+    //         }
+    //     }
+    //     Err(_) => {}
+    // }
     Ok(projects)
 }
 
