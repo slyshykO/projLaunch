@@ -184,50 +184,103 @@ let private About
                 prop.classes [ "text-3xl"; "font-bold" ]
                 prop.children [ Html.text "About" ]
             ]
-            Html.p [
-                prop.classes [ "text-lg"; "font-mono" ]
-                prop.children [ Html.text (sprintf "Version   : %s" appVersion) ]
-            ]
-            Html.p [
-                prop.classes [ "text-lg"; "font-mono" ]
-                prop.children [ Html.text (sprintf "Tauri Ver: %s" tauriVersion) ]
-            ]
-            Html.p [
-                prop.classes [ "text-lg"; "font-mono" ]
-                prop.children [ Html.text (sprintf "React Ver: %s" (ReactVersion.reactVersion ())) ]
-            ]
-            Html.p [
-                prop.classes [ "text-lg"; "font-mono" ]
-                prop.children [ Html.text (sprintf "Data dir  : %s" appDataDir) ]
-            ]
-            Html.p [
-                prop.classes [ "text-lg"; "font-mono" ]
-                prop.children [ Html.text (sprintf "Config dir: %s" appConfigDir) ]
-            ]
-
-            Html.p [
-                prop.classes [ "text-lg"; "font-mono" ]
+            Daisy.table [
+                prop.classes [ "text-lg"; "font-mono"; "table-auto"; "w-fit"; "whitespace-nowrap"; "p-1" ]
                 prop.children [
-                    Html.text (
-                        match appWindowSize with
-                        | Some size -> sprintf "Wnd sz : %.1f x %.1f" size.width size.height
-                        | None -> "Wnd sz : N/A"
-                    )
+                    Html.tbody [
+                        Html.tr [
+                            prop.classes [ "w-fit"; "whitespace-nowrap" ]
+                            prop.children [
+                                Html.td [
+                                    prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
+                                    prop.children [ Html.text "Version" ]
+                                ]
+                                Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
+                                Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text appVersion ] ]
+                            ]
+                        ]
+                        Html.tr [
+                            Html.td [
+                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
+                                prop.children [ Html.text "Tauri Ver" ]
+                            ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text tauriVersion ] ]
+                        ]
+                        Html.tr [
+                            Html.td [
+                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
+                                prop.children [ Html.text "React Ver" ]
+                            ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
+                            Html.td [
+                                prop.classes [ "p-1" ]
+                                prop.children [ Html.text (ReactVersion.reactVersion ()) ]
+                            ]
+                        ]
+                        Html.tr [
+                            Html.td [
+                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
+                                prop.children [ Html.text "Data dir" ]
+                            ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text appDataDir ] ]
+                        ]
+                        Html.tr [
+                            Html.td [
+                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
+                                prop.children [ Html.text "Config dir" ]
+                            ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text appConfigDir ] ]
+                        ]
+                        Html.tr [
+                            Html.td [
+                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
+                                prop.children [ Html.text "Window size" ]
+                            ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
+                            Html.td [
+                                prop.classes [ "p-1" ]
+                                prop.children [
+                                    Html.text (
+                                        match appWindowSize with
+                                        | Some size -> sprintf "%.1f x %.1f" size.width size.height
+                                        | None -> "N/A"
+                                    )
+                                ]
+                            ]
+                        ]
+                        Html.tr [
+                            Html.td [
+                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
+                                prop.children [ Html.text "Window position" ]
+                            ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
+                            Html.td [
+                                prop.classes [ "p-1" ]
+                                prop.children [
+                                    Html.text (
+                                        match appWindowPosition with
+                                        | Some pos -> sprintf "%.1f x %.1f" pos.x pos.y
+                                        | None -> "N/A"
+                                    )
+                                ]
+                            ]
+                        ]
+                        Html.tr [
+                            Html.td [
+                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
+                                prop.children [ Html.text "Current time" ]
+                            ]
+                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
+                            Html.td [
+                                prop.classes [ "p-1" ]
+                                prop.children [ Html.text (sprintf "%A" currentTime) ]
+                            ]
+                        ]
+                    ]
                 ]
-            ]
-            Html.p [
-                prop.classes [ "text-lg"; "font-mono" ]
-                prop.children [
-                    Html.text (
-                        match appWindowPosition with
-                        | Some pos -> sprintf "Wnd pos: %.1f x %.1f" pos.x pos.y
-                        | None -> "Wnd pos: N/A"
-                    )
-                ]
-            ]
-            Html.p [
-                prop.classes [ "text-lg"; "font-mono" ]
-                prop.children [ Html.text (sprintf "Time: %A" currentTime) ]
             ]
 
             Daisy.divider []
@@ -269,6 +322,7 @@ let private ModalAddProject
     let remoteHost, setRemoteHost = React.useState ""
     let remoteUsername, setRemoteUsername = React.useState ""
     let remoteWslDistro, setRemoteWslDistro = React.useState ""
+    let ideValue, setIdeValue = React.useState "vscode"
 
     React.useEffect (
         (fun () ->
@@ -347,20 +401,47 @@ let private ModalAddProject
                                             dispatch (FormAddProjectDescriptionChanged newValue))
                                     )
                                 ]
+
+                                Daisy.fieldsetLabel "IDE"
+                                Daisy.select [
+                                    select.sm
+
+                                    prop.id "form-add-project-ide"
+                                    prop.value ideValue
+                                    prop.onChange (
+                                        React.useCallback (fun newValue ->
+                                            if not (newValue = "vscode") then
+                                                setRemoteType "" // reset remote type if IDE is not vscode, since currently only vscode supports remote projects
+
+                                            setIdeValue newValue)
+                                    )
+                                    prop.children [
+                                        Html.option [ prop.value "vscode"; prop.children [ Html.text "VSCode" ] ]
+                                        Html.option [
+                                            prop.value "visualstudio2022"
+                                            prop.children [ Html.text "Visual Studio 2022" ]
+                                        ]
+                                        Html.option [
+                                            prop.value "visualstudio2026"
+                                            prop.children [ Html.text "Visual Studio 2026" ]
+                                        ]
+                                        Html.option [ prop.value "rider"; prop.children [ Html.text "Rider" ] ]
+
+                                    ]
+                                ]
+
                                 Daisy.fieldsetLabel "Remote"
                                 Daisy.select [
                                     select.sm
                                     prop.id "form-add-project-remote-type"
                                     prop.value remoteType
+                                    prop.disabled (ideValue <> "vscode") // currently only vscode supports remote projects
                                     prop.children [
                                         Html.option [ prop.value ""; prop.children [ Html.text "None" ] ]
                                         Html.option [ prop.value "ssh"; prop.children [ Html.text "SSH" ] ]
                                         Html.option [ prop.value "wsl"; prop.children [ Html.text "WSL" ] ]
                                     ]
-                                    prop.onChange (
-                                        React.useCallback (fun newValue ->
-                                            setRemoteType newValue)
-                                    )
+                                    prop.onChange (React.useCallback (fun newValue -> setRemoteType newValue))
                                 ]
                                 Html.div [
                                     prop.classes [
@@ -376,8 +457,7 @@ let private ModalAddProject
                                             prop.value remoteWslDistro
                                             prop.required true
                                             prop.onChange (
-                                                React.useCallback (fun newValue ->
-                                                    setRemoteWslDistro newValue)
+                                                React.useCallback (fun newValue -> setRemoteWslDistro newValue)
                                             )
                                         ]
                                     ]
@@ -401,8 +481,7 @@ let private ModalAddProject
                                                     prop.value remoteHost
                                                     prop.required true
                                                     prop.onChange (
-                                                        React.useCallback (fun newValue ->
-                                                            setRemoteHost newValue)
+                                                        React.useCallback (fun newValue -> setRemoteHost newValue)
                                                     )
                                                 ]
                                                 Daisy.input [
@@ -413,8 +492,7 @@ let private ModalAddProject
                                                     prop.value remoteUsername
                                                     prop.required true
                                                     prop.onChange (
-                                                        React.useCallback (fun newValue ->
-                                                            setRemoteUsername newValue)
+                                                        React.useCallback (fun newValue -> setRemoteUsername newValue)
                                                     )
                                                 ]
                                             ]
@@ -432,19 +510,6 @@ let private ModalAddProject
                                         React.useCallback (fun newValue ->
                                             dispatch (FormAddProjectPathChanged newValue))
                                     )
-                                ]
-                                Daisy.fieldsetLabel "IDE"
-                                Daisy.select [
-                                    select.sm
-
-                                    prop.id "form-add-project-ide"
-                                    prop.children [
-                                        Html.option [ prop.value "vscode"; prop.children [ Html.text "VSCode" ] ]
-                                        Html.option [
-                                            prop.value "visualstudio2022"
-                                            prop.children [ Html.text "Visual Studio 2022" ]
-                                        ]
-                                    ]
                                 ]
                             ]
                         ]
@@ -488,9 +553,7 @@ let private ModalAddProject
                                                 && not (System.String.IsNullOrWhiteSpace remoteUsername)
                                                 ->
                                                 Some(Ssh(remoteHost, remoteUsername))
-                                            | "wsl" when
-                                                not (System.String.IsNullOrWhiteSpace remoteWslDistro)
-                                                ->
+                                            | "wsl" when not (System.String.IsNullOrWhiteSpace remoteWslDistro) ->
                                                 Some(Wsl remoteWslDistro)
                                             | _ -> None
 
