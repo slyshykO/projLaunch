@@ -172,8 +172,17 @@ fn ide_to_command(ide: &str) -> String {
         "code" => code_exe,
         "vscode" => code_exe,
         "idea" => "idea".to_string(),
+        "rider" => "rider".to_string(),
         s if s.contains("studio") && s.contains("2022") => {
             r"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\devenv.exe"
+                .to_string()
+        }
+        s if s.contains("studio") && s.contains("2019") => {
+            r"C:\Program Files\Microsoft Visual Studio\2019\Community\Common7\IDE\devenv.exe"
+                .to_string()
+        }
+        s if s.contains("studio") && s.contains("2026") => {
+            r"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\devenv.exe"
                 .to_string()
         }
         _ => code_exe,
@@ -190,6 +199,18 @@ fn open_project(app_handle: tauri::AppHandle, id: String) -> Result<(), tauri::E
     let environment = project_data.environment;
     let app = ide_to_command(ide.as_str());
     let mut cmd = std::process::Command::new(app.as_str());
+    match project_data.remote {
+        Some(Remote::Ssh { host, username }) => {
+            cmd.args(&[
+                "--remote",
+                format!("ssh-remote+{}@{}", username, host).as_str(),
+            ]);
+        }
+        Some(Remote::Wsl(distro)) => {
+            cmd.args(&["--remote", format!("wsl+{}", distro).as_str()]);
+        }
+        None => {}
+    }
     cmd.args(&[path.as_str()]);
     for (key, value) in environment {
         if key == "PATH" {
