@@ -202,10 +202,12 @@ fn open_project(app_handle: tauri::AppHandle, id: String) -> Result<(), tauri::E
     let mut cmd = std::process::Command::new(app.as_str());
     match project_data.remote {
         Some(Remote::Ssh { host, username }) => {
-            cmd.args(&[
-                "--remote",
-                format!("ssh-remote+{}@{}", username, host).as_str(),
-            ]);
+            let host = if username.is_empty() {
+                host
+            } else {
+                format!("{}@{}", username, host)
+            };
+            cmd.args(&["--remote", format!("ssh-remote+{}", host).as_str()]);
         }
         Some(Remote::Wsl(distro)) => {
             cmd.args(&["--remote", format!("wsl+{}", distro).as_str()]);
