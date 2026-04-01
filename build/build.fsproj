@@ -13,6 +13,7 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Gapotchenko.FX.Console" Version="2026.5.3" />
+    <PackageReference Include="Gapotchenko.FX.Console" Version="2026.6.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
 </Project>
