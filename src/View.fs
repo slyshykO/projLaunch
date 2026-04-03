@@ -548,10 +548,7 @@ let private ModalAddProject
 
                                         let remote =
                                             match remoteType with
-                                            | "ssh" when
-                                                not (System.String.IsNullOrWhiteSpace remoteHost)
-                                                && not (System.String.IsNullOrWhiteSpace remoteUsername)
-                                                ->
+                                            | "ssh" when not (System.String.IsNullOrWhiteSpace remoteHost) ->
                                                 Some(Ssh(remoteHost, remoteUsername))
                                             | "wsl" when not (System.String.IsNullOrWhiteSpace remoteWslDistro) ->
                                                 Some(Wsl remoteWslDistro)
