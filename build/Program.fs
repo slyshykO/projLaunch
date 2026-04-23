@@ -126,7 +126,9 @@ module Build =
 
     let private syncFelizDaisyUiSources () =
         try
-            let projectRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(__SOURCE_DIRECTORY__, ".."))
+            let projectRoot =
+                System.IO.Path.GetFullPath(System.IO.Path.Combine(__SOURCE_DIRECTORY__, ".."))
+
             let paketLockPath = System.IO.Path.Combine(projectRoot, "paket.lock")
             let indexCssPath = System.IO.Path.Combine(projectRoot, "src", "index.css")
 
@@ -271,14 +273,17 @@ module Build =
                       "./src-tauri/Cargo.toml" ]
 
             let dotnetRes =
-                BuildUtils.runCmd
-                    (Config.shell ())
-                    [ Config.shellCmdArg ()
-                      "dotnet"
-                      "list"
-                      "./src/app.fsproj"
-                      "package"
-                      "--outdated" ]
+                if System.IO.File.Exists "paket.dependencies" then
+                    BuildUtils.runCmd (Config.shell ()) [ Config.shellCmdArg (); "dotnet"; "paket"; "update" ]
+                else
+                    BuildUtils.runCmd
+                        (Config.shell ())
+                        [ Config.shellCmdArg ()
+                          "dotnet"
+                          "list"
+                          "./src/app.fsproj"
+                          "package"
+                          "--outdated" ]
 
             npmRes + cargoRes + dotnetRes
         with ex ->
