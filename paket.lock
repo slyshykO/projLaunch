@@ -63,9 +63,9 @@ NUGET
     Serde.FS.Json (1.0.0-alpha.11)
       FSharp.Core (>= 10.0.103)
       Serde.FS (>= 1.0.0-alpha.11)
-    Thoth.Json (10.4.1)
-      Fable.Core (>= 4.1)
-      FSharp.Core (>= 5.0.2)
+    Thoth.Json (10.5)
+      Fable.Core (>= 5.0)
+      FSharp.Core (>= 10.1.203)
 
 GROUP Build
 STORAGE: NONE
