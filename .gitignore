@@ -35,5 +35,9 @@ paket-files/
 .fake
 
 # Local Codex/.NET helper caches
+.appdata/
 .config/.dotnet/
 .config/.nuget/
+
+# Serde.FS generated probe source copied from obj for Fable checks
+serde-probe-lib/SerdeJsonCodecs.g.fs

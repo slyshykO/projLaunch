@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="SerdeProbe.fs" />
+    <Compile Include="SerdeJsonCodecs.g.fs" Condition="Exists('SerdeJsonCodecs.g.fs') and '$(FABLE_COMPILER)' == 'True'" />
   </ItemGroup>
   <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>

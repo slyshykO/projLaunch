@@ -8,6 +8,7 @@
     "dev": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js -e .js --sourceMaps --configuration Debug --run vite --mode development",
     "start": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js --run vite serve",
     "build": "dotnet tool restore && dotnet fable src -o ./src/bin/fable-js --run vite build --emptyOutDir",
+    "build:serde-probe": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-serde-probe.ps1",
     "tauri": "tauri"
   },
   "dependencies": {
