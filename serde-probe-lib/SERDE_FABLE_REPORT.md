@@ -274,8 +274,19 @@ For `Serde.FS` / `Serde.FS.Json` `1.0.0-alpha.14`:
 - Fable does not automatically compile the normal generated codec source because it is emitted under `obj/`.
 - Copying the generated source out of `obj/` and including it Fable-only makes Fable see the codec source.
 - The generated codec source still fails under Fable because `Serde.FS.Json.Codec.JsonValue` constructors are not translated/resolved.
+- The main app build temporarily excludes `serde-probe-lib` from Fable compilation:
+
+```xml
+<ItemGroup Condition="'$(FABLE_COMPILER)' != 'True'">
+  <ProjectReference Include="..\serde-probe-lib\serde-probe-lib.fsproj" />
+</ItemGroup>
+```
+
+This keeps `npm run build` passing while leaving the probe project available for .NET builds and focused Serde/Fable retries.
 
 So `Serde.FS` is still incompatible with this plain `[<Serde>]` + `SerdeJson.serialize` / `deserialize` Fable use case.
+
+The conditional app reference is a temporary workaround only. Remove it once `Serde.FS` supports this Fable scenario directly.
 
 ## Next Retry Checklist
 
@@ -296,3 +307,4 @@ Cannot find Serde.FS.Json.Codec.JsonValue constructor
 
 4. If that error is gone, check whether the Node runtime verifier passes.
 5. If the generated code moves out of `obj/` or Serde starts generating Fable-specific codecs for `[<Serde>]`, simplify or remove the copy step in `scripts/build-serde-probe.ps1`.
+6. If the probe passes under Fable, remove the temporary `$(FABLE_COMPILER) != 'True'` condition around the `serde-probe-lib` project reference in `src/app.fsproj`.
