@@ -4,13 +4,15 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 import { readFileSync } from 'node:fs'
 import { globSync } from 'glob'
 import tailwindcss from '@tailwindcss/vite';
+import { fileURLToPath } from 'node:url'
 
 const host = process.env.TAURI_DEV_HOST;
+const srcRoot = fileURLToPath(new URL('./src', import.meta.url));
 
 export default defineConfig({
     //plugins: [react(), viteTest(), viteSingleFile(), compression()],
     plugins: [tailwindcss(), react(), viteTest(), viteSingleFile()],
-    root: "./src",
+    root: srcRoot,
     build: {
         outDir: "../dist",
     },
