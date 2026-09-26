@@ -196,7 +196,7 @@ let private About
                                     prop.children [ Html.text "Version" ]
                                 ]
                                 Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                                Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text appVersion ] ]
+                                Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text Version.version ] ]
                             ]
                         ]
                         Html.tr [
@@ -555,14 +555,16 @@ let private ModalAddProject
                                             | _ -> None
 
                                         let pd =
-                                            { id = System.Guid.NewGuid().ToString()
-                                              name = name
-                                              lastOpened = System.DateTime.Now
-                                              description = description
-                                              path = file
-                                              ide = ide
-                                              environment = Map.empty
-                                              remote = remote }
+                                            {
+                                                id = System.Guid.NewGuid().ToString()
+                                                name = name
+                                                lastOpened = System.DateTime.Now
+                                                description = description
+                                                path = file
+                                                ide = ide
+                                                environment = Map.empty
+                                                remote = remote
+                                            }
 
                                         let file_name = sprintf "%s-%s.%s" pd.name pd.id "json"
                                         let pd_json = pd |> ProjectData.toJson

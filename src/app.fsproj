@@ -7,6 +7,7 @@
   <ItemGroup>
     <None Include="index.html" />
     <None Include="index.css" />
+    <Compile Include="bin/version.fs" />
     <Compile Include="AsyncOps.fs" />
     <Compile Include="Extensions.fs" />
     <Compile Include="ReactVersion.fs" />
@@ -38,4 +39,8 @@
     <PackageReference Include="Fable.Browser.Dom" Version="2.20.0" />
   </ItemGroup> -->
   <Import Project="..\.paket\Paket.Restore.targets" />
+
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="dotnet fsi --exec &quot;$(MSBuildProjectDirectory)\..\scripts\version\version.fsx&quot; &quot;$(MSBuildThisFileDirectory)bin&quot;" />
+  </Target>
 </Project>
