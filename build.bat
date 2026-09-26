@@ -9,10 +9,15 @@ set PROJECT_NAME=build
 set PROJECT_FRAMEWORK=net10.0
 set PROJECT_RUNTIME=win-x64
 
+rem Prefer .NET 11 when its SDK is installed; otherwise keep .NET 10.
+dotnet --list-sdks | findstr /b /l /c:"11." >nul
+if not errorlevel 1 set PROJECT_FRAMEWORK=net11.0
+
 if "%1%" == "self-build" (
     dotnet publish ^
         %PROJECT_DIR%\%PROJECT_NAME%.fsproj ^
         --configuration Release -f %PROJECT_FRAMEWORK% --tl:on --verbosity d --sc --runtime %PROJECT_RUNTIME%  ^
+        /property:TargetFrameworks=%PROJECT_FRAMEWORK% ^
         /property:PublishTrimmed=True ^
         /property:IncludeNativeLibrariesForSelfExtract=True ^
         /property:DebugType=None ^
@@ -34,7 +39,7 @@ cd %~dp0
 if exist "%PROJECT_DIR%\bin\Release\%PROJECT_FRAMEWORK%\%PROJECT_RUNTIME%\publish\%PROJECT_NAME%.exe" (
     "%PROJECT_DIR%\bin\Release\%PROJECT_FRAMEWORK%\%PROJECT_RUNTIME%\publish\%PROJECT_NAME%.exe" %* || goto :error
 ) else (
-    dotnet run --project %PROJECT_DIR%\%PROJECT_NAME%.fsproj -f %PROJECT_FRAMEWORK% --runtime %PROJECT_RUNTIME% -- %* || goto :error
+    dotnet run --project %PROJECT_DIR%\%PROJECT_NAME%.fsproj -f %PROJECT_FRAMEWORK% -p:TargetFrameworks=%PROJECT_FRAMEWORK% --runtime %PROJECT_RUNTIME% -- %* || goto :error
 )
 
 :ok
