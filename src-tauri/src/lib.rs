@@ -200,6 +200,14 @@ fn open_project(app_handle: tauri::AppHandle, id: String) -> Result<(), tauri::E
     let environment = project_data.environment;
     let app = ide_to_command(ide.as_str());
     let mut cmd = std::process::Command::new(app.as_str());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        // Keep console-based IDE launchers (such as code.cmd) from opening a console window.
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
     match project_data.remote {
         Some(Remote::Ssh { host, username }) => {
             let host = if username.is_empty() {
