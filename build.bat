@@ -9,8 +9,10 @@ set PROJECT_NAME=build
 set PROJECT_FRAMEWORK=net10.0
 set PROJECT_RUNTIME=win-x64
 
-rem Prefer .NET 11 when its SDK is installed; otherwise keep .NET 10.
-dotnet --list-sdks | findstr /b /l /c:"11." >nul
+cd /d "%~dp0" || goto :error
+
+rem Match the build helper to the SDK selected by global.json.
+dotnet --version | findstr /b /l /c:"11." >nul
 if not errorlevel 1 set PROJECT_FRAMEWORK=net11.0
 
 if "%1%" == "self-build" (
@@ -35,7 +37,6 @@ if "%1%" == "self-build" (
     goto ok
 )
 
-cd %~dp0
 if exist "%PROJECT_DIR%\bin\Release\%PROJECT_FRAMEWORK%\%PROJECT_RUNTIME%\publish\%PROJECT_NAME%.exe" (
     "%PROJECT_DIR%\bin\Release\%PROJECT_FRAMEWORK%\%PROJECT_RUNTIME%\publish\%PROJECT_NAME%.exe" %* || goto :error
 ) else (
@@ -48,6 +49,7 @@ cd /d %saved_dir%
 exit /b 0
 
 :error
+set "build_exit_code=%errorlevel%"
 PATH=%OLD_PATH%
 cd /d %saved_dir%
-exit /b %errorlevel%
+exit /b %build_exit_code%

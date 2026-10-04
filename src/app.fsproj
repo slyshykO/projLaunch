@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <!-- Paket 10.3.1 cannot restore projects declaring net11.0.
+         TODO: Restore net10.0;net11.0 multi-targeting once the .NET 11 support
+         in https://github.com/fsprojects/Paket/pull/4439 is released and
+         the local Paket tool is updated. -->
+    <TargetFramework>net10.0</TargetFramework>
     <LangVersion>10</LangVersion>
   </PropertyGroup>
   <ItemGroup>
