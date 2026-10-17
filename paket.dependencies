@@ -1,6 +1,6 @@
 source https://api.nuget.org/v3/index.json
 storage: none
-framework: net10.0
+framework: net10.0, net11.0
 
 nuget FSharp.Core
 nuget Fable.Core
@@ -20,7 +20,7 @@ nuget Serde.FS.Json
 group Build
     source https://api.nuget.org/v3/index.json
     storage: none
-    framework: net10.0
+    framework: net10.0, net11.0
 
     nuget Gapotchenko.FX.Console
     nuget FSharp.Core

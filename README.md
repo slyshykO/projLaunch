@@ -70,11 +70,16 @@ Each record includes:
 For local development, this repo expects:
 
 - Node.js + npm
-- .NET SDK 10
+- .NET SDK 11 (the RC2 SDK selected by `global.json`, or a newer compatible SDK)
+- .NET 10 runtime for the local Paket tool
 - Rust toolchain
 - Tauri prerequisites for your platform
 
 On Windows, you will also want the IDEs you plan to launch installed and available on disk/path.
+
+The .NET projects target both `net10.0` and `net11.0`. The local tool manifest pins
+Paket `12.0.0-alpha001`, which adds .NET 11 framework support; Paket 11.0.1 cannot
+restore `net11.0` projects. Run `dotnet tool restore` after pulling tool updates.
 
 ## Development
 
