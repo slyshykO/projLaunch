@@ -111,6 +111,7 @@ Notes:
 The repo also includes a custom Windows helper:
 
 ```powershell
+.\build.bat self-build
 .\build.bat build
 .\build.bat clean
 .\build.bat update
@@ -120,10 +121,17 @@ The repo also includes a custom Windows helper:
 
 What these do:
 
+- `self-build` publishes the build helper as a native Windows x64 executable and exits
 - `build` syncs Feliz.DaisyUI source references in `src/index.css` and then runs `npm run tauri build`
 - `clean` runs `cargo clean` for the Tauri app
 - `update` runs npm/cargo update checks
 - `build-daisyui` builds a local `Feliz.DaisyUI` checkout if present
+
+`build.bat` also publishes the helper automatically when its executable is missing.
+The helper checks embedded hashes of its sources, project files, and build configuration
+at startup. If those inputs have changed, the batch file rebuilds it and retries the
+original command once. Self-publishing requires the Windows Native AOT build tools
+(Visual Studio C++ build tools and Windows SDK).
 
 ## Tests
 
@@ -134,3 +142,9 @@ dotnet test .\src-test\src-test.fsproj
 ```
 
 At the moment, the test suite is only a placeholder and does not cover the launcher behavior yet.
+
+Run the build helper's input-hash regression checks with:
+
+```powershell
+dotnet fsi --exec build/scripts/SelfBuild.Tests.fsx
+```

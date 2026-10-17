@@ -3,16 +3,22 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0' Or '$(TargetFramework)' == 'net11.0'">
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="obj/hashes.fs" />
+    <Compile Include="SelfBuild.fs" />
     <Compile Include="Print.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Gapotchenko.FX.Console" Version="2026.8.3" />
   </ItemGroup>
+  <Target Name="GenerateSelfBuildHashes" BeforeTargets="BeforeCompile">
+    <Exec Command="dotnet fsi --exec &quot;$(MSBuildProjectDirectory)\scripts\genhashes.fsx&quot;" />
+  </Target>
 </Project>

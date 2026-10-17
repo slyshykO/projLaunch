@@ -35,6 +35,7 @@ module Help =
         Print.println "Usage: build <subcommand>"
         Print.println ""
         Print.println "Available subcommands:"
+        Print.println "  self-build    Rebuild the build helper (via build.bat)"
         Print.println "  build         Build the app"
         Print.println "  clean         Clean generated artifacts"
         Print.println "  test          Reserved for test workflow"
@@ -309,8 +310,7 @@ module Build =
 module Main =
     open System
 
-    [<EntryPoint>]
-    let main argv =
+    let private run argv =
         let startTime = DateTime.Now
 
         try
@@ -341,3 +341,11 @@ module Main =
             Print.printlnGreen $"Build finished in {duration.TotalSeconds} s."
 
         State.appResult
+
+    [<EntryPoint>]
+    let main argv =
+        match SelfBuild.selfCheck () with
+        | SelfBuild.NeedToRebuild ->
+            Print.printlnRed "Self-build is required. Run build.bat to rebuild the helper."
+            42
+        | SelfBuild.AllGood -> run argv
