@@ -196,7 +196,14 @@ module Build =
 
     let build () =
         try
-            if syncFelizDaisyUiSources () <> AppResult.Success then
+            Print.printlnBlue "Restoring frontend dependencies from package-lock.json..."
+
+            let npmRestoreResult =
+                BuildUtils.runCmd (Config.shell ()) [ Config.shellCmdArg (); "npm"; "ci"; "--include=dev" ]
+
+            if npmRestoreResult <> AppResult.Success then
+                AppResult.Failure
+            elif syncFelizDaisyUiSources () <> AppResult.Success then
                 AppResult.Failure
             else
                 BuildUtils.runCmd (Config.shell ()) [ Config.shellCmdArg (); "npm"; "run"; "tauri"; "build" ]
