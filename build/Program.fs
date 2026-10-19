@@ -14,6 +14,7 @@ module Args =
         | BuildDaisyUI = 4
         | Help = 5
         | BuildGitServer = 6
+        | Run = 7
 
     let extractSubCommandStr (args: string array) =
         if args.Length = 0 then
@@ -24,6 +25,7 @@ module Args =
     let subCommand (args: string array) =
         match extractSubCommandStr args with
         | "build" -> Some SubCommand.Build
+        | "run" -> Some SubCommand.Run
         | "clean" -> Some SubCommand.Clean
         | "test" -> Some SubCommand.Test
         | "update" -> Some SubCommand.Update
@@ -43,6 +45,7 @@ module Help =
         Print.println "  self-build    Rebuild the build helper (via build.bat)"
         Print.println "  build         Build the app in debug mode (default)"
         Print.println "                --release builds the app in release mode"
+        Print.println "  run           Build and run the app (--release for release mode)"
         Print.println "  clean         Clean generated artifacts"
         Print.println "  test          Reserved for test workflow"
         Print.println "  update        Update dependencies"
@@ -225,6 +228,27 @@ module Build =
             Print.printlnRed $"Error during build: {ex.Message}"
             AppResult.Failure
 
+    let run isRelease =
+        let buildResult = build isRelease
+
+        if buildResult <> AppResult.Success then
+            buildResult
+        else
+            let mode = if isRelease then "release" else "debug"
+            let executableName = if Config.isWindows then "projlaunch.exe" else "projlaunch"
+
+            let executablePath =
+                System.IO.Path.GetFullPath(
+                    System.IO.Path.Combine("src-tauri", "target", mode, executableName)
+                )
+
+            if not (System.IO.File.Exists executablePath) then
+                Print.printlnRed $"Built app executable was not found: {executablePath}"
+                AppResult.Failure
+            else
+                Print.printlnBlue $"Starting the {mode} app. Close its window to finish this command."
+                BuildUtils.runCmd executablePath []
+
     let buildDaisyUI () =
         try
             // print current working directory for debugging
@@ -341,6 +365,7 @@ module Main =
                 State.appResult <-
                     match Args.subCommand argv with
                     | Some Args.SubCommand.Build -> Build.build (Args.isRelease argv)
+                    | Some Args.SubCommand.Run -> Build.run (Args.isRelease argv)
                     | Some Args.SubCommand.Update -> Build.update ()
                     | Some Args.SubCommand.Clean -> Build.clean ()
                     | Some Args.SubCommand.BuildDaisyUI -> Build.buildDaisyUI ()

@@ -156,6 +156,8 @@ The repo also includes a custom Windows helper:
 .\build.bat self-build
 .\build.bat build
 .\build.bat build --release
+.\build.bat run
+.\build.bat run --release
 .\build.bat clean
 .\build.bat update
 .\build.bat build-daisyui
@@ -168,6 +170,7 @@ What these do:
 - `self-build` publishes the build helper as a native Windows x64 executable and exits
 - `build` restores npm dependencies from `package-lock.json` with `npm ci --include=dev`, syncs Feliz.DaisyUI source references in `src/index.css`, and then runs `npm run tauri build -- --debug` (debug mode by default)
 - `build --release` performs the same preparation and runs `npm run tauri build` (release mode)
+- `run` performs the same build as `build`, then launches the debug app; `run --release` builds and launches the release app. It waits until the app exits and does not launch it if the build fails.
 - `clean` runs `cargo clean` for the Tauri app
 - `update` runs npm/cargo update checks
 - `build-daisyui` builds a local `Feliz.DaisyUI` checkout if present
