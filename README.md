@@ -219,6 +219,9 @@ other changes in manifests and staged files do. If source changes are reverted w
 version updates remain uncommitted, synchronization removes `.dirty` without creating
 a commit. Generated `version.fs` and `Version.cs` always describe the current Git
 state, including on a clean checkout with older committed manifest versions.
+About calls the generated version function at runtime. It must not be a F#
+`Literal`: Fable can retain an inlined old value in cached consumer JavaScript
+when only the generated version file changes.
 Automatic cleanup requires Git author/committer identity and successful commit
 hooks. If the commit fails, the helper restores its file edits and reports an error;
 the next clean build can retry. It never includes other staged or unstaged edits
@@ -283,6 +286,7 @@ Run the project editor's state and IPC regression checks after compiling the fro
 dotnet fable src -o ./src/bin/fable-js --configuration Debug
 node scripts/test-project-editor.mjs
 node scripts/test-project-git.mjs
+node scripts/test-about-version.mjs
 ```
 
 These checks use an isolated IPC stub, without accessing the user's database.

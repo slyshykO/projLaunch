@@ -259,7 +259,7 @@ let private About
                                     prop.children [ Html.text "Version" ]
                                 ]
                                 Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                                Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text Version.version ] ]
+                                Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text (Version.version ()) ] ]
                             ]
                         ]
                         Html.tr [

@@ -15,6 +15,8 @@ let writeIfChanged name content =
     if not (File.Exists path) || File.ReadAllText path <> content then
         File.WriteAllText(path, content)
 
-writeIfChanged "version.fs" (sprintf "// Generated automatically. Do not edit.\nmodule Version\n[<Literal>]\nlet version = \"%s\"\n" version)
+// Keep a runtime module reference: a Literal gets inlined into consumers whose
+// cached JavaScript may not be rebuilt when only this generated file changes.
+writeIfChanged "version.fs" (sprintf "// Generated automatically. Do not edit.\nmodule Version\nlet version () = \"%s\"\n" version)
 writeIfChanged "Version.cs" (sprintf "// Generated automatically. Do not edit.\nnamespace Version\n{\n    public static class Version {\n        public static string version = \"%s\";\n    }\n}\n" version)
 printfn "Version: %s" version
