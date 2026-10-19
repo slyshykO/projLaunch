@@ -50,6 +50,7 @@ let private targetTriple () =
 
 let build isRelease =
     try
+        Versioning.sync projectRoot |> ignore
         let target = targetTriple ()
         let targetDirectory = Path.Combine(projectRoot, "crates", "target")
 

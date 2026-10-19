@@ -1,10 +1,11 @@
 {
   "name": "projlaunch",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.1+7.g15d5e08.dirty",
   "type": "module",
   "scripts": {
     "gen:version": "dotnet fsi --exec scripts/version/version.fsx src/bin",
+    "pretauri": "npm run gen:version",
     "prebuild": "npm run build:git-server -- --release && dotnet tool restore && dotnet paket restore && npm run gen:version",
     "predev": "npm run build:git-server && npm run gen:version",
     "dev": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js -e .js --sourceMaps --configuration Debug --run vite --mode development",

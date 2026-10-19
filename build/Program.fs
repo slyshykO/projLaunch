@@ -15,6 +15,7 @@ module Args =
         | Help = 5
         | BuildGitServer = 6
         | Run = 7
+        | SetVersion = 8
 
     let extractSubCommandStr (args: string array) =
         if args.Length = 0 then
@@ -26,6 +27,7 @@ module Args =
         match extractSubCommandStr args with
         | "build" -> Some SubCommand.Build
         | "run" -> Some SubCommand.Run
+        | "set-version" -> Some SubCommand.SetVersion
         | "clean" -> Some SubCommand.Clean
         | "test" -> Some SubCommand.Test
         | "update" -> Some SubCommand.Update
@@ -46,6 +48,7 @@ module Help =
         Print.println "  build         Build the app in debug mode (default)"
         Print.println "                --release builds the app in release mode"
         Print.println "  run           Build and run the app (--release for release mode)"
+        Print.println "  set-version X.Y.Z  Update versions, commit and tag vX.Y.Z"
         Print.println "  clean         Clean generated artifacts"
         Print.println "  test          Reserved for test workflow"
         Print.println "  update        Update dependencies"
@@ -206,6 +209,7 @@ module Build =
 
     let build isRelease =
         try
+            Versioning.sync Versioning.projectRoot |> ignore
             Print.printlnBlue "Restoring frontend dependencies from package-lock.json..."
 
             let npmRestoreResult =
@@ -366,6 +370,11 @@ module Main =
                     match Args.subCommand argv with
                     | Some Args.SubCommand.Build -> Build.build (Args.isRelease argv)
                     | Some Args.SubCommand.Run -> Build.run (Args.isRelease argv)
+                    | Some Args.SubCommand.SetVersion ->
+                        if argv.Length <> 2 then
+                            failwith "Usage: build set-version X.Y.Z"
+                        Versioning.setVersion Versioning.projectRoot argv.[1]
+                        AppResult.Success
                     | Some Args.SubCommand.Update -> Build.update ()
                     | Some Args.SubCommand.Clean -> Build.clean ()
                     | Some Args.SubCommand.BuildDaisyUI -> Build.buildDaisyUI ()
