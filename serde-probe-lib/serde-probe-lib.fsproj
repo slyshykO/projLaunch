@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <RootNamespace>SerdeProbeLib</RootNamespace>
+    <LangVersion>10</LangVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="SerdeProbe.fs" />
