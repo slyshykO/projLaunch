@@ -161,7 +161,7 @@ The [upstream README](https://github.com/serde-fs/Serde.FS#readme) documents a d
 
 The previous report was dated 2026-04-26 and covered Serde alpha.14 with Fable 5.0.0, after updating from alpha.11:
 
-1. A normal app build was not a valid probe: `src/Debug.fs` excluded Serde calls under `FABLE_COMPILER`.
+1. A normal app build was not a valid probe: `src/src/Debug.fs` excluded Serde calls under `FABLE_COMPILER`.
 2. Compiling only `SerdeProbe.fs` produced JavaScript with unresolved Serde calls and a Node `ReferenceError`.
 3. Directly including the generated file under `obj/` did not make Fable compile it.
 4. Copying the codec out of `obj/` made Fable see two files, but compilation failed on the `JsonValue` constructor.
@@ -195,7 +195,7 @@ Checked on 2026-10-19 with `Serde.FS.Fable` 1.0.0-beta.6, `Serde.FS` 1.0.0-beta.
 
 Files:
 
-- `serde-fable-probe/Shared/Domain.fs`: a simple record plus data shapes mirroring `src/ProjectData.fs`, exposed through `[<RpcApi>] IProbeApi`.
+- `serde-fable-probe/Shared/Domain.fs`: a simple record plus data shapes mirroring `src/src/domain/ProjectData.fs`, exposed through `[<RpcApi>] IProbeApi`.
 - `serde-fable-probe/Shared/Shared.fsproj`: shared contracts with `Serde.FS`.
 - `serde-fable-probe/Client/Client.fsproj`: consumer with `Serde.FS.Fable` and `Fable.Core`.
 - `serde-fable-probe/Client/Probe.fs`: invokes generated methods and checks decoded values.
@@ -227,14 +227,14 @@ Seven intercepted requests cover a simple record, all three remote cases, two in
 
 | Concern | Current application | Generated Serde.FS.Fable client |
 | --- | --- | --- |
-| Transport | Tauri `invoke` in `src/AppTauri.fs`; Rust handles Git JSON-RPC | `fetch` POST to `/rpc/IProbeApi/Echo` or `/rpc/IProbeApi/EchoProject`, with raw argument JSON |
+| Transport | Tauri `invoke` in `src/src/tauri/AppTauri.fs`; Rust handles Git JSON-RPC | `fetch` POST to `/rpc/IProbeApi/Echo` or `/rpc/IProbeApi/EchoProject`, with raw argument JSON |
 | `environment` | JSON object, e.g. `{"EXTRA":"1"}` | Array of pairs, e.g. `[["EXTRA","1"]]` |
 | `Remote.Wsl` | `{"Wsl":"Ubuntu"}` | `{"Case":"Wsl","Fields":["Ubuntu"]}` |
 | `Remote.Ssh` | `{"Ssh":{"host":"example.test","username":"user"}}` | `{"Case":"Ssh","Fields":["example.test","user"]}` |
 | Optional remote | `null` or omitted; legacy Thoth arrays also accepted | Generated decoder handles nullish values; union values use `Case` / `Fields` |
 | Codec access | Explicit public `ProjectData.toJson/fromJson` | Per-type codec modules are `private` inside the generated RPC client |
 
-The application formats were checked against `src/ProjectData.fs` and `src-tauri/src/project.rs`. The generated formats were checked both in source and in intercepted requests.
+The application formats were checked against `src/src/domain/ProjectData.fs` and `src-tauri/src/project.rs`. The generated formats were checked both in source and in intercepted requests.
 
 Passing our current environment object to the generated decoder does **not** raise a decoder error: under this toolchain it produces an empty Map. The probe's value comparison detects that data loss. Independently, passing `{"Wsl":"Ubuntu"}` with an otherwise valid generated payload fails with `Unknown union case`.
 

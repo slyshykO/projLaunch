@@ -16,8 +16,8 @@ globalThis.window = {
     },
 };
 
-const { init, update, Msg } = await import('../../src/bin/fable-js/State.js');
-const projectModule = await import('../../src/bin/fable-js/ProjectData.js');
+const { init, update, Msg } = await import('../../src/bin/fable-js/src/State.js');
+const projectModule = await import('../../src/bin/fable-js/src/domain/ProjectData.js');
 const decode = Object.entries(projectModule).find(([name]) => name.startsWith('ProjectData_fromJson_'))[1];
 const cases = new Msg(0, []).cases();
 const msg = (name, ...fields) => {

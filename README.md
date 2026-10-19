@@ -104,7 +104,11 @@ real status, paginated history and file diffs, with typed Tauri/Fable wrappers.
 See [the Git server guide](crates/git-server/README.md) for methods, build steps,
 lifecycle, limits and tests. The graph/file/diff UI is a subsequent stage.
 
-- `src/` - F# frontend application code compiled with Fable
+- `src/` - frontend project, HTML/CSS entry point and assets
+- `src/src/` - F# application entry point, state and debug fixtures
+- `src/src/common/`, `src/src/interop/` - shared helpers and browser/JavaScript bindings
+- `src/src/tauri/` - Tauri bindings and typed application IPC calls
+- `src/src/domain/`, `src/src/ui/` - project/Git data types and UI components
 - `src-tauri/` - Rust/Tauri host application and native commands
 - `crates/` - Cargo workspace for `git-protocol`, `git-server` and `git-client`
 - `src-tauri/src/storage/` - SQLite worker, project queries, schema migration and legacy import

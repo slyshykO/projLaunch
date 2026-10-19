@@ -16,16 +16,16 @@ module JsInterop =
     [<Emit("modal-add-project.showModal()")>]
     let inline showModalAddProject () : unit = jsNative
 
-    [<Import("_showModalDialog", "./_ReactVersion.js")>]
+    [<Import("_showModalDialog", "../interop/_ReactVersion.js")>]
     let _showModalDialog: unit -> unit = jsNative
 
-    [<Import("_closeModalDialog", "./_ReactVersion.js")>]
+    [<Import("_closeModalDialog", "../interop/_ReactVersion.js")>]
     let _closeModalDialog: unit -> unit = jsNative
 
-    [<Import("_showModalDialogById", "./_ReactVersion.js")>]
+    [<Import("_showModalDialogById", "../interop/_ReactVersion.js")>]
     let _showModalDialogById: string -> unit = jsNative
 
-    [<Import("_closeModalDialogById", "./_ReactVersion.js")>]
+    [<Import("_closeModalDialogById", "../interop/_ReactVersion.js")>]
     let _closeModalDialogById: string -> unit = jsNative
 
 

@@ -26,9 +26,6 @@ type Msg =
 
     | UrlChanged of string list
 
-    | Greet of string
-    | OnGreetSuccess of string
-
     | GetDataDir
     | OnGetDataDir of string
     | OnGetDataDirError of exn
@@ -82,7 +79,6 @@ type State =
         currentUrl: string list
         currentTime: DateTime
         signIn: option<SignIn>
-        value: string
         appVersion: string
         tauriVersion: string
         appDataDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
@@ -125,7 +121,6 @@ let init () =
             currentUrl = currentUrl
             currentTime = DateTime.Now
             signIn = None
-            value = "Feliz"
             appVersion = ""
             tauriVersion = ""
             appDataDir = ""
@@ -241,18 +236,6 @@ let update msg state =
             },
             Cmd.none
         | _ -> state, Cmd.none
-
-    | Greet nick ->
-        let greetPromise n =
-            promise {
-                let! (response: string) = AppTauri.Core.greet n
-                return response
-            }
-
-        state, Cmd.OfPromise.perform greetPromise nick OnGreetSuccess
-    | OnGreetSuccess response ->
-        let newState = { state with value = response }
-        newState, Cmd.none
 
     | GetDataDir ->
         let getDataDirPromise () =

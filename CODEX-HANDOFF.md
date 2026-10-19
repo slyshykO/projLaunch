@@ -111,9 +111,9 @@ Git-сервер запускается автоматически, когда �
 
 | Путь | Назначение |
 | --- | --- |
-| `src/ProjectData.fs` | DTO launcher-проекта, ручные Thoth JSON encoder/decoder |
-| `src/State.fs`, `src/View.fs` | Elmish-состояние и существующий launcher UI |
-| `src/GitProtocol.fs`, `src/AppTauri.fs` | Frontend DTO и типизированные вызовы Git API |
+| `src/src/domain/ProjectData.fs` | DTO launcher-проекта, ручные Thoth JSON encoder/decoder |
+| `src/src/State.fs`, `src/src/ui/View.fs` | Elmish-состояние и существующий launcher UI |
+| `src/src/domain/GitProtocol.fs`, `src/src/tauri/AppTauri.fs` | Frontend DTO и типизированные вызовы Git API |
 | `src/app.fsproj` | Порядок компиляции F# файлов |
 | `src-tauri/src/lib.rs` | Команды launcher, регистрация GitHost и выход приложения |
 | `src-tauri/src/git_host.rs` | Ленивый запуск sidecar, IPC-команды и shutdown |

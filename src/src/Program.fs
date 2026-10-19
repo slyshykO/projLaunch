@@ -1,7 +1,7 @@
 module Main
 
 // import *css
-//Fable.Core.JsInterop.importAll "./index.css"
+//Fable.Core.JsInterop.importAll "../index.css"
 
 open Elmish
 open Elmish.React

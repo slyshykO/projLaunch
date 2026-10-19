@@ -4,7 +4,8 @@
 
 ProjLaunch is a desktop project launcher using F#/Fable, Elmish/Feliz, and Rust/Tauri.
 
-- `src/`: frontend state, views, Tauri bindings, and `assets/`.
+- `src/`: frontend project, HTML/CSS entry point and `assets/`.
+- `src/src/`: F# entry point and state; `common/`, `interop/`, `tauri/`, `domain/` and `ui/` group supporting code.
 - `src-tauri/`: native commands, SQLite storage, `migrations/`, and desktop icons.
 - `crates/`: separate Cargo workspace containing Git protocol, client, and server.
 - `src-test/`: xUnit tests; `scripts/tests/`: frontend regression scripts and serialization probes.

@@ -2,8 +2,8 @@
 // Exercise the compiled subscription with in-memory keyboard and Tauri events.
 import assert from 'node:assert/strict';
 
-const { onAddProject } = await import('../../src/bin/fable-js/ProjectMenu.js');
-const { Msg, update } = await import('../../src/bin/fable-js/State.js');
+const { onAddProject } = await import('../../src/bin/fable-js/src/ui/ProjectMenu.js');
+const { Msg, update } = await import('../../src/bin/fable-js/src/State.js');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 // Node's EventTarget removal needs an options object for capture listeners.

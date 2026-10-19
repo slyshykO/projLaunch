@@ -5,7 +5,7 @@ open Serde.FS
 
 type ProbeRecord = { Name: string; Count: int }
 
-// Mirrors the data shapes in src/ProjectData.fs without its Thoth implementation.
+// Mirrors the data shapes in src/src/domain/ProjectData.fs without its Thoth implementation.
 type Remote =
     | Ssh of host: string * username: string
     | Wsl of string

@@ -7,7 +7,7 @@ Git handlers have been replaced by Git CLI reads. The fork stays pinned to
 
 `git-protocol` contains shared Rust DTOs, `git-client` owns the multiplexed stdio
 connection, and `src-tauri/src/git_host.rs` exposes typed Tauri commands.
-`src/GitProtocol.fs` and `AppTauri.Git` are the frontend boundary. The launcher
+`src/src/domain/GitProtocol.fs` and `AppTauri.Git` are the frontend boundary. The launcher
 UI and SQLite schema retain their existing responsibilities; this stage supplies
 the API for the future graph/file/diff interface.
 
