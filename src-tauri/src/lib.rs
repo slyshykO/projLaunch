@@ -1,106 +1,10 @@
-use fs_err::{File, OpenOptions};
-use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
+mod project;
+mod storage;
 
+use project::Remote;
+use storage::Storage;
 use tauri::Manager;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-enum Remote {
-    Ssh { host: String, username: String },
-    Wsl(String),
-}
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct ProjectData {
-    id: String,
-    name: String,
-    #[serde(rename = "lastOpened")]
-    last_opened: String,
-    description: String,
-    path: String,
-    ide: String,
-    environment: std::collections::HashMap<String, String>,
-    remote: Option<Remote>,
-}
-
-fn file_content<P>(file_name: P) -> std::io::Result<String>
-where
-    P: Into<std::path::PathBuf>,
-{
-    let mut s = String::new();
-    File::open(file_name)
-        .and_then(|mut f| f.read_to_string(&mut s))
-        .map(|_| s.trim().to_owned())
-}
-
-pub fn rewrite_file_content<P, C>(file_name: P, new_content: C) -> std::io::Result<()>
-where
-    //    P: AsRef<std::path::Path>,
-    P: Into<std::path::PathBuf>,
-    C: AsRef<str>,
-{
-    OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .open(file_name)
-        .and_then(|mut f| f.write_all(new_content.as_ref().as_bytes()))?;
-    Ok(())
-}
-
-#[allow(dead_code)]
-fn gen_test_project_data() -> anyhow::Result<Vec<String>> {
-    let project1 = ProjectData {
-        id: "project1".to_string(),
-        name: "Project 1".to_string(),
-        last_opened: "2023-01-01T00:00:00Z".to_string(),
-        description: "This is project 1".to_string(),
-        path: "/path/to/project1".to_string(),
-        ide: "vscode".to_string(),
-        environment: std::collections::HashMap::new(),
-        remote: None,
-    };
-
-    let project2 = ProjectData {
-        id: "project2".to_string(),
-        name: "Project 2".to_string(),
-        last_opened: "2023-01-02T00:00:00Z".to_string(),
-        description: "This is project 2".to_string(),
-        path: "/path/to/project2".to_string(),
-        ide: "vscode".to_string(),
-        environment: {
-            let mut env = std::collections::HashMap::new();
-            env.insert("PATH".to_string(), "/path/to/project2/bin".to_string());
-            env
-        },
-        remote: Some(Remote::Ssh {
-            host: "example.com".to_string(),
-            username: "user".to_string(),
-        }),
-    };
-
-    let project3 = ProjectData {
-        id: "project3".to_string(),
-        name: "Project 3".to_string(),
-        last_opened: "2023-01-03T00:00:00Z".to_string(),
-        description: "This is project 3".to_string(),
-        path: "/path/to/project3".to_string(),
-        ide: "vscode".to_string(),
-        environment: {
-            let mut env = std::collections::HashMap::new();
-            env.insert("PATH".to_string(), "/path/to/project3/bin".to_string());
-            env
-        },
-        remote: Some(Remote::Wsl("Ubuntu".to_string())),
-    };
-
-    Ok(vec![
-        serde_json::to_string(&project1)?,
-        serde_json::to_string(&project2)?,
-        serde_json::to_string(&project3)?,
-    ])
-}
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -108,58 +12,16 @@ fn greet(name: &str) -> String {
 
 #[tauri::command]
 fn get_data_dir(app_handle: tauri::AppHandle) -> Result<String, tauri::Error> {
-    let dir = app_handle
+    Ok(app_handle
         .path()
         .app_data_dir()?
         .to_string_lossy()
-        .to_string();
-    Ok(dir)
+        .into_owned())
 }
 
 #[tauri::command]
-fn get_projects(app_handle: tauri::AppHandle) -> Result<Vec<String>, tauri::Error> {
-    let dir = app_handle.path().app_data_dir()?;
-    let projects_dir = dir.join("projects");
-    let /*mut*/ projects: Vec<String> = std::fs::read_dir(&projects_dir)?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            let file = file_content(path).ok()?;
-            Some(file)
-        })
-        .collect();
-    // match gen_test_project_data() {
-    //     Ok(test_data) => {
-    //         for data in test_data {
-    //             projects.push(data);
-    //         }
-    //     }
-    //     Err(_) => {}
-    // }
-    Ok(projects)
-}
-
-fn get_project_data<P>(path: P, id: String) -> Result<ProjectData, tauri::Error>
-where
-    P: Into<std::path::PathBuf>,
-{
-    let projects: Vec<ProjectData> = fs_err::read_dir(path)?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            let file = file_content(path).ok()?;
-            let project_data: ProjectData = serde_json::from_str(&file).ok()?;
-            Some(project_data)
-        })
-        .collect();
-    let project = projects.iter().find(|project| project.id == id);
-    match project {
-        Some(project) => Ok(project.clone()),
-        None => Err(tauri::Error::from(anyhow::anyhow!(
-            "Project `{}` not found",
-            id
-        ))),
-    }
+async fn get_projects(storage: tauri::State<'_, Storage>) -> Result<Vec<String>, String> {
+    storage.list().await
 }
 
 fn ide_to_command(ide: &str) -> String {
@@ -191,10 +53,8 @@ fn ide_to_command(ide: &str) -> String {
 }
 
 #[tauri::command]
-fn open_project(app_handle: tauri::AppHandle, id: String) -> Result<(), tauri::Error> {
-    let dir = app_handle.path().app_data_dir()?;
-    let projects_dir = dir.join("projects");
-    let project_data: ProjectData = get_project_data(projects_dir, id.clone())?;
+async fn open_project(storage: tauri::State<'_, Storage>, id: String) -> Result<(), String> {
+    let project_data = storage.get(id).await?;
     let ide = project_data.ide;
     let path = project_data.path;
     let environment = project_data.environment;
@@ -215,14 +75,14 @@ fn open_project(app_handle: tauri::AppHandle, id: String) -> Result<(), tauri::E
             } else {
                 format!("{}@{}", username, host)
             };
-            cmd.args(&["--remote", format!("ssh-remote+{}", host).as_str()]);
+            cmd.args(["--remote", format!("ssh-remote+{}", host).as_str()]);
         }
         Some(Remote::Wsl(distro)) => {
-            cmd.args(&["--remote", format!("wsl+{}", distro).as_str()]);
+            cmd.args(["--remote", format!("wsl+{}", distro).as_str()]);
         }
         None => {}
     }
-    cmd.args(&[path.as_str()]);
+    cmd.args([path.as_str()]);
     for (key, value) in environment {
         if key == "PATH" {
             let path = std::env::var("PATH").unwrap_or_default();
@@ -238,41 +98,18 @@ fn open_project(app_handle: tauri::AppHandle, id: String) -> Result<(), tauri::E
         }
     }
     cmd.spawn()
-        .map_err(|e| anyhow::anyhow!("can't run {}. {}", app, e))?;
+        .map_err(|e| format!("can't run {}. {}", app, e))?;
     Ok(())
 }
 
+// Keep the existing command name for IPC compatibility; all writes now use SQLite.
 #[tauri::command]
 async fn rewrite_project_file(
-    app_handle: tauri::AppHandle,
+    storage: tauri::State<'_, Storage>,
     id: String,
     content: String,
-) -> Result<(), tauri::Error> {
-    let dir = app_handle.path().app_data_dir()?;
-    let projects_dir = dir.join("projects");
-    // get filename of project with id
-    let project_file: Vec<_> = fs_err::read_dir(&projects_dir)?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            let file = file_content(&path).ok()?;
-            let project_data: ProjectData = serde_json::from_str(&file).ok()?;
-            if project_data.id == id {
-                Some(path)
-            } else {
-                None
-            }
-        })
-        .collect();
-    if project_file.len() == 0 {
-        let new_file = projects_dir.join(id);
-        rewrite_file_content(new_file, content)?; // create new file
-    } else {
-        let project_file = project_file[0].clone();
-        rewrite_file_content(project_file, content)?;
-    }
-
-    Ok(())
+) -> Result<(), String> {
+    storage.save(id, content).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -280,6 +117,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let directory = app.path().app_data_dir().map_err(|error| error.to_string());
+            app.manage(Storage::start(directory));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             get_data_dir,

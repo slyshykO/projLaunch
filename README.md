@@ -35,11 +35,36 @@ When a project is opened, the app updates its `lastOpened` value and rewrites th
 - Remote launch options are only wired up for VS Code.
 - Visual Studio launch paths are currently hard-coded for Windows installs.
 - The test project exists, but it only contains a placeholder test right now.
-- The app expects its Tauri app-data `projects` directory to exist when reading saved projects.
 
 ## Project Storage
 
-Saved projects are stored as individual JSON files in the Tauri app data directory under `projects/`.
+Saved projects are stored in `projlaunch.db` in the Tauri app data directory
+(`%APPDATA%/com.projlaunch.app` on Windows). The Rust host uses `rusqlite` with
+bundled SQLite. A dedicated worker owns the connection; frontend commands wait
+for initialization without running database work on the UI thread.
+
+On the first launch with SQLite storage, the app creates the schema and imports
+all regular files directly inside the old `projects/` directory, including
+extensionless files. The original files are left untouched. Both older Thoth
+remote arrays and current serde remote objects are accepted, as are records
+without a remote field. IDs, dates, paths and environment values are preserved.
+
+The import and its `legacy_projects_v1` completion marker are committed in one
+transaction. Malformed/unreadable files, duplicate IDs or conflicts with existing
+database records abort the entire import. The error, including the affected path,
+is displayed in the application. Fix the reported problem and restart to retry;
+project reads and writes remain blocked after an initialization failure.
+
+After a successful import, the database is the sole working storage. Old files
+are retained as a snapshot and are neither updated nor imported again. A fresh
+installation without a `projects/` directory starts with an empty database and
+records the import as complete. An existing database without the completion
+marker still attempts import. Schema versions use SQLite's `user_version`;
+newer unsupported versions are rejected rather than modified.
+
+Do not delete `projlaunch.db` to retry an import after it has succeeded: it may
+contain newer changes or projects that are absent from the old files. Reverting
+to an older, JSON-based ProjLaunch version likewise shows the old snapshot.
 
 Each record includes:
 
@@ -61,6 +86,8 @@ Each record includes:
 
 - `src/` - F# frontend application code compiled with Fable
 - `src-tauri/` - Rust/Tauri host application and native commands
+- `src-tauri/src/storage/` - SQLite worker, project queries, schema migration and legacy import
+- `src-tauri/migrations/` - versioned SQL schema
 - `src-test/` - xUnit test project
 - `build/` - custom F# build helper used by `build.bat`
 - `serde-probe-lib/` - local shared/library code referenced by the app
@@ -151,7 +178,16 @@ Run tests with:
 dotnet test .\src-test\src-test.fsproj
 ```
 
-At the moment, the test suite is only a placeholder and does not cover the launcher behavior yet.
+The F# test suite is currently a placeholder. Run Rust storage tests with:
+
+```powershell
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+```
+
+These use temporary directories, never the real app-data directory. They cover
+first-run import, both remote formats, preservation of source files, restart and
+retry behavior, transactional rollback, duplicate IDs, database conflicts,
+concurrent startup and asynchronous worker commands.
 
 Run the build helper's input-hash regression checks with:
 

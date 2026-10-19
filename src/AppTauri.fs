@@ -42,7 +42,8 @@ module Projects =
     let openProject (id: string) : JS.Promise<unit> =
         Core.invoke "open_project" (Some(createObj [ "id" ==> id ]))
 
-    let rewriteProjectFile (id: string) (content: string) : JS.Promise<unit> =
+    /// The legacy IPC command name is retained; the record is saved in SQLite.
+    let saveProject (id: string) (content: string) : JS.Promise<unit> =
         Core.invoke "rewrite_project_file" (Some(createObj [ "id" ==> id; "content" ==> content ]))
 
 module Window =

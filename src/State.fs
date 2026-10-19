@@ -75,6 +75,7 @@ type State =
       appConfigDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
       errors: string list
       projects: ProjectData list
+      projectStorageError: string option
       formAddProjectName: string
       formAddProjectPath: string
       formAddProjectDescription: string
@@ -93,7 +94,7 @@ let init () =
     let currentUrl = Router.currentUrl ()
 
     let pd =
-        if Debug.Debug then
+        if Debug.Debug && not (AppTauri.Core.isAvailable ()) then
             listOfProjectDataFromJsonStr Debug.projectsJsonStr
         else
             []
@@ -115,6 +116,7 @@ let init () =
           appConfigDir = ""
           errors = []
           projects = pd
+          projectStorageError = None
           formAddProjectName = ""
           formAddProjectPath = ""
           formAddProjectDescription = ""
@@ -257,13 +259,17 @@ let update msg state =
         let newState =
             { state with
                 errors = err |> List.append state.errors
+                projectStorageError = None
                 projects = prj }
 
         newState, Cmd.none
     | OnGetProjectsError exn ->
         let e = sprintf "Error: %A" exn
         let newErrors = List.append state.errors [ e ]
-        let newState = { state with errors = newErrors }
+        let newState =
+            { state with
+                errors = newErrors
+                projectStorageError = Some e }
         newState, Cmd.none
 
     | OpenProject id ->
@@ -296,7 +302,7 @@ let update msg state =
     | AddOrUpdateProject(id, json) ->
         let addOrUpdateProjectPromise (i, j) =
             promise {
-                do! AppTauri.Projects.rewriteProjectFile i j
+                do! AppTauri.Projects.saveProject i j
                 return id
             }
 
@@ -314,7 +320,10 @@ let update msg state =
     | OnAddOrUpdateProjectError exn ->
         let e = sprintf "Error: %A" exn
         let newErrors = List.append state.errors [ e ]
-        let newState = { state with errors = newErrors }
+        let newState =
+            { state with
+                errors = newErrors
+                projectStorageError = Some e }
         newState, Cmd.none
 
     | OpenAddProjectModal ->

@@ -566,11 +566,10 @@ let private ModalAddProject
                                                 remote = remote
                                             }
 
-                                        let file_name = sprintf "%s-%s.%s" pd.name pd.id "json"
                                         let pd_json = pd |> ProjectData.toJson
 
                                         dispatch CloseAddProjectModal
-                                        dispatch (AddOrUpdateProject(file_name, pd_json)))
+                                        dispatch (AddOrUpdateProject(pd.id, pd_json)))
                                 )
                             ]
                             Daisy.button.label [
@@ -616,6 +615,15 @@ let View state dispatch =
                     prop.id "main-view"
                     prop.classes [ "mt-0"; "overflow-y-auto"; "h-screen" ]
                     prop.children [
+                        match state.projectStorageError with
+                        | Some error ->
+                            Html.div [
+                                prop.role "alert"
+                                prop.classes [ "alert"; "alert-error"; "m-4"; "whitespace-pre-wrap"; "break-words" ]
+                                prop.text error
+                            ]
+                        | None -> Html.none
+
                         match state.currentUrl with
                         | [] -> Projects state.projects state.randomSalt dispatch
                         | [ "projects" ] -> Projects state.projects state.randomSalt dispatch
