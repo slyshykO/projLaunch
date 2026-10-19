@@ -2,6 +2,9 @@
 
 `projlaunch` is a Tauri desktop app for keeping a small catalog of development projects and opening them quickly in your preferred IDE.
 
+For development context, completed work and the next steps across machines,
+start with [CODEX-HANDOFF.md](CODEX-HANDOFF.md).
+
 The current app is built with:
 
 - F# + Fable for the frontend application logic
