@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="11.0.100" />
+    <PackageReference Include="Fable.Core" Version="5.4.0" />
+    <PackageReference Include="Serde.FS.Fable" Version="1.0.0-beta.6" />
+    <ProjectReference Include="../Shared/Shared.fsproj" />
+    <Compile Include="Probe.fs" />
+  </ItemGroup>
+</Project>

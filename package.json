@@ -13,6 +13,7 @@
     "start": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js --run vite serve",
     "build": "dotnet tool restore && dotnet fable src -o ./src/bin/fable-js --run vite build --emptyOutDir",
     "build:serde-probe": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-serde-probe.ps1",
+    "build:serde-fable-probe": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-serde-fable-probe.ps1",
     "build:git-server": ".\\build.bat build-git-server",
     "tauri": "tauri"
   },

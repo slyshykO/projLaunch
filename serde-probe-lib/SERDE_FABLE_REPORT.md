@@ -1,51 +1,48 @@
 # Serde.FS + Fable Probe Report
 
-Date checked: 2026-04-26
+Date checked: 2026-10-19
 
 ## Summary
 
-`Serde.FS` and `Serde.FS.Json` are still not usable with this Fable probe at version `1.0.0-alpha.14`.
+`Serde.FS` / `Serde.FS.Json` **1.0.0-beta.6 still fail this standalone serialization probe with Fable 5.22.0**.
 
-The original failure has changed shape while testing:
+- The .NET Release build succeeds for both `net10.0` and `net11.0`, with zero warnings and errors.
+- Fable sees both the probe and the copied generated codec source, but compilation fails.
+- The previous `Cannot find Serde.FS.Json.Codec.JsonValue constructor` error remains. Fable also reports DLL-only references for `serialize`, `deserialize`, and codec registry functions.
+- The Node import / JSON round-trip verifier is not reached: the script stops on the Fable compilation error.
 
-1. If the generated Serde codec source is not included in the Fable compilation, Fable emits calls to missing functions such as `Serde_FS_Json_SerdeJson_serialize`, and the generated JavaScript fails at runtime.
-2. If the generated Serde codec source is copied out of `obj/` and included in the Fable compilation, Fable sees the codec source but fails to compile it:
+This result concerns plain `[<Serde>]` records used through `SerdeJson.serialize` / `SerdeJson.deserialize`.
 
-```text
-SerdeJsonCodecs.g.fs(1,1): error FABLE: Cannot find Serde.FS.Json.Codec.JsonValue constructor
-```
+**Follow-up: `Serde.FS.Fable` 1.0.0-beta.6 does compile and run as a generated RPC client with Fable 5.22.0.** The separate probe below passes against mocked HTTP responses, but confirms incompatible JSON shapes and transport for the current application. It is not a direct replacement for our Thoth serializers or Tauri IPC.
 
-So the current status is: generated source inclusion can be made to work, but the generated codec code itself is not Fable-compatible yet.
+## Package Update Check
 
-## Versions
+The live NuGet flat-container indexes were queried on 2026-10-19:
 
-Current locked package versions:
+- [Serde.FS versions](https://api.nuget.org/v3-flatcontainer/serde.fs/index.json)
+- [Serde.FS.Json versions](https://api.nuget.org/v3-flatcontainer/serde.fs.json/index.json)
 
-```text
-Serde.FS      1.0.0-alpha.14
-Serde.FS.Json 1.0.0-alpha.14
-Fable         5.0.0
-FSharp.Core   11.0.100
-```
+Both list `1.0.0-beta.6` as the newest available version, including prereleases. The repository's `paket.lock` already contained that version before this retry. No package version change was needed; the previous report's `1.0.0-alpha.14` was stale. The restored probe's `obj/project.assets.json` also resolves both packages to `1.0.0-beta.6`.
 
-NuGet flat-container API showed `1.0.0-alpha.14` as the newest available version for both packages when checked:
+## Tested Versions
 
-```text
-https://api.nuget.org/v3-flatcontainer/serde.fs/index.json
-https://api.nuget.org/v3-flatcontainer/serde.fs.json/index.json
-```
+| Component | Version |
+| --- | --- |
+| Serde.FS | 1.0.0-beta.6 |
+| Serde.FS.Json | 1.0.0-beta.6 |
+| Fable CLI | 5.22.0 |
+| FSharp.Core | 11.0.100 |
+| .NET SDK | 11.0.100-rc.2.26504.105 |
+| Target frameworks | net10.0; net11.0 |
+| Node.js | 24.20.0 |
+| Paket | 12.0.0-alpha001 |
 
-Previous locked version was `1.0.0-alpha.11`; the probe was retried after updating to `1.0.0-alpha.14`.
+Fable and Paket are pinned in `.config/dotnet-tools.json`; the SDK is selected by `global.json`. This retry uses the current repository toolchain, so changes in diagnostics cannot be attributed solely to Serde since the April check.
 
-## Probe Shape
+## Probe and Success Criteria
 
-Probe project:
-
-```text
-serde-probe-lib/serde-probe-lib.fsproj
-```
-
-Probe source:
+Project: `serde-probe-lib/serde-probe-lib.fsproj`.
+Source: `serde-probe-lib/SerdeProbe.fs`.
 
 ```fsharp
 namespace SerdeProbeLib
@@ -73,140 +70,72 @@ module Probe =
         toJson sample
 ```
 
-Expected success criteria:
+Success requires all of the following:
 
-1. Fable compiles `serde-probe-lib`.
-2. Node can import the generated `SerdeProbe.js`.
-3. `Probe_sampleJson` is valid JSON with `{ "Name": "serde-probe", "Count": 7 }`.
+1. Fable compiles the probe.
+2. Node imports the generated `SerdeProbe.js`.
+3. `Probe_sampleJson` parses to `{ "Name": "serde-probe", "Count": 7 }`.
 4. `Probe_fromJson` and `Probe_toJson` round-trip the sample.
 
-The current npm script that runs this is:
+Run:
 
-```text
+```powershell
 npm run build:serde-probe
 ```
 
-It delegates to:
+This invokes `scripts/build-serde-probe.ps1`, followed by `scripts/check-serde-probe.mjs` only if compilation succeeds.
+
+## Latest Execution Result
+
+The script restores tools, builds the .NET probe in Release, copies the generated codec out of `obj/`, and invokes Fable with `--noCache`.
+
+Relevant output, with repeated codec-reference diagnostics omitted:
 
 ```text
-scripts/build-serde-probe.ps1
-scripts/check-serde-probe.mjs
+serde-probe-lib -> ...\bin\Release\net10.0\serde-probe-lib.dll
+serde-probe-lib -> ...\bin\Release\net11.0\serde-probe-lib.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Fable 5.22.0: F# to JavaScript compiler
+Project and references (2 source files) parsed
+Started Fable compilation...
+Fable compilation finished
+
+SerdeProbe.fs(17,8): (17,33) error FABLE: Cannot reference member from .dll reference, Fable packages must include F# sources: Serde.FS.Json.SerdeJson.serialize
+SerdeProbe.fs(20,8): (20,47) error FABLE: Cannot reference member from .dll reference, Fable packages must include F# sources: Serde.FS.Json.SerdeJson.deserialize
+SerdeJsonCodecs.g.fs(15,99): (15,146) error FABLE: Cannot reference member from .dll reference, Fable packages must include F# sources: Serde.FS.Json.Codec.GlobalCodecRegistry.Current
+SerdeJsonCodecs.g.fs(15,42): (15,146) error FABLE: Cannot reference member from .dll reference, Fable packages must include F# sources: Serde.FS.Json.Codec.CodecResolver.resolve
+SerdeJsonCodecs.g.fs(34,65): (34,104) error FABLE: Cannot reference member from .dll reference, Fable packages must include F# sources: Serde.FS.Json.Codec.JsonCodec.boxCodec
+SerdeJsonCodecs.g.fs(34,11): (34,105) error FABLE: Cannot reference member from .dll reference, Fable packages must include F# sources: Serde.FS.Json.Codec.CodecRegistryModule.add
+SerdeJsonCodecs.g.fs(42,15): (42,53) error FABLE: Cannot reference member from .dll reference, Fable packages must include F# sources: Serde.FS.Json.SerdeJson.registerCodecs
+SerdeJsonCodecs.g.fs(1,1): error FABLE: Cannot find Serde.FS.Json.Codec.JsonValue constructor
+Compilation failed
 ```
 
-## Attempt 1: App Build Placeholder
+Command exit code: **1**. No successful JavaScript runtime test is claimed. The .NET result is a build check, not a .NET serialization runtime check.
 
-The first script named `build:serde-probe` was only a copy of the normal app build:
+The initial sandboxed attempt stopped before compilation on .NET telemetry registry access (`System.Security.SecurityException`). The completed retry used normal profile/network access and these environment settings:
 
-```text
-dotnet fable src -o ./src/bin/fable-js --run vite build ...
+```powershell
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+$env:DOTNET_CLI_HOME = 'C:\Users\user'
+npm run build:serde-probe
 ```
 
-That was not a valid probe because `src/Debug.fs` guards the Serde reference behind `#if !FABLE_COMPILER`, so the app build did not actually exercise Serde through Fable.
+That environment failure is separate from the Fable compiler errors above.
 
-The script was replaced with a focused probe that compiles `serde-probe-lib` directly and then imports the generated JavaScript with Node.
+## Generated Source and Package Findings
 
-## Attempt 2: Focused Fable Compile Without Generated Codec Source
-
-Command shape:
-
-```text
-dotnet fable serde-probe-lib -o ./serde-probe-lib/bin/fable-js
-node ./scripts/check-serde-probe.mjs
-```
-
-Fable compiled one source file:
-
-```text
-Project and references (1 source files) parsed
-```
-
-Generated JavaScript contained missing calls:
-
-```js
-export function Probe_toJson(value) {
-    return Serde_FS_Json_SerdeJson_serialize(value);
-}
-
-export function Probe_fromJson(json) {
-    return Serde_FS_Json_SerdeJson_deserialize(json);
-}
-```
-
-Runtime failure:
-
-```text
-ReferenceError: Serde_FS_Json_SerdeJson_serialize is not defined
-```
-
-Finding: the Serde source generator does create codec source, but Fable was not compiling it.
-
-## Generated Codec File Found
-
-After a normal .NET build, Serde generated:
+The current .NET JSON generator still emits:
 
 ```text
 serde-probe-lib/obj/Release/net10.0/serde-generated/~SerdeJsonCodecs.json.g.fs
 ```
 
-That file defines:
-
-```fsharp
-namespace Serde.Generated
-
-open Serde.FS.Json
-open Serde.FS.Json.Codec
-
-[<AutoOpen>]
-module SerdeJsonCodecs =
-    ...
-
-type JsonBootstrap() =
-    interface Serde.FS.IEntryPointBootstrap with
-        member _.Init () =
-            Serde.Generated.SerdeJsonCodecs.register
-            |> Serde.FS.Json.SerdeJson.registerCodecs
-```
-
-Important package target note found in:
-
-```text
-.config/.nuget/packages/serde.fs/1.0.0-alpha.14/buildTransitive/Serde.FS.targets
-```
-
-The target comments say Fable excludes files in `obj/`, and Serde therefore uses a `generated-fable/` directory for `[<GenerateFableClient>]` output. This plain `[<Serde>]` codec output is still generated under `obj/`, so Fable does not pick it up automatically.
-
-## Attempt 3: Include `obj/` Generated File Directly
-
-Tried adding a project include like:
-
-```xml
-<Compile Include="$(IntermediateOutputPath)serde-generated\~SerdeJsonCodecs.json.g.fs"
-         Condition="Exists('$(IntermediateOutputPath)serde-generated\~SerdeJsonCodecs.json.g.fs')" />
-```
-
-MSBuild could see it in `@(Compile)`, but Fable still reported only one source file and did not include it in `project_cracked.json`.
-
-Finding: direct inclusion from `obj/` is not sufficient for Fable. This matches the package comment that Fable filters `obj/` paths.
-
-## Attempt 4: Copy Generated Source Out Of `obj/`
-
-The probe script now:
-
-1. Deletes any stale copied codec file.
-2. Runs `dotnet build serde-probe-lib -c Release`.
-3. Copies:
-
-```text
-serde-probe-lib/obj/Release/net10.0/serde-generated/~SerdeJsonCodecs.json.g.fs
-```
-
-to:
-
-```text
-serde-probe-lib/SerdeJsonCodecs.g.fs
-```
-
-4. Includes the copied file only for Fable:
+The probe copies this to `serde-probe-lib/SerdeJsonCodecs.g.fs`, an ignored file, and includes it after the record definition only for Fable:
 
 ```xml
 <Compile Include="SerdeProbe.fs" />
@@ -214,67 +143,34 @@ serde-probe-lib/SerdeJsonCodecs.g.fs
          Condition="Exists('SerdeJsonCodecs.g.fs') and '$(FABLE_COMPILER)' == 'True'" />
 ```
 
-The file must be listed after `SerdeProbe.fs`, because the generated codec references `SerdeProbeLib.ProbeRecord`.
+Fable reporting two source files confirms that the copied codec is included. Source inclusion alone does not supply the missing runtime implementation: the installed beta.6 packages contain compiled libraries and build targets, but no `fable/` source directory. The generated codec calls those DLL-only runtime members.
 
-The copied file is ignored by git:
+The beta.6 targets differ from the old alpha.14 report:
 
-```text
-serde-probe-lib/SerdeJsonCodecs.g.fs
-```
+- `Serde.FS/buildTransitive/Serde.FS.targets` handles cleanup of this project's generated artifacts.
+- `Serde.FS.Json/buildTransitive/Serde.FS.Json.targets` runs the JSON generator before `CoreCompile` and includes its output from the intermediate directory.
+- The JSON targets explicitly state that Fable client generation has moved to the separate `Serde.FS.Fable` package.
 
-This worked mechanically. Fable then reported:
+## Separate Fable RPC Support
 
-```text
-Project and references (2 source files) parsed
-```
+The [upstream README](https://github.com/serde-fs/Serde.FS#readme) documents a different Fable workflow: shared `[<RpcApi>]` interfaces and DTOs, with `Serde.FS.Fable` installed on the consumer project. The generator writes client proxies and matching codecs into the consumer's `fable-generated/` directory and includes them automatically.
 
-But compilation failed:
+[Serde.FS.Fable 1.0.0-beta.6 on NuGet](https://www.nuget.org/packages/Serde.FS.Fable/1.0.0-beta.6) describes the same RPC-specific purpose. The follow-up below tests this package separately. Its RPC support does not make the standalone `SerdeJson.serialize` / `deserialize` API work in Fable.
 
-```text
-SerdeJsonCodecs.g.fs(1,1): error FABLE: Cannot find Serde.FS.Json.Codec.JsonValue constructor
-```
+## Historical Checks
 
-Finding: once Fable sees the generated codec file, it cannot compile the generated Serde JSON codec implementation.
+The previous report was dated 2026-04-26 and covered Serde alpha.14 with Fable 5.0.0, after updating from alpha.11:
 
-## Current Probe Script Notes
+1. A normal app build was not a valid probe: `src/Debug.fs` excluded Serde calls under `FABLE_COMPILER`.
+2. Compiling only `SerdeProbe.fs` produced JavaScript with unresolved Serde calls and a Node `ReferenceError`.
+3. Directly including the generated file under `obj/` did not make Fable compile it.
+4. Copying the codec out of `obj/` made Fable see two files, but compilation failed on the `JsonValue` constructor.
 
-`build-serde-probe.ps1` runs Fable with `--noCache`.
+The current retry retains that focused probe and the copy workaround. It confirms that the standalone scenario remains blocked on beta.6.
 
-This is important because Fable previously reused stale generated JavaScript and hid changes to source ordering or generated file inclusion.
+## Application Workaround and Next Retry
 
-The script also redirects .NET home/appdata paths into local workspace folders when needed, because the sandboxed environment cannot write to the default user profile directories.
-
-## Current Final Error
-
-Current command:
-
-```text
-npm run build:serde-probe
-```
-
-Current result:
-
-```text
-Build succeeded.
-Project and references (2 source files) parsed
-Started Fable compilation...
-Fable compilation finished
-
-SerdeJsonCodecs.g.fs(1,1): error FABLE: Cannot find Serde.FS.Json.Codec.JsonValue constructor
-Compilation failed
-```
-
-This is the useful checkpoint for the next retry.
-
-## Conclusion
-
-For `Serde.FS` / `Serde.FS.Json` `1.0.0-alpha.14`:
-
-- Plain .NET build works.
-- Fable does not automatically compile the normal generated codec source because it is emitted under `obj/`.
-- Copying the generated source out of `obj/` and including it Fable-only makes Fable see the codec source.
-- The generated codec source still fails under Fable because `Serde.FS.Json.Codec.JsonValue` constructors are not translated/resolved.
-- The main app build temporarily excludes `serde-probe-lib` from Fable compilation:
+The conditional reference in `src/app.fsproj` remains in place:
 
 ```xml
 <ItemGroup Condition="'$(FABLE_COMPILER)' != 'True'">
@@ -282,29 +178,72 @@ For `Serde.FS` / `Serde.FS.Json` `1.0.0-alpha.14`:
 </ItemGroup>
 ```
 
-This keeps `npm run build` passing while leaving the probe project available for .NET builds and focused Serde/Fable retries.
+The standalone retry did not change application code, build scripts, or dependency versions. The later RPC follow-up adds an isolated probe and an npm command, as described below. The full application build was not rerun; focused probes provide the compatibility results.
 
-So `Serde.FS` is still incompatible with this plain `[<Serde>]` + `SerdeJson.serialize` / `deserialize` Fable use case.
+For a future retry:
 
-The conditional app reference is a temporary workaround only. Remove it once `Serde.FS` supports this Fable scenario directly.
+1. Check NuGet and update both Serde packages together if a newer version exists.
+2. Run `npm run build:serde-probe` with the restored local toolchain.
+3. Require both Fable compilation and the Node round-trip verifier to pass. A .NET build alone is insufficient.
+4. Remove the copy step only if the package supplies and includes Fable-compatible source for this standalone scenario.
+5. Remove the conditional application reference only after the probe passes, then verify the application build.
+6. For RPC, rerun `npm run build:serde-fable-probe` and keep its results distinct from standalone serialization.
 
-## Next Retry Checklist
+## Serde.FS.Fable Follow-up: Executed RPC Probe
 
-When a newer Serde package is available:
+Checked on 2026-10-19 with `Serde.FS.Fable` 1.0.0-beta.6, `Serde.FS` 1.0.0-beta.6, `Fable.Core` 5.4.0, `FSharp.Core` 11.0.100, Fable 5.22.0 and Node 24.20.0. The isolated projects target `net10.0` and use explicit NuGet `PackageReference` entries; the application's Paket dependencies are unchanged.
 
-1. Update `Serde.FS` and `Serde.FS.Json`.
-2. Run:
+Files:
 
-```text
-npm run build:serde-probe
+- `serde-fable-probe/Shared/Domain.fs`: a simple record plus data shapes mirroring `src/ProjectData.fs`, exposed through `[<RpcApi>] IProbeApi`.
+- `serde-fable-probe/Shared/Shared.fsproj`: shared contracts with `Serde.FS`.
+- `serde-fable-probe/Client/Client.fsproj`: consumer with `Serde.FS.Fable` and `Fable.Core`.
+- `serde-fable-probe/Client/Probe.fs`: invokes generated methods and checks decoded values.
+- `scripts/build-serde-fable-probe.ps1`: tool restore, .NET build, uncached Fable compilation, then Node verification.
+- `scripts/check-serde-fable-probe.mjs`: checks HTTP requests against expected JSON and supplies independent response fixtures through a mock `fetch`.
+
+Run:
+
+```powershell
+npm run build:serde-fable-probe
 ```
 
-3. Check whether Fable still fails on:
+The .NET build generates `Client/fable-generated/~IProbeApi.fable.g.fs` and includes it before the consumer's source. No manual codec copy or project-file include is needed. The generated folder contains a self-ignoring `.gitignore`. Fable parses three source files: shared contracts, generated client, and probe.
+
+Final result: **exit code 0**, .NET build with zero warnings/errors, Fable compilation successful, and:
 
 ```text
-Cannot find Serde.FS.Json.Codec.JsonValue constructor
+PASS: generated RPC record encoder, HTTP request and decoder
+PASS: ProjectData-shaped DateTime, Map and Remote option (None/Wsl/Ssh)
+CONFIRMED INCOMPATIBILITY: current environment JSON object silently decodes as empty Map
+CONFIRMED INCOMPATIBILITY: current externally tagged Remote is rejected
+PASS: HTTP failure propagation
+Serde.FS.Fable probe passed; current application wire format is incompatible.
 ```
 
-4. If that error is gone, check whether the Node runtime verifier passes.
-5. If the generated code moves out of `obj/` or Serde starts generating Fable-specific codecs for `[<Serde>]`, simplify or remove the copy step in `scripts/build-serde-probe.ps1`.
-6. If the probe passes under Fable, remove the temporary `$(FABLE_COMPILER) != 'True'` condition around the `serde-probe-lib` project reference in `src/app.fsproj`.
+Seven intercepted requests cover a simple record, all three remote cases, two incompatible application-shaped responses, and an HTTP 500 response. These are real executions of Fable-generated JavaScript, with mocked transport. No ASP.NET server, Rust integration, browser/webview, authentication, or CORS behavior was tested.
+
+### Fit for projLaunch
+
+| Concern | Current application | Generated Serde.FS.Fable client |
+| --- | --- | --- |
+| Transport | Tauri `invoke` in `src/AppTauri.fs`; Rust handles Git JSON-RPC | `fetch` POST to `/rpc/IProbeApi/Echo` or `/rpc/IProbeApi/EchoProject`, with raw argument JSON |
+| `environment` | JSON object, e.g. `{"EXTRA":"1"}` | Array of pairs, e.g. `[["EXTRA","1"]]` |
+| `Remote.Wsl` | `{"Wsl":"Ubuntu"}` | `{"Case":"Wsl","Fields":["Ubuntu"]}` |
+| `Remote.Ssh` | `{"Ssh":{"host":"example.test","username":"user"}}` | `{"Case":"Ssh","Fields":["example.test","user"]}` |
+| Optional remote | `null` or omitted; legacy Thoth arrays also accepted | Generated decoder handles nullish values; union values use `Case` / `Fields` |
+| Codec access | Explicit public `ProjectData.toJson/fromJson` | Per-type codec modules are `private` inside the generated RPC client |
+
+The application formats were checked against `src/ProjectData.fs` and `src-tauri/src/project.rs`. The generated formats were checked both in source and in intercepted requests.
+
+Passing our current environment object to the generated decoder does **not** raise a decoder error: under this toolchain it produces an empty Map. The probe's value comparison detects that data loss. Independently, passing `{"Wsl":"Ubuntu"}` with an otherwise valid generated payload fails with `Unknown union case`.
+
+Date handling also needs care: the generated decoder uses `DateTime.Parse`, while our existing Thoth decoder uses `Decode.datetimeUtc`. In the tested Europe/Kiev environment, a UTC timestamp came back as local time. The positive probe normalizes `lastOpened` with `ToUniversalTime()` before structural comparison; it verifies the instant, not preservation of `DateTime.Kind` or the original timestamp text.
+
+### Decision
+
+We can use this package for a new HTTP RPC boundary that follows the generated contract. Our simple record and representative application data shapes work with its own wire format, subject to the date normalization above.
+
+We should not replace `ProjectData.toJson/fromJson`, existing persisted JSON, or Tauri/Git transport with it directly. That would require explicit transport integration and format adapters or a deliberate data migration. The tested package generates private codecs tied to RPC methods; it does not supply a public general-purpose Fable `SerdeJson.serialize/deserialize` replacement.
+
+Keep the current Thoth implementation for production. The separate probe provides a reproducible baseline for evaluating a future RPC integration without changing application behavior.
