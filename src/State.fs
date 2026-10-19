@@ -363,7 +363,7 @@ let update msg state =
         newState, Cmd.none
 
     | OpenAddProjectModal ->
-        if state.isProjectSaving then
+        if state.isProjectSaving || state.projectEditor.IsSome then
             state, Cmd.none
         else
             let project = { ProjectData.Default() with id = Guid.NewGuid().ToString(); ide = "vscode" }

@@ -21,6 +21,7 @@
     <Compile Include="ProjectData.fs" />
     <Compile Include="Debug.fs" />
     <Compile Include="State.fs" />
+    <Compile Include="ProjectMenu.fs" />
     <Compile Include="SvgIcons.fs" />
     <Compile Include="ProjectEditor.fs" />
     <Compile Include="View.fs" />

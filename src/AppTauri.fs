@@ -96,6 +96,9 @@ module Window =
     let closeCurrent () : JS.Promise<unit> =
         current().close ()
 
+    let onAddProject (handler: unit -> unit) : JS.Promise<Tauri.Event.UnlistenFn> =
+        current().listen(U2.Case1 "menu-add-project", fun (_: Tauri.Event.Event<unit>) -> handler ())
+
     let onResized (handler: Tauri.Dpi.PhysicalSize -> unit) : JS.Promise<Tauri.Event.UnlistenFn> =
         current().onResized(fun e -> handler e.payload)
 

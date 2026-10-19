@@ -90,6 +90,8 @@ let timer onTick =
 
 let subscriptions model : Sub<Msg> =
     [ [ "timer" ], timer Tick
+      if AppTauri.Core.isAvailable () then
+          [ "menu-add-project" ], ProjectMenu.onAddProject ()
       [ "window-resized" ], onWindowResized ()
       [ "window-moved" ], onWindowMoved ()
       [ "close-requested" ], onCloseRequested ()

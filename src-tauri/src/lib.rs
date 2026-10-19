@@ -5,7 +5,10 @@ mod storage;
 
 use project::Remote;
 use storage::Storage;
-use tauri::Manager;
+use tauri::{
+    Emitter, Manager,
+    menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
+};
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -121,6 +124,40 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(git_host::GitHost::default())
         .setup(|app| {
+            let add_project = MenuItemBuilder::with_id("add-project", "Add project…")
+                .accelerator("CmdOrCtrl+N")
+                .build(app)?;
+            let file_menu = SubmenuBuilder::new(app, "File")
+                .item(&add_project)
+                .build()?;
+            let menu = MenuBuilder::new(app);
+            #[cfg(target_os = "macos")]
+            let menu = menu.item(
+                &SubmenuBuilder::new(app, "Project Launcher")
+                    .quit()
+                    .build()?,
+            );
+            let menu = menu.item(&file_menu);
+            #[cfg(target_os = "macos")]
+            let menu = menu.item(
+                &SubmenuBuilder::new(app, "Edit")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .select_all()
+                    .build()?,
+            );
+            app.set_menu(menu.build()?)?;
+            app.on_menu_event(|app, event| {
+                if event.id() == "add-project" {
+                    if let Err(error) = app.emit_to("main", "menu-add-project", ()) {
+                        eprintln!("Could not open project editor: {error}");
+                    }
+                }
+            });
             let directory = app.path().app_data_dir().map_err(|error| error.to_string());
             app.manage(Storage::start(directory));
             Ok(())

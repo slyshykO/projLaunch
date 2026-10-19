@@ -38,25 +38,11 @@ module JsInterop =
 let pageTheme _state = theme.light
 
 [<ReactMemoComponent>]
-let private Navbar (currentUrl: string list) (randomSalt: string) (dispatch: Msg -> unit) =
+let private Navbar (currentUrl: string list) (randomSalt: string) =
     Daisy.navbar [
-        prop.classes [ "bg-base-300"; "shadow-lg" ]
+        prop.classes [ "bg-base-300"; "shadow-lg"; "justify-end" ]
         prop.id $"navbar-{randomSalt}"
         prop.children [
-            Html.div [
-                prop.className "flex-1"
-                prop.children [
-                    Daisy.button.button [
-                        prop.classes [ "text-sm" ]
-                        button.primary
-                        button.sm
-                        prop.text "Add project"
-                        prop.id $"btn-add-project-{randomSalt}"
-                        prop.type' "button"
-                        prop.onClick (React.useCallback (fun _ -> dispatch OpenAddProjectModal))
-                    ]
-                ]
-            ]
             Html.div [
                 prop.className "flex-none"
                 prop.children [
@@ -387,7 +373,7 @@ let View state dispatch =
             prop.id $"app-{state.randomSalt}"
             pageTheme state // Apply the theme
             prop.children [
-                Navbar state.currentUrl state.randomSalt dispatch
+                Navbar state.currentUrl state.randomSalt
                 match state.projectEditor with
                 | Some project ->
                     Html.div [
