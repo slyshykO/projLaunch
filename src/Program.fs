@@ -92,7 +92,12 @@ let subscriptions model : Sub<Msg> =
     [ [ "timer" ], timer Tick
       [ "window-resized" ], onWindowResized ()
       [ "window-moved" ], onWindowMoved ()
-      [ "close-requested" ], onCloseRequested () ]
+      [ "close-requested" ], onCloseRequested ()
+      [ "git-status-focus" ], (fun dispatch ->
+          let handler (_: Browser.Types.Event) = dispatch RefreshGitStatuses
+          Browser.Dom.window.addEventListener("focus", handler)
+          { new IDisposable with
+              member _.Dispose() = Browser.Dom.window.removeEventListener("focus", handler) }) ]
 
 
 Program.mkProgram init update View

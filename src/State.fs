@@ -8,6 +8,14 @@ open projectData
 
 type SignIn = { nick: string; role: string }
 
+type ProjectGitCheck =
+    { requestId: string
+      path: string
+      remote: Remote option
+      isLoading: bool
+      result: GitProtocol.ProjectStatus option
+      error: string option }
+
 type Msg =
     | Empty
 
@@ -38,6 +46,9 @@ type Msg =
     | GetProjects of int
     | OnGetProjectsSuccess of string array
     | OnGetProjectsError of exn
+    | RefreshGitStatuses
+    | RefreshProjectGit of string
+    | OnProjectGitStatus of string * string * Result<GitProtocol.ProjectStatus, exn>
 
     | OpenProject of string
     | OnOpenProjectSuccess of string
@@ -76,6 +87,7 @@ type State =
       errors: string list
       projects: ProjectData list
       projectStorageError: string option
+      projectGit: Map<string, ProjectGitCheck>
       projectEditor: ProjectData option
       isProjectSaving: bool
       projectSaveError: string option
@@ -116,6 +128,7 @@ let init () =
           errors = []
           projects = pd
           projectStorageError = None
+          projectGit = Map.empty
           projectEditor = None
           isProjectSaving = false
           projectSaveError = None
@@ -151,6 +164,37 @@ let update msg state =
             state, Cmd.none
 
     | UrlChanged url -> { state with currentUrl = url }, Cmd.none
+
+    | RefreshGitStatuses ->
+        state, (state.projects |> List.map (fun project -> Cmd.ofMsg (RefreshProjectGit project.id)) |> Cmd.batch)
+
+    | RefreshProjectGit id ->
+        match state.projects |> List.tryFind (fun project -> project.id = id) with
+        | Some project when AppTauri.Core.isAvailable () ->
+            let previous = state.projectGit |> Map.tryFind id
+            if previous |> Option.exists (fun check -> check.isLoading && check.path = project.path && check.remote = project.remote) then
+                state, Cmd.none
+            else
+                let requestId = Guid.NewGuid().ToString()
+                let check =
+                    { requestId = requestId; path = project.path; remote = project.remote
+                      isLoading = true; result = None; error = None }
+                { state with projectGit = state.projectGit |> Map.add id check },
+                Cmd.OfPromise.either AppTauri.Git.projectStatus id
+                    (fun result -> OnProjectGitStatus(id, requestId, Ok result))
+                    (fun error -> OnProjectGitStatus(id, requestId, Error error))
+        | _ -> state, Cmd.none
+
+    | OnProjectGitStatus(id, requestId, result) ->
+        match state.projectGit |> Map.tryFind id with
+        | Some check when check.requestId = requestId &&
+                          (state.projects |> List.exists (fun project -> project.id = id && project.path = check.path && project.remote = check.remote)) ->
+            let updated =
+                match result with
+                | Ok result -> { check with isLoading = false; result = Some result; error = None }
+                | Error error -> { check with isLoading = false; result = None; error = Some (string error) }
+            { state with projectGit = state.projectGit |> Map.add id updated }, Cmd.none
+        | _ -> state, Cmd.none
 
     | Greet nick ->
         let greetPromise n =
@@ -258,9 +302,10 @@ let update msg state =
             { state with
                 errors = err |> List.append state.errors
                 projectStorageError = None
+                projectGit = state.projectGit |> Map.filter (fun id _ -> prj |> List.exists (fun project -> project.id = id))
                 projects = prj }
 
-        newState, Cmd.none
+        newState, Cmd.ofMsg RefreshGitStatuses
     | OnGetProjectsError exn ->
         let e = sprintf "Error: %A" exn
         let newErrors = List.append state.errors [ e ]
@@ -378,7 +423,7 @@ let update msg state =
             projects = projects |> List.sortByDescending (fun project -> project.lastOpened)
             projectEditor = None
             isProjectSaving = false
-            projectSaveError = None }, Cmd.none
+            projectSaveError = None }, Cmd.ofMsg (RefreshProjectGit project.id)
 
     | OnSaveProjectError error ->
         // Tauri can reject with a plain string rather than a JavaScript Error.

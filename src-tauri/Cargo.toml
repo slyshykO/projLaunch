@@ -23,6 +23,8 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+jsonc-parser = { version = "0.34", features = ["serde"] }
+quick-xml = "0.42"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 tokio = { version = "1", features = ["sync"] }
 git-protocol = { path = "../crates/git-protocol" }

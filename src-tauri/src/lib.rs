@@ -1,5 +1,6 @@
 mod git_host;
 mod project;
+mod project_git;
 mod storage;
 
 use project::Remote;
@@ -133,6 +134,7 @@ pub fn run() {
             git_host::git_hello,
             git_host::git_open,
             git_host::git_status,
+            git_host::git_project_status,
             git_host::git_log,
             git_host::git_diff_files,
             git_host::git_diff,

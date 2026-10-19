@@ -1,5 +1,17 @@
 module GitProtocol
 
+type RepositoryStatus =
+    { root: string
+      name: string
+      branch: string option
+      dirty: bool option
+      error: string option }
+
+type ProjectStatus =
+    { repositories: RepositoryStatus array
+      warnings: string array
+      unsupported: bool }
+
 type Hello =
     { protocolVersion: int
       gitVersion: string

@@ -20,6 +20,7 @@ The app currently lets you:
 - view saved projects in a grid sorted by `lastOpened`
 - add a project from the UI with name, description, IDE, and solution/workspace path
 - edit a project using the pencil button at the top right of its card, including SSH/WSL and environment variables
+- see a Git icon and clean/uncommitted status for each associated local repository at the bottom of a card
 - open projects in:
   - VS Code
   - Visual Studio 2022
@@ -33,10 +34,20 @@ The app currently lets you:
 
 When a project is opened, the app updates its `lastOpened` value and rewrites the stored project record.
 
+Git indicators refresh after loading or saving projects and when the app regains
+focus. For a directory or ordinary project file, the containing repository is used.
+For `.code-workspace`, `.sln` and `.slnx`, explicitly listed folders/projects are
+also checked, with duplicate worktree roots shown once. Child directories are not
+scanned. Hover over an indicator for its full path, branch or error details.
+Paths in workspace/solution files resolve relative to those files; the card's own
+path must be absolute. Untracked, staged and unstaged files count as changes.
+Remote SSH/WSL checks and failed checks are shown as unavailable, never as clean.
+
 ## Current Limitations
 
 - Deleting projects from the UI is not implemented yet.
 - Remote launch options are only wired up for VS Code.
+- Git indicators currently support local repositories; SSH/WSL Git connections are not implemented.
 - Visual Studio launch paths are currently hard-coded for Windows installs.
 - The test project exists, but it only contains a placeholder test right now.
 
@@ -221,8 +232,12 @@ Run the project editor's state and IPC regression checks after compiling the fro
 ```powershell
 dotnet fable src -o ./src/bin/fable-js --configuration Debug
 node scripts/test-project-editor.mjs
+node scripts/test-project-git.mjs
 ```
 
 These checks use an isolated IPC stub, without accessing the user's database.
 They cover editing without duplicates, preserved IDs and timestamps, SSH/WSL and
 environment values, cancellation, failed saves, retry and adding new projects.
+The Git checks cover refresh races, stale responses, errors/recovery and rendered
+indicators. Rust tests also exercise workspace/solution discovery and real stdio
+status checks; build the Git sidecar first with `npm run build:git-server`.

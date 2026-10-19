@@ -49,6 +49,9 @@ module Projects =
 /// Transport and process lifetime stay in Rust. Operation IDs are caller-owned
 /// so an in-flight read can be cancelled without knowing its JSON-RPC request ID.
 module Git =
+    let projectStatus (id: string) : JS.Promise<GitProtocol.ProjectStatus> =
+        Core.invoke "git_project_status" (Some(createObj [ "id" ==> id ]))
+
     let private invoke<'T> command fields : JS.Promise<'T> =
         Core.invoke command (Some(createObj [ "params" ==> createObj fields ]))
 
