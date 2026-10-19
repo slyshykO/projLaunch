@@ -184,7 +184,7 @@ What these do:
 - `build` restores npm dependencies from `package-lock.json` with `npm ci --include=dev`, syncs Feliz.DaisyUI source references in `src/index.css`, and then runs `npm run tauri build -- --debug` (debug mode by default)
 - `build --release` performs the same preparation and runs `npm run tauri build` (release mode)
 - `run` performs the same build as `build`, then launches the debug app; `run --release` builds and launches the release app. It waits until the app exits and does not launch it if the build fails.
-- `clean` runs `cargo clean` for the Tauri app
+- `clean` removes generated artifacts across all projects and build variants, including the build helper itself
 - `update` runs npm/cargo update checks
 - `build-daisyui` builds a local `Feliz.DaisyUI` checkout if present
 - `build-git-server` builds and copies the Git sidecar; add `--release` for optimized output
@@ -246,6 +246,22 @@ at startup. If those inputs have changed, the batch file rebuilds it and retries
 original command once. Self-publishing requires the Windows Native AOT build tools
 (Visual Studio C++ build tools and Windows SDK).
 
+Run `.\build.bat clean` to remove build artifacts for all projects and all
+configurations, frameworks and target platforms. This includes Rust `target`
+trees (the app, Git workspace and repository root), .NET `bin`/`obj` and test
+results, Fable output, frontend `dist`/`dist-ssr` and Vite caches, copied Git
+sidecars, generated Tauri schemas and Serde codecs, and local DaisyUI build/package
+output. Project discovery also includes nested projects and Paket source checkouts.
+Installed dependencies (`node_modules`, Paket sources and global package caches),
+source files, lockfiles and application data are preserved.
+
+Cleaning runs directly in Windows PowerShell before starting the build helper;
+it needs no .NET SDK, Rust or npm and also deletes the helper's own `bin`/`obj`.
+The next build republishes the helper automatically. Close running builds,
+watchers and the app first: failures to remove locked files are reported with a
+nonzero exit code, while other output trees are still cleaned. For a preview,
+run `powershell.exe -NoProfile -File scripts/clean.ps1 -WhatIf`.
+
 After cloning, run `.\build.bat build` with the prerequisites above installed.
 The command restores npm dependencies, including the build tools, before starting
 Tauri. The frontend build then restores the local .NET tools and Paket dependencies.
@@ -273,20 +289,21 @@ first-run import, both remote formats, preservation of source files, restart and
 retry behavior, transactional rollback, duplicate IDs, database conflicts,
 concurrent startup and asynchronous worker commands.
 
-Run the build helper's input-hash regression checks with:
+Run the build helper's regression checks with:
 
 ```powershell
 dotnet fsi --exec build/scripts/SelfBuild.Tests.fsx
 dotnet fsi --exec build/scripts/Versioning.Tests.fsx
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/test-clean.ps1
 ```
 
 Run the project editor's state and IPC regression checks after compiling the frontend:
 
 ```powershell
 dotnet fable src -o ./src/bin/fable-js --configuration Debug
-node scripts/test-project-editor.mjs
-node scripts/test-project-git.mjs
-node scripts/test-about-version.mjs
+node scripts/tests/test-project-editor.mjs
+node scripts/tests/test-project-git.mjs
+node scripts/tests/test-about-version.mjs
 ```
 
 These checks use an isolated IPC stub, without accessing the user's database.

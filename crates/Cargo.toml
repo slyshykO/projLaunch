@@ -3,7 +3,7 @@ members = ["git-protocol", "git-server", "git-client"]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.3+2.g9e2b858"
+version = "0.4.3+6.gb92ac68.dirty"
 edition = "2024"
 
 [workspace.dependencies]

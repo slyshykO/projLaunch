@@ -15,8 +15,8 @@ globalThis.window = {
         },
     },
 };
-const { init, update, Msg } = await import('../src/bin/fable-js/State.js');
-const { ProjectGitIndicators } = await import('../src/bin/fable-js/View.js');
+const { init, update, Msg } = await import('../../src/bin/fable-js/State.js');
+const { ProjectGitIndicators } = await import('../../src/bin/fable-js/View.js');
 const cases = new Msg(0, []).cases();
 const step = (state, name, ...fields) => {
     const tag = cases.indexOf(name);

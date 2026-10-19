@@ -1,4 +1,4 @@
-const moduleUrl = new URL("../serde-probe-lib/bin/fable-js/SerdeProbe.js", import.meta.url);
+const moduleUrl = new URL("../../serde-probe-lib/bin/fable-js/SerdeProbe.js", import.meta.url);
 
 function fail(message, error) {
   console.error(`serde-probe-lib check failed: ${message}`);

@@ -83,7 +83,7 @@ Run:
 npm run build:serde-probe
 ```
 
-This invokes `scripts/build-serde-probe.ps1`, followed by `scripts/check-serde-probe.mjs` only if compilation succeeds.
+This invokes `scripts/tests/build-serde-probe.ps1`, followed by `scripts/tests/check-serde-probe.mjs` only if compilation succeeds.
 
 ## Latest Execution Result
 
@@ -199,8 +199,8 @@ Files:
 - `serde-fable-probe/Shared/Shared.fsproj`: shared contracts with `Serde.FS`.
 - `serde-fable-probe/Client/Client.fsproj`: consumer with `Serde.FS.Fable` and `Fable.Core`.
 - `serde-fable-probe/Client/Probe.fs`: invokes generated methods and checks decoded values.
-- `scripts/build-serde-fable-probe.ps1`: tool restore, .NET build, uncached Fable compilation, then Node verification.
-- `scripts/check-serde-fable-probe.mjs`: checks HTTP requests against expected JSON and supplies independent response fixtures through a mock `fetch`.
+- `scripts/tests/build-serde-fable-probe.ps1`: tool restore, .NET build, uncached Fable compilation, then Node verification.
+- `scripts/tests/check-serde-fable-probe.mjs`: checks HTTP requests against expected JSON and supplies independent response fixtures through a mock `fetch`.
 
 Run:
 

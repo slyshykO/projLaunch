@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$root = (Resolve-Path (Join-Path $PSScriptRoot "../..")).Path
 $dotnetHome = Join-Path $root ".config"
 $appDataRoot = Join-Path $root ".appdata"
 $probeProject = Join-Path $root "serde-probe-lib\serde-probe-lib.fsproj"
@@ -58,7 +58,7 @@ try {
 
     Copy-Item -LiteralPath $generatedCodecSource -Destination $fableCodecSource -Force
     Invoke-NativeCommand "dotnet" @("fable", "serde-probe-lib", "-o", "./serde-probe-lib/bin/fable-js", "--noCache")
-    Invoke-NativeCommand "node" @("./scripts/check-serde-probe.mjs")
+    Invoke-NativeCommand "node" @("./scripts/tests/check-serde-probe.mjs")
 } finally {
     Pop-Location
 }

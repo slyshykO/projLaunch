@@ -49,7 +49,7 @@ module Help =
         Print.println "                --release builds the app in release mode"
         Print.println "  run           Build and run the app (--release for release mode)"
         Print.println "  set-version X.Y.Z  Update versions, commit and tag vX.Y.Z"
-        Print.println "  clean         Clean generated artifacts"
+        Print.println "  clean         Clean all projects/configurations, including the helper (via build.bat)"
         Print.println "  test          Reserved for test workflow"
         Print.println "  update        Update dependencies"
         Print.println "  build-daisyui Build local Feliz.DaisyUI"
@@ -341,20 +341,8 @@ module Build =
             AppResult.Failure
 
     let clean () =
-        try
-            let cargoRes =
-                BuildUtils.runCmd
-                    (Config.shell ())
-                    [ Config.shellCmdArg ()
-                      "cargo"
-                      "clean"
-                      "--manifest-path"
-                      "./src-tauri/Cargo.toml" ]
-
-            cargoRes
-        with ex ->
-            Print.printlnRed $"Error during clean: {ex.Message}"
-            AppResult.Failure
+        Print.printlnRed "Run build.bat clean so the build helper is not running while its own artifacts are removed."
+        AppResult.Failure
 
 module Main =
     open System

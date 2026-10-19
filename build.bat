@@ -14,6 +14,9 @@ set "REBUILT=0"
 
 cd /d "%~dp0" || goto :error
 
+rem Clean before loading the helper so its own bin/obj can also be removed.
+if /I "%~1" == "clean" goto :clean
+
 rem Match the build helper to the SDK selected by global.json.
 dotnet --version | findstr /b /l /c:"11." >nul
 if not errorlevel 1 set PROJECT_FRAMEWORK=net11.0
@@ -25,6 +28,12 @@ if /I "%~1" == "self-build" (
     goto :self-build
 )
 goto :run
+
+:clean
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\clean.ps1"
+set "build_exit_code=%errorlevel%"
+if not "%build_exit_code%"=="0" goto :report-error
+goto :ok
 
 :self-build
 set "SELF_BUILD=1"

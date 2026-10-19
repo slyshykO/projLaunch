@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readdir } from "node:fs/promises";
 
-const output = new URL("../serde-fable-probe/Client/bin/fable-js/", import.meta.url);
+const output = new URL("../../serde-fable-probe/Client/bin/fable-js/", import.meta.url);
 const libraries = (await readdir(new URL("fable_modules/", output)))
   .filter(name => name.startsWith("fable-library-js."));
 assert.equal(libraries.length, 1, "Expected one generated Fable runtime; clean the probe output if stale");

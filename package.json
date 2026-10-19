@@ -1,7 +1,7 @@
 {
   "name": "projlaunch",
   "private": true,
-  "version": "0.4.3+2.g9e2b858",
+  "version": "0.4.3+6.gb92ac68.dirty",
   "type": "module",
   "scripts": {
     "gen:version": "dotnet fsi --exec scripts/version/version.fsx src/bin",
@@ -12,8 +12,8 @@
     "prestart": "npm run gen:version",
     "start": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js --run vite serve",
     "build": "dotnet tool restore && dotnet fable src -o ./src/bin/fable-js --run vite build --emptyOutDir",
-    "build:serde-probe": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-serde-probe.ps1",
-    "build:serde-fable-probe": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-serde-fable-probe.ps1",
+    "build:serde-probe": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/tests/build-serde-probe.ps1",
+    "build:serde-fable-probe": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/tests/build-serde-fable-probe.ps1",
     "build:git-server": ".\\build.bat build-git-server",
     "tauri": "tauri"
   },

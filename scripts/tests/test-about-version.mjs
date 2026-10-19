@@ -13,11 +13,11 @@ globalThis.window = {
     },
 };
 
-const source = readFileSync(new URL('../src/bin/version.fs', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../src/bin/version.fs', import.meta.url), 'utf8');
 const expected = source.match(/let version\s*\(\)\s*=\s*"([^"]+)"/)?.[1];
 assert.ok(expected, 'Generated version must be a runtime function, not an inlined Literal');
-const { init } = await import('../src/bin/fable-js/State.js');
-const { About } = await import('../src/bin/fable-js/View.js');
+const { init } = await import('../../src/bin/fable-js/State.js');
+const { About } = await import('../../src/bin/fable-js/View.js');
 const state = init()[0];
 state.appVersion = 'stale-manifest-version';
 const html = renderToStaticMarkup(React.createElement(About, state));
