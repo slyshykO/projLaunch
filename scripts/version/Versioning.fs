@@ -50,12 +50,12 @@ let gitVersion root =
     if tag.StartsWith("v", StringComparison.Ordinal) then tag.Substring(1) else tag
 
 // Replace only selected JSON string tokens, preserving formatting and dependencies.
-let private updateJson isLock version (content: string) =
+let private updateJson isLock (transformVersion: string -> string) (content: string) =
     let bytes = Encoding.UTF8.GetBytes content
     let mutable reader = Utf8JsonReader(ReadOnlySpan<byte>(bytes))
     let mutable path: string list = []
     let mutable property = "$"
-    let edits = ResizeArray<int * int>()
+    let edits = ResizeArray<int * int * string>()
     while reader.Read() do
         match reader.TokenType with
         | JsonTokenType.PropertyName -> property <- reader.GetString() |> Option.ofObj |> Option.defaultValue ""
@@ -66,19 +66,20 @@ let private updateJson isLock version (content: string) =
         | JsonTokenType.EndObject | JsonTokenType.EndArray -> path <- List.tail path
         | JsonTokenType.String when property = "version" &&
                                     (path = [ "$" ] || (isLock && path = [ ""; "packages"; "$" ])) ->
-            edits.Add(int reader.TokenStartIndex, int reader.BytesConsumed)
+            let version = reader.GetString() |> Option.ofObj |> Option.defaultValue ""
+            edits.Add(int reader.TokenStartIndex, int reader.BytesConsumed, transformVersion version)
         | _ -> ()
     if edits.Count <> (if isLock then 2 else 1) then
         failwith "Expected a root version (and packages[\"\"].version in package-lock.json)."
     let mutable result = content
-    for startOffset, endOffset in edits |> Seq.rev do
+    for startOffset, endOffset, version in edits |> Seq.rev do
         let start = Encoding.UTF8.GetCharCount(bytes, 0, startOffset)
         let length = Encoding.UTF8.GetCharCount(bytes, startOffset, endOffset - startOffset)
         result <- result.Remove(start, length).Insert(start, "\"" + version + "\"")
     result
 
 let private sections = Regex(@"(?m)^\[[^\r\n]+\][^\r\n]*(?:\r?\n|$)")
-let private versionLine = Regex("(?m)^(version[ \\t]*=[ \\t]*[\"'])[^\"'\\r\\n]+([\"'])")
+let private versionLine = Regex("(?m)^(version[ \\t]*=[ \\t]*[\"'])([^\"'\\r\\n]+)([\"'])")
 
 let private updateSections (update: string -> string -> string) (content: string) =
     let headers = sections.Matches content
@@ -92,10 +93,10 @@ let private updateSections (update: string -> string -> string) (content: string
         result <- result.Remove(start, finish - start).Insert(start, replacement)
     result
 
-let private replaceVersion version body =
+let private replaceVersion transformVersion body =
     if versionLine.Matches(body).Count <> 1 then
         failwith "Expected exactly one explicit version in TOML package section."
-    versionLine.Replace(body, MatchEvaluator(fun m -> m.Groups.[1].Value + version + m.Groups.[2].Value))
+    versionLine.Replace(body, MatchEvaluator(fun m -> m.Groups.[1].Value + transformVersion m.Groups.[2].Value + m.Groups.[3].Value))
 
 let private updateCargo version content =
     updateSections (fun header body ->
@@ -119,7 +120,7 @@ let private trackedFiles root =
     (git root [ "ls-files"; "-z" ]).Split('\000', StringSplitOptions.RemoveEmptyEntries)
     |> Array.toList
 
-let private transformations root version =
+let private transformationsWith root transformVersion =
     let files = trackedFiles root
     let cargoFiles = files |> List.filter (fun path -> Path.GetFileName path = "Cargo.toml")
     let localNames =
@@ -130,12 +131,14 @@ let private transformations root version =
     |> List.choose (fun path ->
         let update =
             match Path.GetFileName path with
-            | "package.json" | "tauri.conf.json" -> Some(updateJson false version)
-            | "package-lock.json" -> Some(updateJson true version)
-            | "Cargo.toml" -> Some(updateCargo version)
-            | "Cargo.lock" -> Some(updateCargoLock localNames version)
+            | "package.json" | "tauri.conf.json" -> Some(updateJson false transformVersion)
+            | "package-lock.json" -> Some(updateJson true transformVersion)
+            | "Cargo.toml" -> Some(updateCargo transformVersion)
+            | "Cargo.lock" -> Some(updateCargoLock localNames transformVersion)
             | _ -> None
         update |> Option.map (fun transform -> path, transform))
+
+let private transformations root version = transformationsWith root (fun _ -> version)
 
 let private dirtyPaths root =
     git root [ "diff"; "HEAD"; "--name-only"; "-z" ] + git root [ "diff"; "--cached"; "--name-only"; "-z" ]
@@ -189,11 +192,49 @@ let private apply root (edits: (string * string) list) =
         File.WriteAllText(Path.Combine(root, path), content)
         Console.WriteLine $"Updated {path}"
 
+let private cleanDirtyVersion (version: string) =
+    if Regex.IsMatch(version, "\\A" + releasePattern + @"\+[0-9]+\.g[0-9a-f]+\.dirty\z") then
+        version.Substring(0, version.Length - ".dirty".Length)
+    else version
+
+let private commitCleanVersions root edits =
+    git root [ "var"; "GIT_AUTHOR_IDENT" ] |> ignore
+    git root [ "var"; "GIT_COMMITTER_IDENT" ] |> ignore
+    let head = git root [ "rev-parse"; "HEAD" ]
+    let originals =
+        edits |> List.map (fun (path, content) ->
+            path, File.ReadAllBytes(Path.Combine(root, path)), Encoding.UTF8.GetBytes(content: string))
+    try
+        apply root edits
+        let paths = edits |> List.map fst
+        // --only commits just these tracked files without staging anything else.
+        git root ([ "commit"; "--only"; "-m"; "Remove dirty markers from project versions"; "--" ] @ paths)
+        |> Console.WriteLine
+    with ex ->
+        // A rejected commit (e.g. a hook) must not strand the checkout with clean
+        // versions that were never committed. Preserve any intervening user edits.
+        if git root [ "rev-parse"; "HEAD" ] = head then
+            for path, original, written in originals do
+                let fullPath = Path.Combine(root, path)
+                if File.Exists fullPath && File.ReadAllBytes fullPath = written then
+                    File.WriteAllBytes(fullPath, original)
+        failwith $"Could not commit clean project versions: {ex.Message}"
+
 let sync root =
     let version = manifestVersion root
-    let edits = changes root (transformations root version)
-    apply root edits
-    Console.WriteLine $"Versions synchronized with Git: {version}"
+    // A commit changes its own distance/hash. Never rewrite committed manifests
+    // just because a clean checkout now describes a newer commit.
+    if List.isEmpty (dirtyPaths root) then
+        let cleanEdits = changes root (transformationsWith root cleanDirtyVersion)
+        if List.isEmpty cleanEdits then
+            Console.WriteLine $"Git is clean; keeping committed manifest versions (current Git version: {version})."
+        else
+            commitCleanVersions root cleanEdits
+            Console.WriteLine "Committed clean project versions; no tag created."
+    else
+        let edits = changes root (transformations root version)
+        apply root edits
+        Console.WriteLine $"Versions synchronized with Git: {version}"
     version
 
 let setVersion root version =

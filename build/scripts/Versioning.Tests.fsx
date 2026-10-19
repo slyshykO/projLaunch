@@ -105,6 +105,11 @@ try
     let cleanSnapshot = Versioning.manifestVersion fixture
     check (Regex.IsMatch(cleanSnapshot, @"^1\.2\.3\+1\.g[0-9a-f]+$")) "Snapshot must include distance and hash"
     Versioning.sync fixture |> ignore
+    checkVersions "1.2.3"
+    check (run [ "status"; "--porcelain" ] = "") "Build after a source commit dirtied a clean checkout"
+    // Existing uncommitted version drift can still be synchronized.
+    write "package.json" ((read "package.json").Replace("\"version\": \"1.2.3\"", "\"version\": \"9.9.9\""))
+    Versioning.sync fixture |> ignore
     checkVersions cleanSnapshot
     let snapshotTimestamp = File.GetLastWriteTimeUtc(Path.Combine(fixture, "package.json"))
     Versioning.sync fixture |> ignore
@@ -147,6 +152,62 @@ try
     let beforeEmptyRelease = run [ "rev-parse"; "HEAD" ]
     Versioning.setVersion fixture "2.0.0"
     check (run [ "rev-parse"; "HEAD" ] <> beforeEmptyRelease) "Already-matching manifests must still create a release commit"
+
+    // Reproduce build -> commit (including dirty versions) -> build -> build.
+    // The first clean build commits only removal of dirty markers. Subsequent
+    // builds preserve the clean strings instead of chasing their own commit hash.
+    write "notes.txt" "changes to commit after building"
+    let committedVersion = Versioning.sync fixture
+    check (committedVersion.EndsWith(".dirty")) "Fixture must commit a dirty version"
+    commit ()
+    let sourceHead = run [ "rev-parse"; "HEAD" ]
+    let committedTags = run [ "tag"; "--list" ]
+    // Real edits, including hidden staged changes, must prevent auto-commits.
+    write "notes.txt" "staged change"
+    run [ "add"; "notes.txt" ] |> ignore
+    write "notes.txt" "changes to commit after building"
+    Versioning.sync fixture |> ignore
+    check (run [ "rev-parse"; "HEAD" ] = sourceHead) "Build committed staged source changes"
+    check ((rootVersion "package.json").EndsWith(".dirty")) "Staged source changes lost dirty marker"
+    // Restore only the fixture to the clean source commit for the cleanup checks.
+    run [ "restore"; "--source=HEAD"; "--staged"; "--worktree"; "." ] |> ignore
+
+    // A failed automatic commit restores the clean checkout and can be retried.
+    write ".git/test-hooks/pre-commit" "#!/bin/sh\nexit 1\n"
+    run [ "config"; "core.hooksPath"; Path.Combine(fixture, ".git", "test-hooks") ] |> ignore
+    expectFailure (fun () -> Versioning.sync fixture |> ignore) "Rejected cleanup commit should fail"
+    checkVersions committedVersion
+    check (run [ "rev-parse"; "HEAD" ] = sourceHead) "Rejected cleanup changed HEAD"
+    check (run [ "status"; "--porcelain" ] = "") "Rejected cleanup left a dirty checkout"
+    File.Delete(Path.Combine(fixture, ".git", "test-hooks", "pre-commit"))
+
+    Versioning.sync fixture |> ignore
+    let cleanVersion = committedVersion.Substring(0, committedVersion.Length - ".dirty".Length)
+    checkVersions cleanVersion
+    let committedHead = run [ "rev-parse"; "HEAD" ]
+    check (committedHead <> sourceHead) "Cleanup did not commit"
+    check (run [ "rev-parse"; "HEAD^" ] = sourceHead) "Cleanup created more than one commit"
+    check (run [ "log"; "-1"; "--format=%s" ] = "Remove dirty markers from project versions") "Wrong cleanup commit"
+    let changedPaths = (run [ "diff"; "--name-only"; "HEAD^"; "HEAD" ]).Split('\n')
+    for path in changedPaths do
+        check ([ "Cargo.toml"; "Cargo.lock"; "package.json"; "package-lock.json"; "tauri.conf.json" ] |> List.contains (Path.GetFileName path))
+            $"Cleanup committed unrelated file {path}"
+        let before = run [ "show"; "HEAD^:" + path ]
+        let after = run [ "show"; "HEAD:" + path ]
+        check (after = before.Replace(committedVersion, cleanVersion)) $"Cleanup changed more than dirty markers in {path}"
+    let committedFiles =
+        (run [ "ls-files"; "-z" ]).Split('\000', StringSplitOptions.RemoveEmptyEntries)
+        |> Array.map (fun path -> path, File.ReadAllBytes(Path.Combine(fixture, path)), File.GetLastWriteTimeUtc(Path.Combine(fixture, path)))
+    for _ in 1 .. 2 do
+        Versioning.sync fixture |> ignore
+        checkVersions cleanVersion
+        check (run [ "status"; "--porcelain" ] = "") "Clean build changed the worktree or index"
+        check (run [ "rev-parse"; "HEAD" ] = committedHead) "Clean build created a commit"
+        check (run [ "tag"; "--list" ] = committedTags) "Clean build changed tags"
+        for path, contents, modified in committedFiles do
+            check (File.ReadAllBytes(Path.Combine(fixture, path)) = contents) $"Clean build changed {path}"
+            check (File.GetLastWriteTimeUtc(Path.Combine(fixture, path)) = modified) $"Clean build rewrote {path}"
+    check (not ((Versioning.displayVersion fixture).EndsWith("+"))) "Generated display version should describe the current clean checkout"
     printfn "Versioning regression checks passed."
 finally
     let resolved = Path.GetFullPath fixture
