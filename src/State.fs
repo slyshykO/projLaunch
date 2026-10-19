@@ -47,11 +47,11 @@ type Msg =
     | OnAddOrUpdateProjectSuccess of string
     | OnAddOrUpdateProjectError of exn
     | OpenAddProjectModal
-    | CloseAddProjectModal
-
-    | FormAddProjectNameChanged of string
-    | FormAddProjectPathChanged of string
-    | FormAddProjectDescriptionChanged of string
+    | CloseProjectEditor
+    | OpenEditProjectModal of string
+    | SaveProject of ProjectData
+    | OnSaveProjectSuccess of ProjectData
+    | OnSaveProjectError of exn
 
     | WindowSave
     | OnWindowSaveSuccess
@@ -76,10 +76,9 @@ type State =
       errors: string list
       projects: ProjectData list
       projectStorageError: string option
-      formAddProjectName: string
-      formAddProjectPath: string
-      formAddProjectDescription: string
-      isAddProjectModalOpen: bool
+      projectEditor: ProjectData option
+      isProjectSaving: bool
+      projectSaveError: string option
       randomSalt: string
       appWindowSize: Tauri.Dpi.PhysicalSize option
       appWindowPosition: Tauri.Dpi.PhysicalPosition option
@@ -117,10 +116,9 @@ let init () =
           errors = []
           projects = pd
           projectStorageError = None
-          formAddProjectName = ""
-          formAddProjectPath = ""
-          formAddProjectDescription = ""
-          isAddProjectModalOpen = false
+          projectEditor = None
+          isProjectSaving = false
+          projectSaveError = None
           randomSalt = randomSalt
           appWindowSize = None
           appWindowPosition = None
@@ -309,14 +307,7 @@ let update msg state =
         state,
         Cmd.OfPromise.either addOrUpdateProjectPromise (id, json) OnAddOrUpdateProjectSuccess OnAddOrUpdateProjectError
     | OnAddOrUpdateProjectSuccess _id ->
-        let newState =
-            { state with
-                formAddProjectName = ""
-                formAddProjectPath = ""
-                formAddProjectDescription = ""
-                isAddProjectModalOpen = false }
-
-        newState, Cmd.ofMsg (GetProjects 1000)
+        state, Cmd.ofMsg (GetProjects 0)
     | OnAddOrUpdateProjectError exn ->
         let e = sprintf "Error: %A" exn
         let newErrors = List.append state.errors [ e ]
@@ -327,35 +318,71 @@ let update msg state =
         newState, Cmd.none
 
     | OpenAddProjectModal ->
-        let newState =
-            { state with
-                isAddProjectModalOpen = true }
+        if state.isProjectSaving then
+            state, Cmd.none
+        else
+            let project = { ProjectData.Default() with id = Guid.NewGuid().ToString(); ide = "vscode" }
+            { state with projectEditor = Some project; projectSaveError = None }, Cmd.none
 
-        newState, Cmd.none
+    | OpenEditProjectModal id ->
+        if state.isProjectSaving then
+            state, Cmd.none
+        else
+            match state.projects |> List.tryFind (fun project -> project.id = id) with
+            | Some project ->
+                { state with projectEditor = Some project; projectSaveError = None }, Cmd.none
+            | None -> state, Cmd.none
 
-    | CloseAddProjectModal ->
-        let newState =
-            { state with
-                isAddProjectModalOpen = false }
+    | CloseProjectEditor ->
+        if state.isProjectSaving then
+            state, Cmd.none
+        else
+            { state with projectEditor = None; projectSaveError = None }, Cmd.none
 
-        newState, Cmd.none
+    | SaveProject draft ->
+        match state.projectEditor with
+        | Some original when original.id = draft.id && not state.isProjectSaving ->
+            if String.IsNullOrWhiteSpace draft.name || String.IsNullOrWhiteSpace draft.path then
+                { state with projectSaveError = Some "Name and project path are required." }, Cmd.none
+            else
+                let latest =
+                    state.projects
+                    |> List.tryFind (fun project -> project.id = original.id)
+                    |> Option.defaultValue original
 
-    | FormAddProjectNameChanged v ->
-        let newState = { state with formAddProjectName = v }
+                let project =
+                    { draft with
+                        id = original.id
+                        lastOpened = latest.lastOpened
+                        name = draft.name.Trim()
+                        path = draft.path.Trim() }
 
-        newState, Cmd.none
+                let save project =
+                    promise {
+                        do! AppTauri.Projects.saveProject project.id (ProjectData.toJson project)
+                        return project
+                    }
 
-    | FormAddProjectDescriptionChanged v ->
-        let newState =
-            { state with
-                formAddProjectDescription = v }
+                { state with isProjectSaving = true; projectSaveError = None },
+                Cmd.OfPromise.either save project OnSaveProjectSuccess OnSaveProjectError
+        | _ -> state, Cmd.none
 
-        newState, Cmd.none
+    | OnSaveProjectSuccess project ->
+        let projects =
+            if state.projects |> List.exists (fun existing -> existing.id = project.id) then
+                state.projects |> List.map (fun existing -> if existing.id = project.id then project else existing)
+            else
+                project :: state.projects
 
-    | FormAddProjectPathChanged v ->
-        let newState = { state with formAddProjectPath = v }
+        { state with
+            projects = projects |> List.sortByDescending (fun project -> project.lastOpened)
+            projectEditor = None
+            isProjectSaving = false
+            projectSaveError = None }, Cmd.none
 
-        newState, Cmd.none
+    | OnSaveProjectError error ->
+        // Tauri can reject with a plain string rather than a JavaScript Error.
+        { state with isProjectSaving = false; projectSaveError = Some $"Could not save project: {error}" }, Cmd.none
 
     | WindowSave ->
         if state.isWindowClosePending || not (AppTauri.Core.isAvailable ()) then

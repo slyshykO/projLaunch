@@ -2,6 +2,22 @@ module svgIcons
 
 open Feliz
 
+let edit (sz: int) =
+    Svg.svg [
+        svg.xmlns "http://www.w3.org/2000/svg"
+        svg.viewBox (0, 0, 24, 24)
+        svg.width sz
+        svg.height sz
+        svg.fill "none"
+        svg.stroke "currentColor"
+        svg.strokeWidth 1.75
+        svg.strokeLineCap "round"
+        svg.strokeLineJoin "round"
+        svg.children [
+            Svg.path [ svg.d "M14 5l5 5M4 20l5-1L20 8a2.12 2.12 0 0 0-3-3L6 16l-2 4z" ]
+        ]
+    ]
+
 let bulbElectricEnergySvg (sz: int) =
     // https://www.svgrepo.com/svg/429021/bulb-electric-energy
     // LICENSE: CC0 License

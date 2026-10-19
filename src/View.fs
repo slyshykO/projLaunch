@@ -119,10 +119,26 @@ let Project (prj: ProjectData) (dispatch: Msg -> unit) =
         | None -> None
 
     Daisy.card [
-        prop.classes [ "shadow-lg"; "p-2"; "bg-base-200"; "min-w-[350px]" ]
+        prop.classes [ "shadow-lg"; "p-2"; "bg-base-200"; "min-w-[350px]"; "h-full" ]
         prop.children [
             Daisy.cardBody [
-                Daisy.cardTitle [ prop.children [ Html.text title ] ]
+                Html.div [
+                    prop.classes [ "flex"; "items-start"; "justify-between"; "gap-2" ]
+                    prop.children [
+                        Daisy.cardTitle [ prop.className "min-w-0 break-words"; prop.text title ]
+                        Html.button [
+                            prop.type' "button"
+                            prop.classes [
+                                "btn"; "btn-xs"; "btn-square"; "btn-ghost"; "shrink-0"
+                                "text-gray-400"; "hover:text-black"; "focus-visible:text-black"; "transition-colors"
+                            ]
+                            prop.title "Edit project"
+                            prop.ariaLabel $"Edit project {prj.name}"
+                            prop.children [ svgIcons.edit 16 ]
+                            prop.onClick (fun _ -> dispatch (OpenEditProjectModal prj.id))
+                        ]
+                    ]
+                ]
                 Html.p [ prop.children [ Html.text prj.description ] ]
                 match remoteText with
                 | Some text -> Html.p [ prop.children [ Html.text $"Remote: {text}" ] ]
@@ -158,7 +174,7 @@ let private Projects (projects: ProjectData list) (randomSalt: string) (dispatch
                 prop.classes [ "grid"; "grid-cols-3"; "gap-4" ]
                 prop.children [
                     for prj in projects do
-                        yield Project prj dispatch
+                        yield Html.div [ prop.key prj.id; prop.children [ Project prj dispatch ] ]
                 ]
             ]
         ]
@@ -309,285 +325,6 @@ let private Page404 (currentUrl: string list) (randomSalt: string) =
     ]
 
 [<ReactComponent>]
-let private ModalAddProject
-    (randomSalt: string)
-    (isAddProjectModalOpen: bool)
-    (formAddProjectName: string)
-    (formAddProjectDescription: string)
-    (formAddProjectPath: string)
-    (dispatch: Msg -> unit)
-    =
-    let modalId = $"modal-add-project-{randomSalt}"
-    let remoteType, setRemoteType = React.useState ""
-    let remoteHost, setRemoteHost = React.useState ""
-    let remoteUsername, setRemoteUsername = React.useState ""
-    let remoteWslDistro, setRemoteWslDistro = React.useState ""
-    let ideValue, setIdeValue = React.useState "vscode"
-
-    React.useEffect (
-        (fun () ->
-            if isAddProjectModalOpen then
-                setRemoteType ""
-                setRemoteHost ""
-                setRemoteUsername ""
-                setRemoteWslDistro ""
-
-            let modal =
-                Browser.Dom.document.getElementById modalId :?> Browser.HTMLDialogElement
-
-            if modal <> null then
-                modal.onclose <- (fun _ -> dispatch CloseAddProjectModal)
-
-                if isAddProjectModalOpen then
-                    if not modal.``open`` then
-                        modal.showModal ()
-                elif modal.``open`` then
-                    modal.close ()),
-        [| box modalId; box isAddProjectModalOpen |]
-    )
-
-    Html.dialog [
-        prop.id modalId
-        prop.classes [ "modal"; "active" ]
-        prop.children [
-            Html.div [
-                prop.classes [ "modal-box" ]
-                prop.children [
-                    Html.form [
-                        prop.id "form-add-project-close"
-                        prop.method "dialog"
-                        prop.children [
-                            Html.button [
-                                prop.type' "button"
-                                prop.classes [
-                                    "btn"
-                                    "btn-xs"
-                                    "btn-square"
-                                    "btn-ghost"
-                                    "absolute"
-                                    "top-2"
-                                    "right-2"
-                                ]
-                                prop.children [ Html.text "✕" ]
-                                prop.onClick (React.useCallback (fun _ -> dispatch CloseAddProjectModal))
-                            ]
-                        ]
-                    ]
-                    Html.h3 [ prop.children [ Html.text "Add project" ] ]
-                    Html.form [
-                        prop.id "form-add-project"
-                        prop.children [
-                            Daisy.fieldset [
-                                Daisy.fieldsetLabel "Name"
-                                Daisy.input [
-                                    input.sm
-                                    prop.id "form-add-project-name"
-                                    prop.placeholder "Project name"
-                                    prop.value formAddProjectName
-                                    prop.required true
-                                    prop.onChange (
-                                        React.useCallback (fun newValue ->
-                                            dispatch (FormAddProjectNameChanged newValue))
-                                    )
-                                ]
-                                Daisy.fieldsetLabel "Description"
-                                Daisy.input [
-                                    prop.id "form-add-project-description"
-                                    input.sm
-                                    prop.placeholder "Project description"
-                                    prop.value formAddProjectDescription
-                                    prop.onChange (
-                                        React.useCallback (fun newValue ->
-                                            dispatch (FormAddProjectDescriptionChanged newValue))
-                                    )
-                                ]
-
-                                Daisy.fieldsetLabel "IDE"
-                                Daisy.select [
-                                    select.sm
-
-                                    prop.id "form-add-project-ide"
-                                    prop.value ideValue
-                                    prop.onChange (
-                                        React.useCallback (fun newValue ->
-                                            if not (newValue = "vscode") then
-                                                setRemoteType "" // reset remote type if IDE is not vscode, since currently only vscode supports remote projects
-
-                                            setIdeValue newValue)
-                                    )
-                                    prop.children [
-                                        Html.option [ prop.value "vscode"; prop.children [ Html.text "VSCode" ] ]
-                                        Html.option [
-                                            prop.value "visualstudio2022"
-                                            prop.children [ Html.text "Visual Studio 2022" ]
-                                        ]
-                                        Html.option [
-                                            prop.value "visualstudio2026"
-                                            prop.children [ Html.text "Visual Studio 2026" ]
-                                        ]
-                                        Html.option [ prop.value "rider"; prop.children [ Html.text "Rider" ] ]
-
-                                    ]
-                                ]
-
-                                Daisy.fieldsetLabel "Remote"
-                                Daisy.select [
-                                    select.sm
-                                    prop.id "form-add-project-remote-type"
-                                    prop.value remoteType
-                                    prop.disabled (ideValue <> "vscode") // currently only vscode supports remote projects
-                                    prop.children [
-                                        Html.option [ prop.value ""; prop.children [ Html.text "None" ] ]
-                                        Html.option [ prop.value "ssh"; prop.children [ Html.text "SSH" ] ]
-                                        Html.option [ prop.value "wsl"; prop.children [ Html.text "WSL" ] ]
-                                    ]
-                                    prop.onChange (React.useCallback (fun newValue -> setRemoteType newValue))
-                                ]
-                                Html.div [
-                                    prop.classes [
-                                        if not (remoteType = "wsl") then
-                                            "hidden"
-                                    ]
-                                    prop.children [
-                                        Daisy.fieldsetLabel "WSL distro"
-                                        Daisy.input [
-                                            input.sm
-                                            prop.id "form-add-project-remote-wsl-distro"
-                                            prop.placeholder "Ubuntu"
-                                            prop.value remoteWslDistro
-                                            prop.required true
-                                            prop.onChange (
-                                                React.useCallback (fun newValue -> setRemoteWslDistro newValue)
-                                            )
-                                        ]
-                                    ]
-                                ]
-
-                                Html.div [
-                                    prop.classes [
-                                        if not (remoteType = "ssh") then
-                                            "hidden"
-                                    ]
-                                    prop.children [
-                                        Daisy.fieldsetLabel "SSH"
-                                        Html.div [
-                                            prop.classes [ "flex"; "gap-2" ]
-                                            prop.children [
-                                                Daisy.input [
-                                                    input.sm
-                                                    prop.id "form-add-project-remote-host"
-                                                    prop.classes [ "flex-1" ]
-                                                    prop.placeholder "Host"
-                                                    prop.value remoteHost
-                                                    prop.required true
-                                                    prop.onChange (
-                                                        React.useCallback (fun newValue -> setRemoteHost newValue)
-                                                    )
-                                                ]
-                                                Daisy.input [
-                                                    input.sm
-                                                    prop.id "form-add-project-remote-username"
-                                                    prop.classes [ "flex-1" ]
-                                                    prop.placeholder "Username"
-                                                    prop.value remoteUsername
-                                                    prop.required true
-                                                    prop.onChange (
-                                                        React.useCallback (fun newValue -> setRemoteUsername newValue)
-                                                    )
-                                                ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-
-                                Daisy.fieldsetLabel "Solution/Workspace"
-                                Daisy.input [
-                                    prop.id "form-add-project-file"
-                                    input.sm
-                                    prop.placeholder "Solution/Workspace file"
-                                    prop.value formAddProjectPath
-                                    prop.onChange (
-                                        React.useCallback (fun newValue ->
-                                            dispatch (FormAddProjectPathChanged newValue))
-                                    )
-                                ]
-                            ]
-                        ]
-                    ]
-                    Html.div [
-                        prop.classes [ "modal-action" ]
-                        prop.children [
-                            Daisy.button.label [
-                                button.primary
-                                button.sm
-                                prop.text "Accept"
-                                prop.onClick (
-                                    React.useCallback (fun _ ->
-                                        printfn "Accept"
-                                        //get form values
-                                        let nameEl =
-                                            Browser.Dom.document.getElementById "form-add-project-name"
-                                            :?> Browser.Types.HTMLInputElement
-
-                                        let descriptionEl =
-                                            Browser.Dom.document.getElementById "form-add-project-description"
-                                            :?> Browser.Types.HTMLInputElement
-
-                                        let fileEl =
-                                            Browser.Dom.document.getElementById "form-add-project-file"
-                                            :?> Browser.Types.HTMLInputElement
-
-                                        let ideEl =
-                                            Browser.Dom.document.getElementById "form-add-project-ide"
-                                            :?> Browser.Types.HTMLSelectElement
-
-                                        let name = nameEl.value
-                                        let description = descriptionEl.value
-                                        let file = fileEl.value
-                                        let ide = ideEl.value
-
-                                        let remote =
-                                            match remoteType with
-                                            | "ssh" when not (System.String.IsNullOrWhiteSpace remoteHost) ->
-                                                Some(Ssh(remoteHost, remoteUsername))
-                                            | "wsl" when not (System.String.IsNullOrWhiteSpace remoteWslDistro) ->
-                                                Some(Wsl remoteWslDistro)
-                                            | _ -> None
-
-                                        let pd =
-                                            {
-                                                id = System.Guid.NewGuid().ToString()
-                                                name = name
-                                                lastOpened = System.DateTime.Now
-                                                description = description
-                                                path = file
-                                                ide = ide
-                                                environment = Map.empty
-                                                remote = remote
-                                            }
-
-                                        let pd_json = pd |> ProjectData.toJson
-
-                                        dispatch CloseAddProjectModal
-                                        dispatch (AddOrUpdateProject(pd.id, pd_json)))
-                                )
-                            ]
-                            Daisy.button.label [
-                                button.primary
-                                button.sm
-                                prop.text "Cancel"
-                                prop.onClick (fun _ ->
-                                    printfn "Cancel"
-                                    dispatch CloseAddProjectModal)
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-        ]
-    ]
-
-[<ReactComponent>]
 let View state dispatch =
     let page =
         Html.div [
@@ -604,13 +341,20 @@ let View state dispatch =
             pageTheme state // Apply the theme
             prop.children [
                 Navbar state.currentUrl state.randomSalt dispatch
-                ModalAddProject
-                    state.randomSalt
-                    state.isAddProjectModalOpen
-                    state.formAddProjectName
-                    state.formAddProjectDescription
-                    state.formAddProjectPath
-                    dispatch
+                match state.projectEditor with
+                | Some project ->
+                    Html.div [
+                        prop.key project.id
+                        prop.children [
+                            ProjectEditor.Dialog
+                                project
+                                (not (state.projects |> List.exists (fun existing -> existing.id = project.id)))
+                                state.isProjectSaving
+                                state.projectSaveError
+                                dispatch
+                        ]
+                    ]
+                | None -> Html.none
                 Html.div [
                     prop.id "main-view"
                     prop.classes [ "mt-0"; "overflow-y-auto"; "h-screen" ]

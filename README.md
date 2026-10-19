@@ -19,6 +19,7 @@ The app currently lets you:
 
 - view saved projects in a grid sorted by `lastOpened`
 - add a project from the UI with name, description, IDE, and solution/workspace path
+- edit a project using the pencil button at the top right of its card, including SSH/WSL and environment variables
 - open projects in:
   - VS Code
   - Visual Studio 2022
@@ -34,7 +35,7 @@ When a project is opened, the app updates its `lastOpened` value and rewrites th
 
 ## Current Limitations
 
-- The add-project dialog does not expose editing or deleting existing entries yet.
+- Deleting projects from the UI is not implemented yet.
 - Remote launch options are only wired up for VS Code.
 - Visual Studio launch paths are currently hard-coded for Windows installs.
 - The test project exists, but it only contains a placeholder test right now.
@@ -214,3 +215,14 @@ Run the build helper's input-hash regression checks with:
 ```powershell
 dotnet fsi --exec build/scripts/SelfBuild.Tests.fsx
 ```
+
+Run the project editor's state and IPC regression checks after compiling the frontend:
+
+```powershell
+dotnet fable src -o ./src/bin/fable-js --configuration Debug
+node scripts/test-project-editor.mjs
+```
+
+These checks use an isolated IPC stub, without accessing the user's database.
+They cover editing without duplicates, preserved IDs and timestamps, SSH/WSL and
+environment values, cancellation, failed saves, retry and adding new projects.
