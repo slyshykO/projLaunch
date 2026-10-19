@@ -18,6 +18,6 @@ async fn main() -> anyhow::Result<()> {
             server.stopped().await;
             Ok(())
         }
-        _ => anyhow::bail!("usage: git-server stdio"),
+        _ => anyhow::bail!("usage: project-launch-git-server stdio"),
     }
 }

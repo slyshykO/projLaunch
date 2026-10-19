@@ -1,6 +1,6 @@
 # Local Git server
 
-The launcher runs `git-server stdio` as a separate process on demand. It is based
+The launcher runs `project-launch-git-server stdio` as a separate process on demand. It is based
 on the `jsonrpc-axum-probe` transport and `json-rpc-rs` dispatcher; the synthetic
 Git handlers have been replaced by Git CLI reads. The fork stays pinned to
 `226e48afcc9557adf9b2ce04c72a27a37858be15` (no upstream migration in this change).
@@ -26,13 +26,12 @@ cargo build --manifest-path src-tauri/Cargo.toml --locked
 `npm run dev` prepares a debug sidecar; `npm run build` prepares an optimized
 sidecar before compiling Fable and Vite. The implementation in `build/GitServer.fs` honors
 `TAURI_ENV_TARGET_TRIPLE`, uses an explicit target/output directory, and places
-the binary in `src-tauri/binaries/git-server-<target>[.exe]`. The npm command invokes
-`build/build.fsproj` via `dotnet run` targeting .NET 10, so it also works without
-the Windows Native AOT helper. On Windows the same command is available through
-`build.bat build-git-server`, including `--release`. Tauri's
+the binary in `src-tauri/binaries/project-launch-git-server-<target>[.exe]`. The npm command invokes
+`build.bat build-git-server`, forwarding arguments such as `--release`. The batch
+script rebuilds the F# helper when needed. Tauri's
 `bundle.externalBin` copies it next to the app. Generated binaries are ignored.
 Direct Cargo builds of the Tauri host require `npm run build:git-server` first.
-Keep `git-server.exe` alongside `projlaunch.exe` when copying a Windows build.
+Keep `project-launch-git-server.exe` alongside `projlaunch.exe` when copying a Windows build.
 
 Tauri starts the server lazily and checks the protocol version. No server runs
 until a Git command is invoked. `git_disconnect` and application exit close stdin,

@@ -44,7 +44,7 @@ impl Fixture {
         self.git(&["rev-parse", "HEAD"])
     }
     async fn connect(&self) -> (Client, String) {
-        let client = Client::connect(Path::new(env!("CARGO_BIN_EXE_git-server")))
+        let client = Client::connect(Path::new(env!("CARGO_BIN_EXE_project-launch-git-server")))
             .await
             .unwrap();
         let repo = request(&client, "repo.open", json!({"path":self.path()})).await;

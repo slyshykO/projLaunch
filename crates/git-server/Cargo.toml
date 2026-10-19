@@ -3,6 +3,10 @@ name = "git-server"
 version.workspace = true
 edition.workspace = true
 
+[[bin]]
+name = "project-launch-git-server"
+path = "src/main.rs"
+
 [features]
 network = ["dep:axum"]
 

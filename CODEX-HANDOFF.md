@@ -207,14 +207,16 @@ npm run build:git-server -- --release
 .\build.bat build-git-server --release
 ```
 
-npm-обёртка запускает F# helper через `dotnet run --framework net10.0`.
+npm-обёртка запускает `build.bat build-git-server` и передаёт ему аргументы, включая `--release`.
+В `build/build.fsproj` остаются оба фреймворка: `net10.0;net11.0`.
+Выбор фреймворка выполняет только `build.bat` по версии SDK; выбранное значение используется для публикации и пути к исполняемому файлу.
 Target берётся из `TAURI_ENV_TARGET_TRIPLE`, иначе из `rustc -vV`.
-Бинарник копируется в `src-tauri/binaries/git-server-<target>[.exe]`.
+Бинарник копируется в `src-tauri/binaries/project-launch-git-server-<target>[.exe]`.
 Tauri externalBin размещает его рядом с приложением.
 
 `npm run dev` подготавливает debug sidecar; `npm run build` — release sidecar
 перед Fable/Vite. Перед прямой Cargo-сборкой Tauri сначала собрать sidecar.
-При переносе готового Windows-приложения сохранять `git-server.exe` рядом с ним.
+При переносе готового Windows-приложения сохранять `project-launch-git-server.exe` рядом с ним.
 
 ## Проверки и известные особенности среды
 

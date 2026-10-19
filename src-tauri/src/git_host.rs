@@ -143,9 +143,9 @@ async fn repository_status(
 fn server_path() -> Result<PathBuf, String> {
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     let adjacent = executable.with_file_name(if cfg!(windows) {
-        "git-server.exe"
+        "project-launch-git-server.exe"
     } else {
-        "git-server"
+        "project-launch-git-server"
     });
     if adjacent.is_file() {
         return Ok(adjacent);
@@ -154,7 +154,7 @@ fn server_path() -> Result<PathBuf, String> {
     let development = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("binaries")
         .join(concat!(
-            "git-server-",
+            "project-launch-git-server-",
             env!("PROJLAUNCH_TARGET"),
             env!("PROJLAUNCH_EXE_SUFFIX")
         ));

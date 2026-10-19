@@ -75,11 +75,11 @@ let build isRelease =
         let profile = if isRelease then "release" else "debug"
 
         let source =
-            Path.Combine(targetDirectory, target, profile, $"git-server{extension}")
+            Path.Combine(targetDirectory, target, profile, $"project-launch-git-server{extension}")
 
         let binaryDirectory = Path.Combine(projectRoot, "src-tauri", "binaries")
         Directory.CreateDirectory binaryDirectory |> ignore
-        let destination = Path.Combine(binaryDirectory, $"git-server-{target}{extension}")
+        let destination = Path.Combine(binaryDirectory, $"project-launch-git-server-{target}{extension}")
         File.Copy(source, destination, true)
         Print.printlnGreen $"Git server copied to {destination}"
         0
