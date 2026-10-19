@@ -41,6 +41,11 @@ SQLite-каталог проектов и пользовательские на�
 
 ## Что уже готово
 
+Иконка ProjLaunch заменена на сине-фиолетовую папку со стрелкой запуска.
+Исходник с прозрачностью сохранён в `src-tauri/app-icon.png`; из него через
+Tauri CLI созданы desktop-иконки в `src-tauri/icons/` и favicon 16/32 px в
+`src/assets/`. Пути в Tauri-конфигурации и HTML остались прежними.
+
 - `ca2924d` — SQLite-хранилище проектов.
 - `78f62bf` — поддержка debug/release в build helper.
 - `14349f6` — локальный Git-сервер, реальные status/log/diff, Tauri/Fable API,
