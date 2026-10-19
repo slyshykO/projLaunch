@@ -13,6 +13,7 @@ module Args =
         | Update = 3
         | BuildDaisyUI = 4
         | Help = 5
+        | BuildGitServer = 6
 
     let extractSubCommandStr (args: string array) =
         if args.Length = 0 then
@@ -27,6 +28,7 @@ module Args =
         | "test" -> Some SubCommand.Test
         | "update" -> Some SubCommand.Update
         | "build-daisyui" -> Some SubCommand.BuildDaisyUI
+        | "build-git-server" -> Some SubCommand.BuildGitServer
         | "help" -> Some SubCommand.Help
         | _ -> None
 
@@ -45,6 +47,7 @@ module Help =
         Print.println "  test          Reserved for test workflow"
         Print.println "  update        Update dependencies"
         Print.println "  build-daisyui Build local Feliz.DaisyUI"
+        Print.println "  build-git-server Build the Git sidecar (--release for optimized output)"
         Print.println "  help          Show this help"
 
 module Config =
@@ -341,6 +344,7 @@ module Main =
                     | Some Args.SubCommand.Update -> Build.update ()
                     | Some Args.SubCommand.Clean -> Build.clean ()
                     | Some Args.SubCommand.BuildDaisyUI -> Build.buildDaisyUI ()
+                    | Some Args.SubCommand.BuildGitServer -> GitServer.build (Args.isRelease argv)
                     | Some Args.SubCommand.Help ->
                         Help.print ()
                         AppResult.Success

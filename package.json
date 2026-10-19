@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "gen:version": "dotnet fsi --exec scripts/version/version.fsx src/bin",
-    "prebuild": "dotnet tool restore && dotnet paket restore && npm run gen:version",
-    "predev": "npm run gen:version",
+    "prebuild": "npm run build:git-server -- --release && dotnet tool restore && dotnet paket restore && npm run gen:version",
+    "predev": "npm run build:git-server && npm run gen:version",
     "dev": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js -e .js --sourceMaps --configuration Debug --run vite --mode development",
     "prestart": "npm run gen:version",
     "start": "dotnet tool restore && dotnet fable watch src -o ./src/bin/fable-js --run vite serve",
     "build": "dotnet tool restore && dotnet fable src -o ./src/bin/fable-js --run vite build --emptyOutDir",
     "build:serde-probe": "pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-serde-probe.ps1",
+    "build:git-server": "dotnet run --project build/build.fsproj --framework net10.0 -- build-git-server",
     "tauri": "tauri"
   },
   "dependencies": {

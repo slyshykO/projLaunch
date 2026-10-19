@@ -1301,6 +1301,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "git-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "git-protocol",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "git-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "glib"
 version = "0.18.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2711,6 +2731,8 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "fs-err",
+ "git-client",
+ "git-protocol",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3856,6 +3878,7 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys 0.61.2",
@@ -3881,6 +3904,8 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
+ "libc",
  "pin-project-lite",
  "tokio",
 ]

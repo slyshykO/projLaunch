@@ -16,6 +16,7 @@
     <Compile Include="Tauri.Event.fs" />
     <Compile Include="Tauri.Window.fs" />
     <Compile Include="Tauri.fs" />
+    <Compile Include="GitProtocol.fs" />
     <Compile Include="AppTauri.fs" />
     <Compile Include="ProjectData.fs" />
     <Compile Include="Debug.fs" />

@@ -1,0 +1,23 @@
+[package]
+name = "git-server"
+version.workspace = true
+edition.workspace = true
+
+[features]
+network = ["dep:axum"]
+
+[dependencies]
+git-protocol = { path = "../git-protocol" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures-util.workspace = true
+json-rpc-rs = { git = "https://github.com/slyshykO/json-rpc-rs", rev = "226e48afcc9557adf9b2ce04c72a27a37858be15" }
+uuid = { version = "1", features = ["v4"] }
+axum = { version = "0.8", features = ["ws"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+git-client = { path = "../git-client" }

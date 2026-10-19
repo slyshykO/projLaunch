@@ -25,6 +25,7 @@
     }
   },
   "bundle": {
+    "externalBin": ["binaries/git-server"],
     "active": false,
     "targets": "all",
     "icon": [

@@ -84,8 +84,14 @@ Each record includes:
 
 ## Repository Layout
 
+The local Git read API now runs in a separate Rust process over stdio. It provides
+real status, paginated history and file diffs, with typed Tauri/Fable wrappers.
+See [the Git server guide](crates/git-server/README.md) for methods, build steps,
+lifecycle, limits and tests. The graph/file/diff UI is a subsequent stage.
+
 - `src/` - F# frontend application code compiled with Fable
 - `src-tauri/` - Rust/Tauri host application and native commands
+- `crates/` - Cargo workspace for `git-protocol`, `git-server` and `git-client`
 - `src-tauri/src/storage/` - SQLite worker, project queries, schema migration and legacy import
 - `src-tauri/migrations/` - versioned SQL schema
 - `src-test/` - xUnit test project
@@ -100,6 +106,7 @@ For local development, this repo expects:
 - .NET SDK 11 (the RC2 SDK selected by `global.json`, or a newer compatible SDK)
 - .NET 10 runtime for the local Paket tool
 - Rust toolchain
+- Git on PATH (used by the local Git server)
 - Tauri prerequisites for your platform
 
 On Windows, you will also want the IDEs you plan to launch installed and available on disk/path.
@@ -149,6 +156,7 @@ The repo also includes a custom Windows helper:
 .\build.bat clean
 .\build.bat update
 .\build.bat build-daisyui
+.\build.bat build-git-server
 .\build.bat help
 ```
 
@@ -160,6 +168,7 @@ What these do:
 - `clean` runs `cargo clean` for the Tauri app
 - `update` runs npm/cargo update checks
 - `build-daisyui` builds a local `Feliz.DaisyUI` checkout if present
+- `build-git-server` builds and copies the Git sidecar; add `--release` for optimized output
 
 `build.bat` also publishes the helper automatically when its executable is missing.
 The helper checks embedded hashes of its sources, project files, and build configuration

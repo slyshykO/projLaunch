@@ -1,0 +1,13 @@
+[package]
+name = "git-client"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+git-protocol = { path = "../git-protocol" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures-util.workspace = true

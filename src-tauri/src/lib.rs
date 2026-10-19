@@ -1,3 +1,4 @@
+mod git_host;
 mod project;
 mod storage;
 
@@ -117,6 +118,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .manage(git_host::GitHost::default())
         .setup(|app| {
             let directory = app.path().app_data_dir().map_err(|error| error.to_string());
             app.manage(Storage::start(directory));
@@ -127,8 +129,21 @@ pub fn run() {
             get_data_dir,
             get_projects,
             open_project,
-            rewrite_project_file
+            rewrite_project_file,
+            git_host::git_hello,
+            git_host::git_open,
+            git_host::git_status,
+            git_host::git_log,
+            git_host::git_diff_files,
+            git_host::git_diff,
+            git_host::git_cancel,
+            git_host::git_disconnect
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                tauri::async_runtime::block_on(app.state::<git_host::GitHost>().shutdown());
+            }
+        });
 }

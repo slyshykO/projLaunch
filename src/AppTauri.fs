@@ -46,6 +46,42 @@ module Projects =
     let saveProject (id: string) (content: string) : JS.Promise<unit> =
         Core.invoke "rewrite_project_file" (Some(createObj [ "id" ==> id; "content" ==> content ]))
 
+/// Transport and process lifetime stay in Rust. Operation IDs are caller-owned
+/// so an in-flight read can be cancelled without knowing its JSON-RPC request ID.
+module Git =
+    let private invoke<'T> command fields : JS.Promise<'T> =
+        Core.invoke command (Some(createObj [ "params" ==> createObj fields ]))
+
+    let private target = function
+        | GitProtocol.Unstaged -> createObj [ "kind" ==> "unstaged" ]
+        | GitProtocol.Staged -> createObj [ "kind" ==> "staged" ]
+        | GitProtocol.Untracked -> createObj [ "kind" ==> "untracked" ]
+        | GitProtocol.Commit(oid, parent) ->
+            createObj [ "kind" ==> "commit"; "oid" ==> oid; "parent" ==> parent ]
+
+    let hello () : JS.Promise<GitProtocol.Hello> = Core.invoke "git_hello" None
+
+    let openRepository (path: string) (operationId: string) : JS.Promise<GitProtocol.Repository> =
+        invoke "git_open" [ "path" ==> path; "operationId" ==> operationId ]
+
+    let status (repoId: string) (operationId: string) : JS.Promise<GitProtocol.Status> =
+        invoke "git_status" [ "repoId" ==> repoId; "operationId" ==> operationId ]
+
+    let log (repoId: string) (operationId: string) (cursor: string option) (limit: int) : JS.Promise<GitProtocol.LogPage> =
+        invoke "git_log" [ "repoId" ==> repoId; "operationId" ==> operationId; "cursor" ==> cursor; "limit" ==> limit ]
+
+    let diffFiles (repoId: string) (operationId: string) diffTarget : JS.Promise<GitProtocol.DiffFile array> =
+        invoke "git_diff_files" [ "repoId" ==> repoId; "operationId" ==> operationId; "target" ==> target diffTarget ]
+
+    let diff (repoId: string) (operationId: string) diffTarget (path: string) : JS.Promise<GitProtocol.Patch> =
+        invoke "git_diff" [ "repoId" ==> repoId; "operationId" ==> operationId; "target" ==> target diffTarget; "path" ==> path ]
+
+    let cancel (operationId: string) : JS.Promise<bool> =
+        invoke "git_cancel" [ "operationId" ==> operationId ]
+
+    /// Invalidates all repoIds and history cursors belonging to this connection.
+    let disconnect () : JS.Promise<unit> = Core.invoke "git_disconnect" None
+
 module Window =
 
     let current () =
