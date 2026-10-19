@@ -30,13 +30,17 @@ module Args =
         | "help" -> Some SubCommand.Help
         | _ -> None
 
+    let isRelease (args: string array) =
+        args |> Array.contains "--release"
+
 module Help =
     let print () =
-        Print.println "Usage: build <subcommand>"
+        Print.println "Usage: build <subcommand> [options]"
         Print.println ""
         Print.println "Available subcommands:"
         Print.println "  self-build    Rebuild the build helper (via build.bat)"
-        Print.println "  build         Build the app"
+        Print.println "  build         Build the app in debug mode (default)"
+        Print.println "                --release builds the app in release mode"
         Print.println "  clean         Clean generated artifacts"
         Print.println "  test          Reserved for test workflow"
         Print.println "  update        Update dependencies"
@@ -194,7 +198,7 @@ module Build =
             Print.printlnRed $"Error while syncing Feliz.DaisyUI sources: {ex.Message}"
             AppResult.Failure
 
-    let build () =
+    let build isRelease =
         try
             Print.printlnBlue "Restoring frontend dependencies from package-lock.json..."
 
@@ -206,7 +210,14 @@ module Build =
             elif syncFelizDaisyUiSources () <> AppResult.Success then
                 AppResult.Failure
             else
-                BuildUtils.runCmd (Config.shell ()) [ Config.shellCmdArg (); "npm"; "run"; "tauri"; "build" ]
+                let mode = if isRelease then "release" else "debug"
+                Print.printlnBlue $"Building Tauri app in {mode} mode..."
+
+                let buildArgs =
+                    [ Config.shellCmdArg (); "npm"; "run"; "tauri"; "build" ]
+                    @ if isRelease then [] else [ "--"; "--debug" ]
+
+                BuildUtils.runCmd (Config.shell ()) buildArgs
         with ex ->
             Print.printlnRed $"Error during build: {ex.Message}"
             AppResult.Failure
@@ -326,7 +337,7 @@ module Main =
 
                 State.appResult <-
                     match Args.subCommand argv with
-                    | Some Args.SubCommand.Build -> Build.build ()
+                    | Some Args.SubCommand.Build -> Build.build (Args.isRelease argv)
                     | Some Args.SubCommand.Update -> Build.update ()
                     | Some Args.SubCommand.Clean -> Build.clean ()
                     | Some Args.SubCommand.BuildDaisyUI -> Build.buildDaisyUI ()

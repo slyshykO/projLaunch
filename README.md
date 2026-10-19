@@ -145,6 +145,7 @@ The repo also includes a custom Windows helper:
 ```powershell
 .\build.bat self-build
 .\build.bat build
+.\build.bat build --release
 .\build.bat clean
 .\build.bat update
 .\build.bat build-daisyui
@@ -154,7 +155,8 @@ The repo also includes a custom Windows helper:
 What these do:
 
 - `self-build` publishes the build helper as a native Windows x64 executable and exits
-- `build` restores npm dependencies from `package-lock.json` with `npm ci --include=dev`, syncs Feliz.DaisyUI source references in `src/index.css`, and then runs `npm run tauri build`
+- `build` restores npm dependencies from `package-lock.json` with `npm ci --include=dev`, syncs Feliz.DaisyUI source references in `src/index.css`, and then runs `npm run tauri build -- --debug` (debug mode by default)
+- `build --release` performs the same preparation and runs `npm run tauri build` (release mode)
 - `clean` runs `cargo clean` for the Tauri app
 - `update` runs npm/cargo update checks
 - `build-daisyui` builds a local `Feliz.DaisyUI` checkout if present
@@ -169,6 +171,9 @@ After cloning, run `.\build.bat build` with the prerequisites above installed.
 The command restores npm dependencies, including the build tools, before starting
 Tauri. The frontend build then restores the local .NET tools and Paket dependencies.
 If npm restore fails, the build stops before starting Tauri.
+
+The app executable is written to `src-tauri/target/debug/projlaunch.exe` by default,
+or `src-tauri/target/release/projlaunch.exe` with `--release`.
 
 ## Tests
 
