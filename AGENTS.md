@@ -26,7 +26,9 @@ Version hooks may edit manifests or commit cleanup of stale `.dirty` suffixes; r
 
 ## Coding Style & Naming Conventions
 
-Match surrounding formatting, generally four-space indentation in F#, Rust, and test JavaScript. Use PascalCase F# types/union cases and camelCase values; Rust functions/modules use snake_case. Preserve dependency order in `src/app.fsproj` when adding F# files. Respect `.editorconfig`'s Elmish setting. No repository-wide formatter is configured; Git workspace Clippy checks are documented in its README.
+Match surrounding formatting, generally four-space indentation in F#, Rust, and test JavaScript. Use PascalCase F# types/union cases and camelCase values; Rust functions/modules use snake_case. Preserve dependency order in `src/app.fsproj` when adding F# files. Respect `.editorconfig`'s Elmish setting. Git workspace Clippy checks are documented in its README.
+
+After editing source files, always format F# with Fantomas and Rust with `cargo fmt`.
 
 ## Testing Guidelines
 

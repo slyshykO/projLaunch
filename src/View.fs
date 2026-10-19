@@ -95,7 +95,11 @@ let private Navbar (currentUrl: string list) (randomSalt: string) =
 [<ReactMemoComponent>]
 let private ProjectGitIndicators (check: ProjectGitCheck option) =
     let note text title =
-        Html.span [ prop.className "text-xs text-base-content/60"; prop.text (text: string); prop.title (title: string) ]
+        Html.span [
+            prop.className "text-xs text-base-content/60"
+            prop.text (text: string)
+            prop.title (title: string)
+        ]
 
     Html.div [
         prop.className "mt-auto pt-3 border-t border-base-300 flex flex-wrap items-center gap-2"
@@ -111,27 +115,36 @@ let private ProjectGitIndicators (check: ProjectGitCheck option) =
                 | Some result, _ ->
                     if result.repositories.Length = 0 && result.warnings.Length = 0 then
                         note "No Git repository" "No repository found for this project"
+
                     for repo in result.repositories do
                         let label, color =
                             match repo.dirty with
                             | Some true -> "Uncommitted changes", "text-amber-700"
                             | Some false -> "Clean", "text-emerald-700"
                             | None -> "Status unavailable", "text-base-content/60"
+
                         let details =
-                            [ Some repo.root; repo.branch |> Option.map (fun branch -> $"Branch: {branch}"); repo.error ]
+                            [
+                                Some repo.root
+                                repo.branch |> Option.map (fun branch -> $"Branch: {branch}")
+                                repo.error
+                            ]
                             |> List.choose id
                             |> String.concat "\n"
+
                         Html.div [
                             prop.key repo.root
                             prop.title details
                             prop.ariaLabel $"{repo.name}: {label}. {details}"
-                            prop.className "flex items-center gap-1.5 rounded border border-base-300 px-2 py-1 text-xs min-w-0"
+                            prop.className
+                                "flex items-center gap-1.5 rounded border border-base-300 px-2 py-1 text-xs min-w-0"
                             prop.children [
                                 svgIcons.git 18
                                 Html.span [ prop.className "truncate max-w-32"; prop.text repo.name ]
                                 Html.span [ prop.className color; prop.text $"· {label}" ]
                             ]
                         ]
+
                     if result.warnings.Length > 0 then
                         note "Some paths could not be checked" (String.concat "\n" result.warnings)
                 | _ -> Html.none
@@ -161,8 +174,15 @@ let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (dispatch: Msg
                         Html.button [
                             prop.type' "button"
                             prop.classes [
-                                "btn"; "btn-xs"; "btn-square"; "btn-ghost"; "shrink-0"
-                                "text-gray-400"; "hover:text-black"; "focus-visible:text-black"; "transition-colors"
+                                "btn"
+                                "btn-xs"
+                                "btn-square"
+                                "btn-ghost"
+                                "shrink-0"
+                                "text-gray-400"
+                                "hover:text-black"
+                                "focus-visible:text-black"
+                                "transition-colors"
                             ]
                             prop.title "Edit project"
                             prop.ariaLabel $"Edit project {prj.name}"
@@ -197,7 +217,12 @@ let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (dispatch: Msg
     ]
 
 [<ReactMemoComponent>]
-let private Projects (projects: ProjectData list) (projectGit: Map<string, ProjectGitCheck>) (randomSalt: string) (dispatch: Msg -> unit) =
+let private Projects
+    (projects: ProjectData list)
+    (projectGit: Map<string, ProjectGitCheck>)
+    (randomSalt: string)
+    (dispatch: Msg -> unit)
+    =
     Html.div [
         prop.classes [ "flex"; "flex-col"; "p-4"; "gap-4" ]
         prop.id $"projects-{randomSalt}"
@@ -207,7 +232,11 @@ let private Projects (projects: ProjectData list) (projectGit: Map<string, Proje
                 prop.classes [ "grid"; "grid-cols-3"; "gap-4" ]
                 prop.children [
                     for prj in projects do
-                        yield Html.div [ prop.key prj.id; prop.children [ Project prj (projectGit |> Map.tryFind prj.id) dispatch ] ]
+                        yield
+                            Html.div [
+                                prop.key prj.id
+                                prop.children [ Project prj (projectGit |> Map.tryFind prj.id) dispatch ]
+                            ]
                 ]
             ]
         ]

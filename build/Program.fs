@@ -36,8 +36,7 @@ module Args =
         | "help" -> Some SubCommand.Help
         | _ -> None
 
-    let isRelease (args: string array) =
-        args |> Array.contains "--release"
+    let isRelease (args: string array) = args |> Array.contains "--release"
 
 module Help =
     let print () =
@@ -242,9 +241,7 @@ module Build =
             let executableName = if Config.isWindows then "projlaunch.exe" else "projlaunch"
 
             let executablePath =
-                System.IO.Path.GetFullPath(
-                    System.IO.Path.Combine("src-tauri", "target", mode, executableName)
-                )
+                System.IO.Path.GetFullPath(System.IO.Path.Combine("src-tauri", "target", mode, executableName))
 
             if not (System.IO.File.Exists executablePath) then
                 Print.printlnRed $"Built app executable was not found: {executablePath}"
@@ -316,11 +313,13 @@ module Build =
             let cargoRes =
                 BuildUtils.runCmd
                     (Config.shell ())
-                    [ Config.shellCmdArg ()
-                      "cargo"
-                      "update"
-                      "--manifest-path"
-                      "./src-tauri/Cargo.toml" ]
+                    [
+                        Config.shellCmdArg ()
+                        "cargo"
+                        "update"
+                        "--manifest-path"
+                        "./src-tauri/Cargo.toml"
+                    ]
 
             let dotnetRes =
                 if System.IO.File.Exists "paket.dependencies" then
@@ -328,12 +327,14 @@ module Build =
                 else
                     BuildUtils.runCmd
                         (Config.shell ())
-                        [ Config.shellCmdArg ()
-                          "dotnet"
-                          "list"
-                          "./src/app.fsproj"
-                          "package"
-                          "--outdated" ]
+                        [
+                            Config.shellCmdArg ()
+                            "dotnet"
+                            "list"
+                            "./src/app.fsproj"
+                            "package"
+                            "--outdated"
+                        ]
 
             npmRes + cargoRes + dotnetRes
         with ex ->
@@ -361,6 +362,7 @@ module Main =
                     | Some Args.SubCommand.SetVersion ->
                         if argv.Length <> 2 then
                             failwith "Usage: build set-version X.Y.Z"
+
                         Versioning.setVersion Versioning.projectRoot argv.[1]
                         AppResult.Success
                     | Some Args.SubCommand.Update -> Build.update ()

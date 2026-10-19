@@ -9,12 +9,14 @@ open projectData
 type SignIn = { nick: string; role: string }
 
 type ProjectGitCheck =
-    { requestId: string
-      path: string
-      remote: Remote option
-      isLoading: bool
-      result: GitProtocol.ProjectStatus option
-      error: string option }
+    {
+        requestId: string
+        path: string
+        remote: Remote option
+        isLoading: bool
+        result: GitProtocol.ProjectStatus option
+        error: string option
+    }
 
 type Msg =
     | Empty
@@ -76,25 +78,27 @@ type Msg =
 
 
 type State =
-    { currentUrl: string list
-      currentTime: DateTime
-      signIn: option<SignIn>
-      value: string
-      appVersion: string
-      tauriVersion: string
-      appDataDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
-      appConfigDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
-      errors: string list
-      projects: ProjectData list
-      projectStorageError: string option
-      projectGit: Map<string, ProjectGitCheck>
-      projectEditor: ProjectData option
-      isProjectSaving: bool
-      projectSaveError: string option
-      randomSalt: string
-      appWindowSize: Tauri.Dpi.PhysicalSize option
-      appWindowPosition: Tauri.Dpi.PhysicalPosition option
-      isWindowClosePending: bool }
+    {
+        currentUrl: string list
+        currentTime: DateTime
+        signIn: option<SignIn>
+        value: string
+        appVersion: string
+        tauriVersion: string
+        appDataDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
+        appConfigDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
+        errors: string list
+        projects: ProjectData list
+        projectStorageError: string option
+        projectGit: Map<string, ProjectGitCheck>
+        projectEditor: ProjectData option
+        isProjectSaving: bool
+        projectSaveError: string option
+        randomSalt: string
+        appWindowSize: Tauri.Dpi.PhysicalSize option
+        appWindowPosition: Tauri.Dpi.PhysicalPosition option
+        isWindowClosePending: bool
+    }
 
 let mutable allowWindowClose = false
 
@@ -117,25 +121,27 @@ let init () =
 
     // Initial state
     let state =
-        { currentUrl = currentUrl
-          currentTime = DateTime.Now
-          signIn = None
-          value = "Feliz"
-          appVersion = ""
-          tauriVersion = ""
-          appDataDir = ""
-          appConfigDir = ""
-          errors = []
-          projects = pd
-          projectStorageError = None
-          projectGit = Map.empty
-          projectEditor = None
-          isProjectSaving = false
-          projectSaveError = None
-          randomSalt = randomSalt
-          appWindowSize = None
-          appWindowPosition = None
-          isWindowClosePending = false }
+        {
+            currentUrl = currentUrl
+            currentTime = DateTime.Now
+            signIn = None
+            value = "Feliz"
+            appVersion = ""
+            tauriVersion = ""
+            appDataDir = ""
+            appConfigDir = ""
+            errors = []
+            projects = pd
+            projectStorageError = None
+            projectGit = Map.empty
+            projectEditor = None
+            isProjectSaving = false
+            projectSaveError = None
+            randomSalt = randomSalt
+            appWindowSize = None
+            appWindowPosition = None
+            isWindowClosePending = false
+        }
 
     state, Cmd.ofMsg Start
 
@@ -155,45 +161,85 @@ let update msg state =
         if AppTauri.Core.isAvailable () then
             state,
             Cmd.batch
-                [ Cmd.ofMsg (GetProjects 50)
-                  Cmd.ofMsg GetConfigDir
-                  Cmd.ofMsg GetDataDir
-                  Cmd.ofMsg GetAppVersion
-                  Cmd.ofMsg GetTauriVersion ]
+                [
+                    Cmd.ofMsg (GetProjects 50)
+                    Cmd.ofMsg GetConfigDir
+                    Cmd.ofMsg GetDataDir
+                    Cmd.ofMsg GetAppVersion
+                    Cmd.ofMsg GetTauriVersion
+                ]
         else
             state, Cmd.none
 
     | UrlChanged url -> { state with currentUrl = url }, Cmd.none
 
     | RefreshGitStatuses ->
-        state, (state.projects |> List.map (fun project -> Cmd.ofMsg (RefreshProjectGit project.id)) |> Cmd.batch)
+        state,
+        (state.projects
+         |> List.map (fun project -> Cmd.ofMsg (RefreshProjectGit project.id))
+         |> Cmd.batch)
 
     | RefreshProjectGit id ->
         match state.projects |> List.tryFind (fun project -> project.id = id) with
         | Some project when AppTauri.Core.isAvailable () ->
             let previous = state.projectGit |> Map.tryFind id
-            if previous |> Option.exists (fun check -> check.isLoading && check.path = project.path && check.remote = project.remote) then
+
+            if
+                previous
+                |> Option.exists (fun check ->
+                    check.isLoading && check.path = project.path && check.remote = project.remote)
+            then
                 state, Cmd.none
             else
                 let requestId = Guid.NewGuid().ToString()
+
                 let check =
-                    { requestId = requestId; path = project.path; remote = project.remote
-                      isLoading = true; result = None; error = None }
-                { state with projectGit = state.projectGit |> Map.add id check },
-                Cmd.OfPromise.either AppTauri.Git.projectStatus id
+                    {
+                        requestId = requestId
+                        path = project.path
+                        remote = project.remote
+                        isLoading = true
+                        result = None
+                        error = None
+                    }
+
+                { state with
+                    projectGit = state.projectGit |> Map.add id check
+                },
+                Cmd.OfPromise.either
+                    AppTauri.Git.projectStatus
+                    id
                     (fun result -> OnProjectGitStatus(id, requestId, Ok result))
                     (fun error -> OnProjectGitStatus(id, requestId, Error error))
         | _ -> state, Cmd.none
 
     | OnProjectGitStatus(id, requestId, result) ->
         match state.projectGit |> Map.tryFind id with
-        | Some check when check.requestId = requestId &&
-                          (state.projects |> List.exists (fun project -> project.id = id && project.path = check.path && project.remote = check.remote)) ->
+        | Some check when
+            check.requestId = requestId
+            && (state.projects
+                |> List.exists (fun project ->
+                    project.id = id && project.path = check.path && project.remote = check.remote))
+            ->
             let updated =
                 match result with
-                | Ok result -> { check with isLoading = false; result = Some result; error = None }
-                | Error error -> { check with isLoading = false; result = None; error = Some (string error) }
-            { state with projectGit = state.projectGit |> Map.add id updated }, Cmd.none
+                | Ok result ->
+                    { check with
+                        isLoading = false
+                        result = Some result
+                        error = None
+                    }
+                | Error error ->
+                    { check with
+                        isLoading = false
+                        result = None
+                        error = Some(string error)
+                    }
+
+            { state with
+                projectGit = state.projectGit |> Map.add id updated
+            },
+            Cmd.none
         | _ -> state, Cmd.none
 
     | Greet nick ->
@@ -302,17 +348,23 @@ let update msg state =
             { state with
                 errors = err |> List.append state.errors
                 projectStorageError = None
-                projectGit = state.projectGit |> Map.filter (fun id _ -> prj |> List.exists (fun project -> project.id = id))
-                projects = prj }
+                projectGit =
+                    state.projectGit
+                    |> Map.filter (fun id _ -> prj |> List.exists (fun project -> project.id = id))
+                projects = prj
+            }
 
         newState, Cmd.ofMsg RefreshGitStatuses
     | OnGetProjectsError exn ->
         let e = sprintf "Error: %A" exn
         let newErrors = List.append state.errors [ e ]
+
         let newState =
             { state with
                 errors = newErrors
-                projectStorageError = Some e }
+                projectStorageError = Some e
+            }
+
         newState, Cmd.none
 
     | OpenProject id ->
@@ -351,23 +403,34 @@ let update msg state =
 
         state,
         Cmd.OfPromise.either addOrUpdateProjectPromise (id, json) OnAddOrUpdateProjectSuccess OnAddOrUpdateProjectError
-    | OnAddOrUpdateProjectSuccess _id ->
-        state, Cmd.ofMsg (GetProjects 0)
+    | OnAddOrUpdateProjectSuccess _id -> state, Cmd.ofMsg (GetProjects 0)
     | OnAddOrUpdateProjectError exn ->
         let e = sprintf "Error: %A" exn
         let newErrors = List.append state.errors [ e ]
+
         let newState =
             { state with
                 errors = newErrors
-                projectStorageError = Some e }
+                projectStorageError = Some e
+            }
+
         newState, Cmd.none
 
     | OpenAddProjectModal ->
         if state.isProjectSaving || state.projectEditor.IsSome then
             state, Cmd.none
         else
-            let project = { ProjectData.Default() with id = Guid.NewGuid().ToString(); ide = "vscode" }
-            { state with projectEditor = Some project; projectSaveError = None }, Cmd.none
+            let project =
+                { ProjectData.Default() with
+                    id = Guid.NewGuid().ToString()
+                    ide = "vscode"
+                }
+
+            { state with
+                projectEditor = Some project
+                projectSaveError = None
+            },
+            Cmd.none
 
     | OpenEditProjectModal id ->
         if state.isProjectSaving then
@@ -375,20 +438,31 @@ let update msg state =
         else
             match state.projects |> List.tryFind (fun project -> project.id = id) with
             | Some project ->
-                { state with projectEditor = Some project; projectSaveError = None }, Cmd.none
+                { state with
+                    projectEditor = Some project
+                    projectSaveError = None
+                },
+                Cmd.none
             | None -> state, Cmd.none
 
     | CloseProjectEditor ->
         if state.isProjectSaving then
             state, Cmd.none
         else
-            { state with projectEditor = None; projectSaveError = None }, Cmd.none
+            { state with
+                projectEditor = None
+                projectSaveError = None
+            },
+            Cmd.none
 
     | SaveProject draft ->
         match state.projectEditor with
         | Some original when original.id = draft.id && not state.isProjectSaving ->
             if String.IsNullOrWhiteSpace draft.name || String.IsNullOrWhiteSpace draft.path then
-                { state with projectSaveError = Some "Name and project path are required." }, Cmd.none
+                { state with
+                    projectSaveError = Some "Name and project path are required."
+                },
+                Cmd.none
             else
                 let latest =
                     state.projects
@@ -400,7 +474,8 @@ let update msg state =
                         id = original.id
                         lastOpened = latest.lastOpened
                         name = draft.name.Trim()
-                        path = draft.path.Trim() }
+                        path = draft.path.Trim()
+                    }
 
                 let save project =
                     promise {
@@ -408,14 +483,18 @@ let update msg state =
                         return project
                     }
 
-                { state with isProjectSaving = true; projectSaveError = None },
+                { state with
+                    isProjectSaving = true
+                    projectSaveError = None
+                },
                 Cmd.OfPromise.either save project OnSaveProjectSuccess OnSaveProjectError
         | _ -> state, Cmd.none
 
     | OnSaveProjectSuccess project ->
         let projects =
             if state.projects |> List.exists (fun existing -> existing.id = project.id) then
-                state.projects |> List.map (fun existing -> if existing.id = project.id then project else existing)
+                state.projects
+                |> List.map (fun existing -> if existing.id = project.id then project else existing)
             else
                 project :: state.projects
 
@@ -423,11 +502,17 @@ let update msg state =
             projects = projects |> List.sortByDescending (fun project -> project.lastOpened)
             projectEditor = None
             isProjectSaving = false
-            projectSaveError = None }, Cmd.ofMsg (RefreshProjectGit project.id)
+            projectSaveError = None
+        },
+        Cmd.ofMsg (RefreshProjectGit project.id)
 
     | OnSaveProjectError error ->
         // Tauri can reject with a plain string rather than a JavaScript Error.
-        { state with isProjectSaving = false; projectSaveError = Some $"Could not save project: {error}" }, Cmd.none
+        { state with
+            isProjectSaving = false
+            projectSaveError = Some $"Could not save project: {error}"
+        },
+        Cmd.none
 
     | WindowSave ->
         if state.isWindowClosePending || not (AppTauri.Core.isAvailable ()) then
@@ -438,7 +523,8 @@ let update msg state =
 
             let newState =
                 { state with
-                    isWindowClosePending = true }
+                    isWindowClosePending = true
+                }
 
             allowWindowClose <- false
             newState, Cmd.OfPromise.either saveWindowStatePromise () (fun () -> OnWindowSaveSuccess) OnWindowSaveError
@@ -459,7 +545,8 @@ let update msg state =
         let newState =
             { state with
                 errors = List.append state.errors [ e ]
-                isWindowClosePending = false }
+                isWindowClosePending = false
+            }
 
         newState, Cmd.none
 
@@ -470,7 +557,8 @@ let update msg state =
         let newState =
             { state with
                 errors = List.append state.errors [ e ]
-                isWindowClosePending = false }
+                isWindowClosePending = false
+            }
 
         newState, Cmd.none
 
@@ -485,7 +573,8 @@ let update msg state =
     | WindowMoved position ->
         let newState =
             { state with
-                appWindowPosition = Some position }
+                appWindowPosition = Some position
+            }
 
 #if DEBUG
         printfn "Window moved to: x:%f, y:%f" position.x position.y

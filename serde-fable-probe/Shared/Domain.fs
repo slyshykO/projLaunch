@@ -11,16 +11,18 @@ type Remote =
     | Wsl of string
 
 type ProjectData =
-    { id: string
-      name: string
-      lastOpened: DateTime
-      description: string
-      path: string
-      ide: string
-      environment: Map<string, string>
-      remote: Remote option }
+    {
+        id: string
+        name: string
+        lastOpened: DateTime
+        description: string
+        path: string
+        ide: string
+        environment: Map<string, string>
+        remote: Remote option
+    }
 
 [<RpcApi>]
 type IProbeApi =
-    abstract Echo : ProbeRecord -> Async<ProbeRecord>
-    abstract EchoProject : ProjectData -> Async<ProjectData>
+    abstract Echo: ProbeRecord -> Async<ProbeRecord>
+    abstract EchoProject: ProjectData -> Async<ProjectData>

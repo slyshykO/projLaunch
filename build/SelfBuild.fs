@@ -27,12 +27,14 @@ module private Internal =
 
         let rec addSharedConfiguration (directory: DirectoryInfo) =
             for name in
-                [ "Directory.Build.props"
-                  "Directory.Build.targets"
-                  "Directory.Packages.props"
-                  "global.json"
-                  "NuGet.Config"
-                  "nuget.config" ] do
+                [
+                    "Directory.Build.props"
+                    "Directory.Build.targets"
+                    "Directory.Packages.props"
+                    "global.json"
+                    "NuGet.Config"
+                    "nuget.config"
+                ] do
                 addExisting (Path.Combine(directory.FullName, name))
 
             match directory.Parent with

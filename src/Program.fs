@@ -33,7 +33,8 @@ let onCloseRequested () =
 
         { new IDisposable with
             member _.Dispose() =
-                unsubscribe |> Option.iter (fun unlisten -> unlisten ()) }
+                unsubscribe |> Option.iter (fun unlisten -> unlisten ())
+        }
 
     start
 
@@ -54,7 +55,8 @@ let onWindowResized () =
         { new IDisposable with
             member _.Dispose() =
                 printfn "Unsubscribing from window resized event"
-                unsubscribe |> Option.iter (fun unlisten -> unlisten ()) }
+                unsubscribe |> Option.iter (fun unlisten -> unlisten ())
+        }
 
     start
 
@@ -75,7 +77,8 @@ let onWindowMoved () =
         { new IDisposable with
             member _.Dispose() =
                 printfn "Unsubscribing from window moved event"
-                unsubscribe |> Option.iter (fun unlisten -> unlisten ()) }
+                unsubscribe |> Option.iter (fun unlisten -> unlisten ())
+        }
 
     start
 
@@ -84,22 +87,29 @@ let timer onTick =
         let intervalId = JS.setInterval (fun _ -> dispatch (onTick DateTime.Now)) 1000
 
         { new IDisposable with
-            member _.Dispose() = JS.clearInterval intervalId }
+            member _.Dispose() = JS.clearInterval intervalId
+        }
 
     start
 
 let subscriptions model : Sub<Msg> =
-    [ [ "timer" ], timer Tick
-      if AppTauri.Core.isAvailable () then
-          [ "menu-add-project" ], ProjectMenu.onAddProject ()
-      [ "window-resized" ], onWindowResized ()
-      [ "window-moved" ], onWindowMoved ()
-      [ "close-requested" ], onCloseRequested ()
-      [ "git-status-focus" ], (fun dispatch ->
-          let handler (_: Browser.Types.Event) = dispatch RefreshGitStatuses
-          Browser.Dom.window.addEventListener("focus", handler)
-          { new IDisposable with
-              member _.Dispose() = Browser.Dom.window.removeEventListener("focus", handler) }) ]
+    [
+        [ "timer" ], timer Tick
+        if AppTauri.Core.isAvailable () then
+            [ "menu-add-project" ], ProjectMenu.onAddProject ()
+        [ "window-resized" ], onWindowResized ()
+        [ "window-moved" ], onWindowMoved ()
+        [ "close-requested" ], onCloseRequested ()
+        [ "git-status-focus" ],
+        (fun dispatch ->
+            let handler (_: Browser.Types.Event) = dispatch RefreshGitStatuses
+            Browser.Dom.window.addEventListener ("focus", handler)
+
+            { new IDisposable with
+                member _.Dispose() =
+                    Browser.Dom.window.removeEventListener ("focus", handler)
+            })
+    ]
 
 
 Program.mkProgram init update View

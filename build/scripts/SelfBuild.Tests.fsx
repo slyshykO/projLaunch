@@ -3,7 +3,9 @@
 open System
 open System.IO
 
-let testDirectory = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "obj", "self-build-tests"))
+let testDirectory =
+    Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "obj", "self-build-tests"))
+
 let fixture = Path.Combine(testDirectory, Guid.NewGuid().ToString("N"))
 
 let write (relativePath: string) (contents: string) =
@@ -12,17 +14,24 @@ let write (relativePath: string) (contents: string) =
     File.WriteAllText(path, contents)
 
 let check condition message =
-    if not condition then failwith message
+    if not condition then
+        failwith message
 
 try
-    write "build/build.fsproj" """<Project><ItemGroup>
+    write
+        "build/build.fsproj"
+        """<Project><ItemGroup>
       <Compile Include="obj/hashes.fs" />
       <Compile Include="Program.fs" />
       <ProjectReference Include="../support/support.fsproj" />
     </ItemGroup></Project>"""
-    write "support/support.fsproj" """<Project><ItemGroup>
+
+    write
+        "support/support.fsproj"
+        """<Project><ItemGroup>
       <Compile Include="Support.fs" />
     </ItemGroup></Project>"""
+
     write "build/Program.fs" "module Program"
     write "support/Support.fs" "module Support"
     write "build/scripts/genhashes.fsx" "// generator"
@@ -38,15 +47,17 @@ try
     check (snapshot () = original) "Unchanged inputs must produce the same hashes."
 
     for relativePath in
-        [ "build/Program.fs"
-          "support/Support.fs"
-          "build/scripts/genhashes.fsx"
-          "build.bat"
-          "global.json"
-          "build/packages.lock.json"
-          "Directory.Build.props"
-          "build/build.fsproj"
-          "support/support.fsproj" ] do
+        [
+            "build/Program.fs"
+            "support/Support.fs"
+            "build/scripts/genhashes.fsx"
+            "build.bat"
+            "global.json"
+            "build/packages.lock.json"
+            "Directory.Build.props"
+            "build/build.fsproj"
+            "support/support.fsproj"
+        ] do
         let path = Path.Combine(fixture, relativePath)
         let contents = File.ReadAllBytes path
         let timestamp = File.GetLastWriteTimeUtc path
@@ -65,29 +76,45 @@ try
 
     let beforeNewSource = snapshot ()
     write "build/Added.fs" "module Added"
-    write "build/build.fsproj" """<Project><ItemGroup>
+
+    write
+        "build/build.fsproj"
+        """<Project><ItemGroup>
       <Compile Include="obj/hashes.fs" />
       <Compile Include="Program.fs" />
       <Compile Include="Added.fs" />
       <ProjectReference Include="../support/support.fsproj" />
     </ItemGroup></Project>"""
+
     check (snapshot () <> beforeNewSource) "Adding a compile item must invalidate the helper."
     let withNewSource = snapshot ()
     write "build/Added.fs" "module Added\nlet value = 1"
     check (snapshot () <> withNewSource) "New compile items must be tracked."
 
     File.Delete(Path.Combine(fixture, "build", "Added.fs"))
+
     let missingSourceDetected =
         try
             snapshot () |> ignore
             false
-        with :? FileNotFoundException -> true
+        with :? FileNotFoundException ->
+            true
+
     check missingSourceDetected "A missing compile input must fail the self-check."
 
     printfn "Self-build input checks passed."
 finally
     let resolvedFixture = Path.GetFullPath fixture
-    if not (resolvedFixture.StartsWith(testDirectory + string Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) then
+
+    if
+        not (
+            resolvedFixture.StartsWith(
+                testDirectory + string Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+    then
         failwith "Refusing to clean a fixture outside the self-build test directory."
+
     if Directory.Exists resolvedFixture then
         Directory.Delete(resolvedFixture, true)
