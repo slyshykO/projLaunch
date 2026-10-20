@@ -160,7 +160,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            greet,
             get_data_dir,
             get_projects,
             open_project,
