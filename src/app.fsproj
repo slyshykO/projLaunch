@@ -25,6 +25,7 @@
     <Compile Include="src/ui/ProjectMenu.fs" />
     <Compile Include="src/ui/SvgIcons.fs" />
     <Compile Include="src/ui/CommitFiles.fs" />
+    <Compile Include="src/ui/CommitDiff.fs" />
     <Compile Include="src/ui/DesktopTabs.fs" />
     <Compile Include="src/ui/ProjectEditor.fs" />
     <Compile Include="src/ui/View.fs" />

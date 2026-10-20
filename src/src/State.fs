@@ -27,6 +27,14 @@ type RepositoryHistory =
         error: string option
     }
 
+type CommitDiff =
+    {
+        file: GitProtocol.DiffFile
+        requestId: string option
+        patch: GitProtocol.Patch option
+        error: string option
+    }
+
 type CommitFiles =
     {
         commit: GitProtocol.Commit
@@ -35,6 +43,7 @@ type CommitFiles =
         requestId: string option
         hasLoaded: bool
         error: string option
+        diff: CommitDiff option
     }
 
 type RepositoryTab =
@@ -64,6 +73,10 @@ type Msg =
     | SelectCommitParent of tabId: string * parent: int
     | RefreshCommitFiles of tabId: string
     | OnCommitFiles of tabId: string * requestId: string * Result<GitProtocol.DiffFile array, exn>
+    | SelectCommitFile of tabId: string * path: string
+    | RetryCommitDiff of tabId: string
+    | CloseCommitDiff of tabId: string
+    | OnCommitDiff of tabId: string * requestId: string * Result<GitProtocol.Patch, exn>
     | OpenAbout
     | CloseAbout
 
@@ -284,7 +297,8 @@ let update msg state =
                 let selection =
                     {
                         commit = commit
-                        parent = if commit.parents.Length = 1 then Some 1 else None
+                        diff = None
+                        parent = if commit.parents.Length > 0 then Some 1 else None
                         files = [||]
                         requestId = None
                         hasLoaded = false
@@ -300,10 +314,7 @@ let update msg state =
                             else
                                 item)
                 },
-                (if commit.parents.Length > 1 then
-                     Cmd.none
-                 else
-                     Cmd.ofMsg (RefreshCommitFiles id))
+                Cmd.ofMsg (RefreshCommitFiles id)
             | None -> state, Cmd.none
         | None -> state, Cmd.none
 
@@ -319,6 +330,7 @@ let update msg state =
                 let next =
                     { selection with
                         parent = Some parent
+                        diff = None
                         files = [||]
                         requestId = None
                         hasLoaded = false
@@ -351,6 +363,7 @@ let update msg state =
                 let next =
                     { selection with
                         requestId = Some requestId
+                        diff = None
                         files = [||]
                         hasLoaded = false
                         error = None
@@ -405,6 +418,110 @@ let update msg state =
                                 }
 
                         { tab with selection = Some next }
+                    | _ -> tab)
+        },
+        Cmd.none
+
+    | SelectCommitFile(id, _)
+    | RetryCommitDiff id ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab ->
+            match tab.selection with
+            | Some selection when selection.hasLoaded && selection.requestId.IsNone ->
+                let file =
+                    match msg with
+                    | SelectCommitFile(_, path) ->
+                        if selection.diff |> Option.exists (fun diff -> diff.file.path = path) then
+                            None
+                        else
+                            selection.files |> Array.tryFind (fun file -> file.path = path)
+                    | _ ->
+                        selection.diff
+                        |> Option.filter (fun diff -> diff.requestId.IsNone)
+                        |> Option.map (fun diff -> diff.file)
+
+                match file with
+                | Some file ->
+                    let requestId = Guid.NewGuid().ToString()
+
+                    let diff =
+                        {
+                            file = file
+                            requestId = Some requestId
+                            patch = None
+                            error = None
+                        }
+
+                    let read () =
+                        promise {
+                            let! repository = AppTauri.Git.openRepository tab.root $"diff-{requestId}-open"
+
+                            return!
+                                AppTauri.Git.diff
+                                    repository.repoId
+                                    $"diff-{requestId}-patch"
+                                    (GitProtocol.Commit(selection.commit.oid, selection.parent))
+                                    file.path
+                        }
+
+                    { state with
+                        repositoryTabs =
+                            state.repositoryTabs
+                            |> List.map (fun item ->
+                                if item.id = id then
+                                    { item with
+                                        selection = Some { selection with diff = Some diff }
+                                    }
+                                else
+                                    item)
+                    },
+                    Cmd.OfPromise.either read () (fun patch -> OnCommitDiff(id, requestId, Ok patch)) (fun error ->
+                        OnCommitDiff(id, requestId, Error error))
+                | None -> state, Cmd.none
+            | _ -> state, Cmd.none
+        | None -> state, Cmd.none
+
+    | CloseCommitDiff id ->
+        { state with
+            repositoryTabs =
+                state.repositoryTabs
+                |> List.map (fun tab ->
+                    if tab.id = id then
+                        { tab with
+                            selection = tab.selection |> Option.map (fun selection -> { selection with diff = None })
+                        }
+                    else
+                        tab)
+        },
+        Cmd.none
+
+    | OnCommitDiff(id, requestId, result) ->
+        { state with
+            repositoryTabs =
+                state.repositoryTabs
+                |> List.map (fun tab ->
+                    match tab.selection with
+                    | Some selection when tab.id = id ->
+                        match selection.diff with
+                        | Some diff when diff.requestId = Some requestId ->
+                            let next =
+                                match result with
+                                | Ok patch ->
+                                    { diff with
+                                        requestId = None
+                                        patch = Some patch
+                                        error = None
+                                    }
+                                | Error error ->
+                                    { diff with
+                                        requestId = None
+                                        error = Some(string error)
+                                    }
+
+                            { tab with
+                                selection = Some { selection with diff = Some next }
+                            }
+                        | _ -> tab
                     | _ -> tab)
         },
         Cmd.none

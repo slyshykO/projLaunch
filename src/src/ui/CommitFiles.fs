@@ -13,6 +13,72 @@ let private statusLabel (status: string) =
     | Some 'T' -> "Type changed"
     | _ -> status
 
+let private FileRow (tab: RepositoryTab) (selection: CommitFiles) (file: GitProtocol.DiffFile) dispatch =
+    let selected =
+        selection.diff |> Option.exists (fun diff -> diff.file.path = file.path)
+
+    Html.li
+        [
+            prop.key file.path
+            prop.children
+                [
+                    Html.button
+                        [
+                            prop.type' "button"
+                            prop.className (
+                                "w-full text-left border-b border-base-300 p-2 text-sm focus-visible:outline-2 focus-visible:outline-primary "
+                                + if selected then "bg-primary/10" else "hover:bg-base-200/60"
+                            )
+                            prop.ariaPressed selected
+                            prop.ariaControls $"diff-panel-{tab.id}"
+                            prop.onClick (fun _ -> dispatch (SelectCommitFile(tab.id, file.path)))
+                            prop.children
+                                [
+                                    Html.span
+                                        [
+                                            prop.className "badge badge-sm badge-outline mb-1 mr-2"
+                                            prop.title $"{statusLabel file.status} ({file.status})"
+                                            prop.ariaLabel (statusLabel file.status)
+                                            prop.text (
+                                                match file.status |> Seq.tryHead with
+                                                | Some 'A' -> "+"
+                                                | Some 'D' -> "-"
+                                                | Some 'M' -> "M"
+                                                | Some 'R' -> "R"
+                                                | Some 'C' -> "C"
+                                                | Some 'T' -> "T"
+                                                | _ -> statusLabel file.status
+                                            )
+                                        ]
+                                    match file.originalPath with
+                                    | Some original ->
+                                        Html.div
+                                            [
+                                                prop.className
+                                                    "font-mono text-xs whitespace-pre-wrap break-all text-base-content/60"
+                                                prop.text original
+                                            ]
+
+                                        Html.span [ prop.ariaLabel "to"; prop.text "→ " ]
+                                    | None -> Html.none
+                                    Html.span
+                                        [
+                                            prop.className "font-mono text-xs whitespace-pre-wrap break-all"
+                                            prop.text file.path
+                                        ]
+                                ]
+                        ]
+                ]
+        ]
+
+let parentLabel (commit: GitProtocol.Commit) =
+    let hashes =
+        commit.parents
+        |> Array.map (fun oid -> oid.Substring(0, min 6 oid.Length))
+        |> String.concat ","
+
+    "parent: " + if hashes = "" then "—" else hashes
+
 [<ReactMemoComponent>]
 let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
     Html.section
@@ -42,20 +108,29 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                 prop.text selection.commit.oid
                                             ]
 
+                                        Html.p
+                                            [
+                                                prop.className "mt-2 text-xs text-base-content/60"
+                                                prop.title (String.concat "," selection.commit.parents)
+                                                prop.text (parentLabel selection.commit)
+                                            ]
+
                                         if selection.commit.parents.Length > 1 then
                                             Html.label
                                                 [
-                                                    prop.className "block mt-3 text-sm"
+                                                    prop.className
+                                                        "flex items-center gap-2 mt-2 text-xs text-base-content/60"
                                                     prop.children
                                                         [
-                                                            Html.span [ prop.text "Compare with parent" ]
+                                                            Html.span [ prop.text "diff:" ]
                                                             Html.select
                                                                 [
-                                                                    prop.className "select select-sm w-full mt-1"
+                                                                    prop.ariaLabel "Diff parent"
+                                                                    prop.className "select select-xs font-mono"
                                                                     prop.value (
                                                                         selection.parent
                                                                         |> Option.map string
-                                                                        |> Option.defaultValue ""
+                                                                        |> Option.defaultValue "1"
                                                                     )
                                                                     prop.onChange (fun (value: string) ->
                                                                         match System.Int32.TryParse value with
@@ -66,36 +141,24 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                                         | _ -> ())
                                                                     prop.children
                                                                         [
-                                                                            Html.option
-                                                                                [
-                                                                                    prop.value ""
-                                                                                    prop.disabled true
-                                                                                    prop.text "Choose a parent…"
-                                                                                ]
                                                                             for index, oid in
                                                                                 selection.commit.parents
                                                                                 |> Array.indexed do
                                                                                 Html.option
                                                                                     [
-                                                                                        prop.key oid
+                                                                                        prop.key (string index)
                                                                                         prop.value (string (index + 1))
-                                                                                        prop.text
-                                                                                            $"Parent {index + 1} — {oid}"
+                                                                                        prop.title oid
+                                                                                        prop.text (
+                                                                                            oid.Substring(
+                                                                                                0,
+                                                                                                min 6 oid.Length
+                                                                                            )
+                                                                                        )
                                                                                     ]
                                                                         ]
                                                                 ]
                                                         ]
-                                                ]
-                                        else
-                                            Html.p
-                                                [
-                                                    prop.className "mt-2 text-xs text-base-content/60"
-                                                    prop.text (
-                                                        if selection.commit.parents.Length = 0 then
-                                                            "Initial commit — compared with an empty tree"
-                                                        else
-                                                            "Compared with parent 1"
-                                                    )
                                                 ]
                                 ]
                         ]
@@ -113,13 +176,7 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                 prop.text "Select a commit to view changed files."
                                             ]
                                     | Some selection ->
-                                        if selection.commit.parents.Length > 1 && selection.parent.IsNone then
-                                            Html.p
-                                                [
-                                                    prop.text
-                                                        "Choose a parent to view the changes in this merge commit."
-                                                ]
-                                        elif
+                                        if
                                             selection.requestId.IsSome
                                             || (not selection.hasLoaded && selection.error.IsNone)
                                         then
@@ -168,45 +225,7 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                         prop.children
                                                             [
                                                                 for file in selection.files do
-                                                                    Html.li
-                                                                        [
-                                                                            prop.key file.path
-                                                                            prop.className
-                                                                                "border-b border-base-300 pb-2 text-sm"
-                                                                            prop.children
-                                                                                [
-                                                                                    Html.span
-                                                                                        [
-                                                                                            prop.className
-                                                                                                "badge badge-sm badge-outline mb-1 mr-2"
-                                                                                            prop.title file.status
-                                                                                            prop.text (
-                                                                                                statusLabel file.status
-                                                                                            )
-                                                                                        ]
-                                                                                    match file.originalPath with
-                                                                                    | Some original ->
-                                                                                        Html.div
-                                                                                            [
-                                                                                                prop.className
-                                                                                                    "font-mono text-xs whitespace-pre-wrap break-all text-base-content/60"
-                                                                                                prop.text original
-                                                                                            ]
-
-                                                                                        Html.span
-                                                                                            [
-                                                                                                prop.ariaLabel "to"
-                                                                                                prop.text "→ "
-                                                                                            ]
-                                                                                    | None -> Html.none
-                                                                                    Html.span
-                                                                                        [
-                                                                                            prop.className
-                                                                                                "font-mono text-xs whitespace-pre-wrap break-all"
-                                                                                            prop.text file.path
-                                                                                        ]
-                                                                                ]
-                                                                        ]
+                                                                    FileRow tab selection file dispatch
                                                             ]
                                                     ]
                                 ]

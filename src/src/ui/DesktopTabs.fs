@@ -328,6 +328,8 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
 
 [<ReactMemoComponent>]
 let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
+    let diff = tab.selection |> Option.bind (fun selection -> selection.diff)
+
     Html.div
         [
             prop.className "h-full flex flex-col lg:flex-row min-h-0"
@@ -336,7 +338,26 @@ let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                     Html.div
                         [
                             prop.className "flex-1 min-w-0 min-h-0"
-                            prop.children [ HistoryPanel tab dispatch ]
+                            prop.children
+                                [
+                                    Html.div
+                                        [
+                                            prop.id $"history-panel-{tab.id}"
+                                            prop.tabIndex -1
+                                            prop.hidden diff.IsSome
+                                            prop.className "h-full min-h-0"
+                                            prop.children [ HistoryPanel tab dispatch ]
+                                        ]
+                                    match tab.selection, diff with
+                                    | Some selection, Some diff ->
+                                        Html.div
+                                            [
+                                                prop.key $"{selection.commit.oid}-{selection.parent}-{diff.file.path}"
+                                                prop.className "h-full min-h-0"
+                                                prop.children [ CommitDiffView.Panel tab.id selection diff dispatch ]
+                                            ]
+                                    | _ -> Html.none
+                                ]
                         ]
                     Html.div
                         [

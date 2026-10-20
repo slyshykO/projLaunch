@@ -47,12 +47,21 @@ or a restarted server.
 
 Select a commit row (or focus its subject and press Enter/Space) to load changed
 files through the Git server. The file panel shows change types and old/new paths
-for renames. Merge commits require choosing a parent; initial commits compare
+for renames. Parents are shown as `parent: abc123,def456`. Merge commits initially
+compare with the first parent; the compact `diff:` selector switches parents.
+Parent hashes are not navigation links yet. Initial commits compare
 against an empty tree. Loading, empty results and errors are shown separately;
 Retry reopens the repository after a server restart. Selection is independent per
 tab and stays visible when refreshing history, even outside its new first page.
 The file panel sits beside history in wide windows and below it in narrow windows.
-Patch viewing and the graph are still planned.
+Select a changed file to open its unified diff in place of history. Added and
+removed lines have colored backgrounds. The file list stays available for switching
+files; `✕` returns to the mounted history panel with its scroll position.
+File markers are `M` (modified), `+` (added), `-` (deleted), `R` (renamed),
+`C` (copied) and `T` (type changed), with full descriptions in tooltips.
+Changing the commit or merge parent closes the old diff. Diff state stays independent
+per tab; loading, retry, binary files, empty patches and server truncation are explicit.
+The graph is still planned.
 Open tabs are kept only for the current app session.
 
 When a project is opened, the app updates its `lastOpened` value and rewrites the stored project record.
@@ -366,6 +375,7 @@ node scripts/tests/test-project-menu.mjs
 node scripts/tests/test-desktop-tabs.mjs
 node scripts/tests/test-repository-history.mjs
 node scripts/tests/test-commit-files.mjs
+node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-logging.mjs
 ```
 
@@ -379,6 +389,8 @@ History checks cover paging, duplicate requests, independent tabs, late replies
 after closing a tab, empty repositories, failed reads and session recovery.
 Commit file checks cover selection races, initial/merge commits, parent changes,
 renames, escaped paths, failed reads/retry and selection across tabs/history refresh.
+Diff checks cover exact paths/targets, selection races, close/reopen during loading,
+retry, binary/empty/truncated patches, escaping and stale responses after tab closure.
 Logging checks cover automatic runtime delivery, immediate errors/warnings,
 bounded batches, Unicode/errors, transport failure recovery and draining before
 native close. Rust logging tests write only to temporary directories.
