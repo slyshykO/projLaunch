@@ -50,12 +50,16 @@ impl Storage {
                     // Initialization is queued ahead of all commands. Errors remain
                     // visible to the UI, with writes disabled until the next launch.
                     let mut database = Database::open(&directory).map_err(|error| {
+                        tracing::error!(error = %format!("{error:#}"), "Project storage initialization failed");
                         format!(
                             "Project storage could not be initialized: {error:#}. \
                              Existing project files have not been changed. \
                              Fix the reported problem and restart ProjLaunch."
                         )
                     });
+                    if database.is_ok() {
+                        tracing::info!("Project storage ready");
+                    }
                     while let Some(request) = receiver.blocking_recv() {
                         match request {
                             Request::List(reply) => {
@@ -113,7 +117,10 @@ fn run<T>(
     operation: impl FnOnce(&mut Database) -> anyhow::Result<T>,
 ) -> Result<T, String> {
     match database {
-        Ok(database) => operation(database).map_err(|error| format!("{error:#}")),
+        Ok(database) => operation(database).map_err(|error| {
+            tracing::error!(error = %format!("{error:#}"), "Project storage operation failed");
+            format!("{error:#}")
+        }),
         Err(error) => Err(error.clone()),
     }
 }

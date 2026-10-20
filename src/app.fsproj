@@ -12,6 +12,7 @@
     <Compile Include="src/common/Extensions.fs" />
     <Compile Include="src/interop/ReactVersion.fs" />
     <Compile Include="src/interop/Browser.fs" />
+    <Compile Include="src/interop/FrontendLog.fs" />
     <Compile Include="src/tauri/Tauri.Dpi.fs" />
     <Compile Include="src/tauri/Tauri.Event.fs" />
     <Compile Include="src/tauri/Tauri.Window.fs" />

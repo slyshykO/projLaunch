@@ -41,17 +41,20 @@ impl GitHost {
             old.shutdown().await;
         }
         let executable = server_path()?;
+        tracing::info!("Starting local Git server");
         let client = Arc::new(
             Client::connect(&executable)
                 .await
                 .map_err(|e| format!("{e:#}"))?,
         );
         *connection = Some(client.clone());
+        tracing::info!("Local Git server connected");
         Ok(client)
     }
 
     pub async fn shutdown(&self) {
         if let Some(client) = self.connection.lock().await.take() {
+            tracing::debug!("Stopping local Git server");
             client.shutdown().await;
         }
     }

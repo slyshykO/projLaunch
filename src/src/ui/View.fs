@@ -125,7 +125,7 @@ let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (dispatch: Msg
                         prop.children [ Html.text "Open" ]
                         prop.onClick (
                             React.useCallback (fun _ ->
-                                printfn "Open project: %s" prj.id
+                                FrontendLog.info $"Opening project {prj.id}"
                                 dispatch (OpenProject prj.id))
                         )
                     ]

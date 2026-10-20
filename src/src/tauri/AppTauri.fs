@@ -8,7 +8,14 @@ module Core =
     let isAvailable () = Tauri.Tauri.Tauri.isTauri ()
 
     let invoke<'T> (command: string) (args: obj option) : JS.Promise<'T> =
-        Tauri.Tauri.Tauri.invoke (command, args)
+        promise {
+            try
+                return! Tauri.Tauri.Tauri.invoke (command, args)
+            with error ->
+                // Do not log args: project records may contain environment secrets.
+                FrontendLog.error $"IPC {command} failed: {error}"
+                return raise error
+        }
 
     let greet (name: string) : JS.Promise<string> =
         invoke "greet" (Some(createObj [ "name" ==> name ]))

@@ -18,10 +18,9 @@ let onCloseRequested () =
 
         let closeRequestedHandler (event: Tauri.Window.CloseRequestedEvent) =
             if allowWindowClose then
-                printfn "Close requested after save, allowing window to close"
                 allowWindowClose <- false
             else
-                printfn "Close requested, dispatching WindowSave message"
+                FrontendLog.debug "Close requested; saving window state"
                 event.preventDefault ()
                 dispatch WindowSave
 
@@ -42,9 +41,7 @@ let onWindowResized () =
     let start dispatch =
         let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
 
-        let resizeHandler (size: Tauri.Dpi.PhysicalSize) =
-            printfn "Window resized, dispatching WindowResized message"
-            dispatch (WindowResized size)
+        let resizeHandler (size: Tauri.Dpi.PhysicalSize) = dispatch (WindowResized size)
 
         promise {
             let! unlisten = AppTauri.Window.onResized resizeHandler
@@ -54,7 +51,6 @@ let onWindowResized () =
 
         { new IDisposable with
             member _.Dispose() =
-                printfn "Unsubscribing from window resized event"
                 unsubscribe |> Option.iter (fun unlisten -> unlisten ())
         }
 
@@ -64,9 +60,7 @@ let onWindowMoved () =
     let start dispatch =
         let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
 
-        let moveHandler (position: Tauri.Dpi.PhysicalPosition) =
-            printfn "Window moved, dispatching WindowMoved message"
-            dispatch (WindowMoved position)
+        let moveHandler (position: Tauri.Dpi.PhysicalPosition) = dispatch (WindowMoved position)
 
         promise {
             let! unlisten = AppTauri.Window.onMoved moveHandler
@@ -76,7 +70,6 @@ let onWindowMoved () =
 
         { new IDisposable with
             member _.Dispose() =
-                printfn "Unsubscribing from window moved event"
                 unsubscribe |> Option.iter (fun unlisten -> unlisten ())
         }
 
@@ -94,6 +87,7 @@ let timer onTick =
 
 let subscriptions model : Sub<Msg> =
     [
+        [ "frontend-logging" ], (fun _ -> FrontendLog.start ())
         [ "timer" ], timer Tick
         if AppTauri.Core.isAvailable () then
             [ "menu-add-project" ], ProjectMenu.onAddProject ()
@@ -114,6 +108,7 @@ let subscriptions model : Sub<Msg> =
 
 
 Program.mkProgram init update View
+|> Program.withErrorHandler (fun (_message, error) -> FrontendLog.error $"Unhandled Elmish error: {error}")
 |> Program.withSubscription subscriptions
 |> Program.withReactSynchronous "feliz-app-364e6a85-5c8c-4f74-a6c4-470c3700aadb"
 |> Program.run

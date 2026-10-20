@@ -120,8 +120,6 @@ let init () =
         else
             []
 
-    printfn "Projects: %A" pd
-
     // generate a random salt
     let randomSalt = Guid.NewGuid().ToString()
 
@@ -587,6 +585,7 @@ let update msg state =
     | OnWindowSaveSuccess ->
         let closeWindowPromise () =
             promise {
+                do! FrontendLog.flush ()
                 allowWindowClose <- true
                 do! AppTauri.Window.closeCurrent ()
             }
@@ -595,6 +594,7 @@ let update msg state =
 
     | OnWindowSaveError exn ->
         let e = sprintf "Error while saving window state before close: %A" exn
+        FrontendLog.error e
         allowWindowClose <- false
 
         let newState =
@@ -607,6 +607,7 @@ let update msg state =
 
     | OnWindowCloseError exn ->
         let e = sprintf "Error while closing window after save: %A" exn
+        FrontendLog.error e
         allowWindowClose <- false
 
         let newState =
@@ -621,7 +622,7 @@ let update msg state =
         let newState = { state with appWindowSize = Some size }
 
 #if DEBUG
-        printfn "Window resized to: w:%f, h:%f" size.width size.height
+        FrontendLog.debug $"Window resized to: {size.width} x {size.height}"
 #endif
         newState, Cmd.none
 
@@ -632,7 +633,7 @@ let update msg state =
             }
 
 #if DEBUG
-        printfn "Window moved to: x:%f, y:%f" position.x position.y
+        FrontendLog.debug $"Window moved to: {position.x}, {position.y}"
 #endif
         newState, Cmd.none
 

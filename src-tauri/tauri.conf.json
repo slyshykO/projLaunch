@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "projlaunch",
-  "version": "0.4.3+19.g5a7b354.dirty",
+  "version": "0.4.3+20.g8d376e9.dirty",
   "identifier": "com.projlaunch.app",
   "build": {
     "beforeDevCommand": "npm run dev",

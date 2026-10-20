@@ -1,4 +1,5 @@
 mod git_host;
+mod logging;
 mod project;
 mod project_git;
 mod storage;
@@ -9,7 +10,6 @@ use tauri::{
     Emitter, Manager,
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
 };
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tauri::command]
 fn get_data_dir(app_handle: tauri::AppHandle) -> Result<String, tauri::Error> {
@@ -115,12 +115,16 @@ async fn rewrite_project_file(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    init_tracing();
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .manage(git_host::GitHost::default())
         .setup(|app| {
+            let directory = app.path().app_data_dir().map_err(|error| error.to_string());
+            app.manage(logging::Logging::start(
+                directory.as_deref().map_err(String::as_str),
+            ));
+            tracing::info!(version = env!("CARGO_PKG_VERSION"), "ProjLaunch starting");
             let add_project = MenuItemBuilder::with_id("add-project", "Add project…")
                 .accelerator("CmdOrCtrl+N")
                 .build(app)?;
@@ -165,7 +169,7 @@ pub fn run() {
             app.on_menu_event(|app, event| {
                 if event.id() == "add-project" {
                     if let Err(error) = app.emit_to("main", "menu-add-project", ()) {
-                        eprintln!("Could not open project editor: {error}");
+                        tracing::error!(%error, "Could not open project editor");
                     }
                 } else if event.id() == "exit" {
                     if let Some(window) = app.get_webview_window("main") {
@@ -178,7 +182,6 @@ pub fn run() {
                     tracing::error!(%error, "Could not dispatch menu action");
                 }
             });
-            let directory = app.path().app_data_dir().map_err(|error| error.to_string());
             app.manage(Storage::start(directory));
             Ok(())
         })
@@ -187,6 +190,7 @@ pub fn run() {
             get_projects,
             open_project,
             rewrite_project_file,
+            logging::frontend_log,
             git_host::git_hello,
             git_host::git_open,
             git_host::git_status,
@@ -202,19 +206,8 @@ pub fn run() {
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
                 tauri::async_runtime::block_on(app.state::<git_host::GitHost>().shutdown());
+                tracing::info!("ProjLaunch exiting");
+                app.state::<logging::Logging>().shutdown();
             }
         });
-}
-
-fn init_tracing() {
-    use tracing_subscriber::EnvFilter;
-
-    let env_var = std::env::var("PROJ_LAUNCHER_LOG").unwrap_or_else(|_| "info".into());
-
-    let filter = EnvFilter::new(env_var).add_directive("tauri=info".parse().unwrap());
-
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(tracing_subscriber::fmt::layer())
-        .init();
 }

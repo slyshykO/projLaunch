@@ -106,6 +106,35 @@ Each record includes:
 - `Ssh { host, username }`
 - `Wsl "<distro>"`
 
+## Logging
+
+Rust and frontend logs are written to `projlaunch.YYYY-MM-DD.log` next to
+`projlaunch.db` in the app data directory (`%APPDATA%/com.projlaunch.app` on
+Windows). Rotation uses UTC dates and retains the latest 7 log files. Each entry
+includes a timestamp, level and source (`frontend` for UI messages). Rust output
+also remains available on stderr; the WebView developer console still works.
+
+The frontend forwards `console.log/info/warn/error/debug/trace`, uncaught
+JavaScript errors, unhandled promise rejections and Elmish errors. Ordinary
+messages are sent automatically with a 50 ms batching delay; warnings/errors
+start sending immediately, unless another batch is already in flight. The file
+writer runs continuously on a separate thread. Closing the app only drains the
+remaining messages; logging does not wait for shutdown.
+
+`FrontendLog.info`, `FrontendLog.debug` and `FrontendLog.error` are available to
+F# code. IPC failures log the command name and error, never the argument object.
+Avoid logging project records, environment values or credentials. Browser-only
+development keeps console output without attempting native logging.
+
+The default level is `info`. Set `PROJ_LAUNCHER_LOG=debug` (or, for example,
+`info,frontend=debug`) before launching to include debug messages. Invalid filter
+values fall back to `info`. Each frontend batch is limited to 32 entries, each
+message to 4,000 JavaScript characters (at most 16 KiB in UTF-8). The frontend
+queue holds 200 messages and reports overflow; the native writer has a bounded
+4,096-line queue and can drop messages under overload. If file initialization
+fails, the app continues with stderr/developer-console output and reports the
+logging error there. A stalled log transport delays closing by at most 1.5 seconds.
+
 ## Repository Layout
 
 The local Git read API now runs in a separate Rust process over stdio. It provides
@@ -319,6 +348,7 @@ node scripts/tests/test-project-git.mjs
 node scripts/tests/test-about-version.mjs
 node scripts/tests/test-project-menu.mjs
 node scripts/tests/test-desktop-tabs.mjs
+node scripts/tests/test-logging.mjs
 ```
 
 These checks use an isolated IPC stub, without accessing the user's database.
@@ -327,3 +357,6 @@ environment values, cancellation, failed saves, retry and adding new projects.
 The Git checks cover refresh races, stale responses, errors/recovery and rendered
 indicators. Rust tests also exercise workspace/solution discovery and real stdio
 status checks; build the Git sidecar first with `npm run build:git-server`.
+Logging checks cover automatic runtime delivery, immediate errors/warnings,
+bounded batches, Unicode/errors, transport failure recovery and draining before
+native close. Rust logging tests write only to temporary directories.
