@@ -43,7 +43,16 @@ commit date, short hash and branch/tag labels. History loads in pages of 100;
 `Load more` appends the next page. `Refresh`, the View menu refresh action and
 window focus reload the active repository from a fresh snapshot. Failed reads
 keep previously loaded rows visible; Refresh also recovers from expired cursors
-or a restarted server. Graph and diff panels are still planned.
+or a restarted server.
+
+Select a commit row (or focus its subject and press Enter/Space) to load changed
+files through the Git server. The file panel shows change types and old/new paths
+for renames. Merge commits require choosing a parent; initial commits compare
+against an empty tree. Loading, empty results and errors are shown separately;
+Retry reopens the repository after a server restart. Selection is independent per
+tab and stays visible when refreshing history, even outside its new first page.
+The file panel sits beside history in wide windows and below it in narrow windows.
+Patch viewing and the graph are still planned.
 Open tabs are kept only for the current app session.
 
 When a project is opened, the app updates its `lastOpened` value and rewrites the stored project record.
@@ -356,6 +365,7 @@ node scripts/tests/test-about-version.mjs
 node scripts/tests/test-project-menu.mjs
 node scripts/tests/test-desktop-tabs.mjs
 node scripts/tests/test-repository-history.mjs
+node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-logging.mjs
 ```
 
@@ -367,6 +377,8 @@ indicators. Rust tests also exercise workspace/solution discovery and real stdio
 status checks; build the Git sidecar first with `npm run build:git-server`.
 History checks cover paging, duplicate requests, independent tabs, late replies
 after closing a tab, empty repositories, failed reads and session recovery.
+Commit file checks cover selection races, initial/merge commits, parent changes,
+renames, escaped paths, failed reads/retry and selection across tabs/history refresh.
 Logging checks cover automatic runtime delivery, immediate errors/warnings,
 bounded batches, Unicode/errors, transport failure recovery and draining before
 native close. Rust logging tests write only to temporary directories.

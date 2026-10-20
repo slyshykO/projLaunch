@@ -110,8 +110,79 @@ let private commitDate (value: string) =
     | true, date -> date.ToString("yyyy-MM-dd HH:mm")
     | _ -> value
 
+let private CommitRow (tab: RepositoryTab) (commit: GitProtocol.Commit) (dispatch: Msg -> unit) =
+    Html.tr
+        [
+            prop.key commit.oid
+            prop.className (
+                if
+                    tab.selection
+                    |> Option.exists (fun selection -> selection.commit.oid = commit.oid)
+                then
+                    "bg-primary/10"
+                else
+                    "hover:bg-base-200/60"
+            )
+            prop.onClick (fun _ -> dispatch (SelectRepositoryCommit(tab.id, commit.oid)))
+            prop.children
+                [
+                    Html.td
+                        [
+                            prop.className "min-w-64"
+                            prop.children
+                                [
+                                    Html.div
+                                        [
+                                            prop.className "flex flex-wrap items-center gap-1 mb-1"
+                                            prop.children
+                                                [
+                                                    for reference in commit.refs do
+                                                        Html.span
+                                                            [
+                                                                prop.key reference
+                                                                prop.className
+                                                                    "badge badge-sm badge-outline max-w-64 truncate"
+                                                                prop.title reference
+                                                                prop.text reference
+                                                            ]
+                                                ]
+                                        ]
+                                    Html.button
+                                        [
+                                            prop.type' "button"
+                                            prop.ariaPressed (
+                                                tab.selection
+                                                |> Option.exists (fun selection -> selection.commit.oid = commit.oid)
+                                            )
+                                            prop.className
+                                                "break-words text-left cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
+                                            prop.text commit.subject
+                                        ]
+                                ]
+                        ]
+                    Html.td
+                        [
+                            prop.className "max-w-48 truncate"
+                            prop.title $"{commit.authorName} <{commit.authorEmail}>"
+                            prop.text commit.authorName
+                        ]
+                    Html.td
+                        [
+                            prop.className "whitespace-nowrap text-base-content/70"
+                            prop.title commit.commitDate
+                            prop.text (commitDate commit.commitDate)
+                        ]
+                    Html.td
+                        [
+                            prop.className "font-mono text-base-content/70"
+                            prop.title commit.oid
+                            prop.text (commit.oid.Substring(0, min 8 commit.oid.Length))
+                        ]
+                ]
+        ]
+
 [<ReactMemoComponent>]
-let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
+let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
     let history = tab.history
     let loading = history.requestId.IsSome
 
@@ -206,92 +277,7 @@ let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                         Html.tbody
                                                             [
                                                                 for commit in history.commits do
-                                                                    Html.tr
-                                                                        [
-                                                                            prop.key commit.oid
-                                                                            prop.className "hover:bg-base-200/60"
-                                                                            prop.children
-                                                                                [
-                                                                                    Html.td
-                                                                                        [
-                                                                                            prop.className "min-w-64"
-                                                                                            prop.children
-                                                                                                [
-                                                                                                    Html.div
-                                                                                                        [
-                                                                                                            prop
-                                                                                                                .className
-                                                                                                                "flex flex-wrap items-center gap-1 mb-1"
-                                                                                                            prop
-                                                                                                                .children
-                                                                                                                [
-                                                                                                                    for reference in
-                                                                                                                        commit
-                                                                                                                            .refs do
-                                                                                                                        Html
-                                                                                                                            .span
-                                                                                                                            [
-                                                                                                                                prop
-                                                                                                                                    .key
-                                                                                                                                    reference
-                                                                                                                                prop
-                                                                                                                                    .className
-                                                                                                                                    "badge badge-sm badge-outline max-w-64 truncate"
-                                                                                                                                prop
-                                                                                                                                    .title
-                                                                                                                                    reference
-                                                                                                                                prop
-                                                                                                                                    .text
-                                                                                                                                    reference
-                                                                                                                            ]
-                                                                                                                ]
-                                                                                                        ]
-                                                                                                    Html.span
-                                                                                                        [
-                                                                                                            prop
-                                                                                                                .className
-                                                                                                                "break-words"
-                                                                                                            prop.text
-                                                                                                                commit
-                                                                                                                    .subject
-                                                                                                        ]
-                                                                                                ]
-                                                                                        ]
-                                                                                    Html.td
-                                                                                        [
-                                                                                            prop.className
-                                                                                                "max-w-48 truncate"
-                                                                                            prop.title
-                                                                                                $"{commit.authorName} <{commit.authorEmail}>"
-                                                                                            prop.text commit.authorName
-                                                                                        ]
-                                                                                    Html.td
-                                                                                        [
-                                                                                            prop.className
-                                                                                                "whitespace-nowrap text-base-content/70"
-                                                                                            prop.title commit.commitDate
-                                                                                            prop.text (
-                                                                                                commitDate
-                                                                                                    commit.commitDate
-                                                                                            )
-                                                                                        ]
-                                                                                    Html.td
-                                                                                        [
-                                                                                            prop.className
-                                                                                                "font-mono text-base-content/70"
-                                                                                            prop.title commit.oid
-                                                                                            prop.text (
-                                                                                                commit.oid.Substring(
-                                                                                                    0,
-                                                                                                    min
-                                                                                                        8
-                                                                                                        commit.oid
-                                                                                                            .Length
-                                                                                                )
-                                                                                            )
-                                                                                        ]
-                                                                                ]
-                                                                        ]
+                                                                    CommitRow tab commit dispatch
                                                             ]
                                                     ]
                                             ]
@@ -336,6 +322,27 @@ let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                 prop.onClick (fun _ -> dispatch (LoadMoreCommits tab.id))
                                             ]
                                 ]
+                        ]
+                ]
+        ]
+
+[<ReactMemoComponent>]
+let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
+    Html.div
+        [
+            prop.className "h-full flex flex-col lg:flex-row min-h-0"
+            prop.children
+                [
+                    Html.div
+                        [
+                            prop.className "flex-1 min-w-0 min-h-0"
+                            prop.children [ HistoryPanel tab dispatch ]
+                        ]
+                    Html.div
+                        [
+                            prop.className
+                                "h-2/5 lg:h-full lg:w-2/5 shrink-0 min-h-0 border-t lg:border-t-0 lg:border-l border-base-300"
+                            prop.children [ CommitFilesView.Panel tab dispatch ]
                         ]
                 ]
         ]

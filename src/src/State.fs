@@ -27,12 +27,23 @@ type RepositoryHistory =
         error: string option
     }
 
+type CommitFiles =
+    {
+        commit: GitProtocol.Commit
+        parent: int option
+        files: GitProtocol.DiffFile array
+        requestId: string option
+        hasLoaded: bool
+        error: string option
+    }
+
 type RepositoryTab =
     {
         id: string
         root: string
         name: string
         history: RepositoryHistory
+        selection: CommitFiles option
     }
 
 type Msg =
@@ -49,6 +60,10 @@ type Msg =
     | RefreshRepositoryHistory of string
     | LoadMoreCommits of string
     | OnRepositoryHistory of string * string * bool * Result<string * GitProtocol.LogPage, exn>
+    | SelectRepositoryCommit of tabId: string * oid: string
+    | SelectCommitParent of tabId: string * parent: int
+    | RefreshCommitFiles of tabId: string
+    | OnCommitFiles of tabId: string * requestId: string * Result<GitProtocol.DiffFile array, exn>
     | OpenAbout
     | CloseAbout
 
@@ -206,6 +221,7 @@ let update msg state =
                     id = Guid.NewGuid().ToString()
                     root = repository.root
                     name = repository.name
+                    selection = None
                     history =
                         {
                             repoId = None
@@ -258,6 +274,140 @@ let update msg state =
         else
             { state with isAboutOpen = true }, Cmd.none
     | CloseAbout -> { state with isAboutOpen = false }, Cmd.none
+
+    | SelectRepositoryCommit(id, oid) ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when tab.selection |> Option.exists (fun selection -> selection.commit.oid = oid) -> state, Cmd.none
+        | Some tab ->
+            match tab.history.commits |> Array.tryFind (fun commit -> commit.oid = oid) with
+            | Some commit ->
+                let selection =
+                    {
+                        commit = commit
+                        parent = if commit.parents.Length = 1 then Some 1 else None
+                        files = [||]
+                        requestId = None
+                        hasLoaded = false
+                        error = None
+                    }
+
+                { state with
+                    repositoryTabs =
+                        state.repositoryTabs
+                        |> List.map (fun item ->
+                            if item.id = id then
+                                { item with selection = Some selection }
+                            else
+                                item)
+                },
+                (if commit.parents.Length > 1 then
+                     Cmd.none
+                 else
+                     Cmd.ofMsg (RefreshCommitFiles id))
+            | None -> state, Cmd.none
+        | None -> state, Cmd.none
+
+    | SelectCommitParent(id, parent) ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab ->
+            match tab.selection with
+            | Some selection when
+                parent >= 1
+                && parent <= selection.commit.parents.Length
+                && selection.parent <> Some parent
+                ->
+                let next =
+                    { selection with
+                        parent = Some parent
+                        files = [||]
+                        requestId = None
+                        hasLoaded = false
+                        error = None
+                    }
+
+                { state with
+                    repositoryTabs =
+                        state.repositoryTabs
+                        |> List.map (fun item ->
+                            if item.id = id then
+                                { item with selection = Some next }
+                            else
+                                item)
+                },
+                Cmd.ofMsg (RefreshCommitFiles id)
+            | _ -> state, Cmd.none
+        | None -> state, Cmd.none
+
+    | RefreshCommitFiles id ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab ->
+            match tab.selection with
+            | Some selection when
+                selection.requestId.IsNone
+                && (selection.commit.parents.Length <= 1 || selection.parent.IsSome)
+                ->
+                let requestId = Guid.NewGuid().ToString()
+
+                let next =
+                    { selection with
+                        requestId = Some requestId
+                        files = [||]
+                        hasLoaded = false
+                        error = None
+                    }
+
+                let read () =
+                    promise {
+                        // Reopen by root so retry also recovers from a restarted server.
+                        let! repository = AppTauri.Git.openRepository tab.root $"files-{requestId}-open"
+
+                        return!
+                            AppTauri.Git.diffFiles
+                                repository.repoId
+                                $"files-{requestId}-list"
+                                (GitProtocol.Commit(selection.commit.oid, selection.parent))
+                    }
+
+                { state with
+                    repositoryTabs =
+                        state.repositoryTabs
+                        |> List.map (fun item ->
+                            if item.id = id then
+                                { item with selection = Some next }
+                            else
+                                item)
+                },
+                Cmd.OfPromise.either read () (fun files -> OnCommitFiles(id, requestId, Ok files)) (fun error ->
+                    OnCommitFiles(id, requestId, Error error))
+            | _ -> state, Cmd.none
+        | None -> state, Cmd.none
+
+    | OnCommitFiles(id, requestId, result) ->
+        { state with
+            repositoryTabs =
+                state.repositoryTabs
+                |> List.map (fun tab ->
+                    match tab.selection with
+                    | Some selection when tab.id = id && selection.requestId = Some requestId ->
+                        let next =
+                            match result with
+                            | Ok files ->
+                                { selection with
+                                    files = files
+                                    requestId = None
+                                    hasLoaded = true
+                                    error = None
+                                }
+                            | Error error ->
+                                { selection with
+                                    requestId = None
+                                    error = Some(string error)
+                                }
+
+                        { tab with selection = Some next }
+                    | _ -> tab)
+        },
+        Cmd.none
 
     | RefreshRepositoryHistory id
     | LoadMoreCommits id ->
