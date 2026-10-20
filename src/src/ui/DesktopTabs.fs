@@ -1,5 +1,6 @@
 module DesktopTabs
 
+open System
 open Feliz
 open state
 
@@ -104,39 +105,236 @@ let TabBar (tabs: RepositoryTab list) (active: string option) (dispatch: Msg -> 
                 ]
         ]
 
+let private commitDate (value: string) =
+    match DateTime.TryParse value with
+    | true, date -> date.ToString("yyyy-MM-dd HH:mm")
+    | _ -> value
+
 [<ReactMemoComponent>]
-let RepositoryPanel (tab: RepositoryTab) =
+let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
+    let history = tab.history
+    let loading = history.requestId.IsSome
+
     Html.div
         [
-            prop.className "h-full flex flex-col"
+            prop.className "h-full flex flex-col min-h-0"
             prop.children
                 [
                     Html.div
                         [
-                            prop.className "border-b border-base-300 px-6 py-4"
+                            prop.className
+                                "shrink-0 border-b border-base-300 px-6 py-4 flex items-center justify-between gap-4"
                             prop.children
                                 [
-                                    Html.h1 [ prop.className "font-semibold text-lg"; prop.text tab.name ]
-                                    Html.p
+                                    Html.div
                                         [
-                                            prop.className "text-sm text-base-content/60 break-all mt-1"
-                                            prop.text tab.root
+                                            prop.className "min-w-0"
+                                            prop.children
+                                                [
+                                                    Html.h1
+                                                        [ prop.className "font-semibold text-lg"; prop.text tab.name ]
+                                                    Html.p
+                                                        [
+                                                            prop.className "text-sm text-base-content/60 break-all mt-1"
+                                                            prop.text tab.root
+                                                        ]
+                                                ]
                                         ]
+                                    Html.button
+                                        [
+                                            prop.type' "button"
+                                            prop.className "btn btn-sm btn-outline shrink-0"
+                                            prop.disabled loading
+                                            prop.text "Refresh"
+                                            prop.ariaLabel $"Refresh history for {tab.name}"
+                                            prop.onClick (fun _ -> dispatch (RefreshRepositoryHistory tab.id))
+                                        ]
+                                ]
+                        ]
+                    match history.error with
+                    | Some error ->
+                        Html.div
+                            [
+                                prop.role "alert"
+                                prop.className "shrink-0 border-b border-error/30 bg-error/10 px-6 py-3 text-sm"
+                                prop.children
+                                    [
+                                        Html.p
+                                            [
+                                                prop.className "font-medium"
+                                                prop.text "Could not load commit history. Refresh to try again."
+                                            ]
+                                        if history.commits.Length > 0 then
+                                            Html.p [ prop.text "Previously loaded commits are shown below." ]
+                                        Html.p
+                                            [
+                                                prop.className
+                                                    "break-words whitespace-pre-wrap mt-1 max-h-24 overflow-auto"
+                                                prop.text error
+                                            ]
+                                    ]
+                            ]
+                    | None -> Html.none
+                    Html.div
+                        [
+                            prop.className "flex-1 min-h-0 overflow-auto"
+                            prop.ariaBusy loading
+                            prop.children
+                                [
+                                    if history.commits.Length > 0 then
+                                        Html.table
+                                            [
+                                                prop.className "table table-sm w-full"
+                                                prop.children
+                                                    [
+                                                        Html.caption
+                                                            [ prop.className "sr-only"; prop.text "Commit history" ]
+                                                        Html.thead
+                                                            [
+                                                                prop.className "sticky top-0 bg-base-200 z-10"
+                                                                prop.children
+                                                                    [
+                                                                        Html.tr
+                                                                            [
+                                                                                Html.th [ prop.text "Commit" ]
+                                                                                Html.th [ prop.text "Author" ]
+                                                                                Html.th [ prop.text "Date" ]
+                                                                                Html.th [ prop.text "Hash" ]
+                                                                            ]
+                                                                    ]
+                                                            ]
+                                                        Html.tbody
+                                                            [
+                                                                for commit in history.commits do
+                                                                    Html.tr
+                                                                        [
+                                                                            prop.key commit.oid
+                                                                            prop.className "hover:bg-base-200/60"
+                                                                            prop.children
+                                                                                [
+                                                                                    Html.td
+                                                                                        [
+                                                                                            prop.className "min-w-64"
+                                                                                            prop.children
+                                                                                                [
+                                                                                                    Html.div
+                                                                                                        [
+                                                                                                            prop
+                                                                                                                .className
+                                                                                                                "flex flex-wrap items-center gap-1 mb-1"
+                                                                                                            prop
+                                                                                                                .children
+                                                                                                                [
+                                                                                                                    for reference in
+                                                                                                                        commit
+                                                                                                                            .refs do
+                                                                                                                        Html
+                                                                                                                            .span
+                                                                                                                            [
+                                                                                                                                prop
+                                                                                                                                    .key
+                                                                                                                                    reference
+                                                                                                                                prop
+                                                                                                                                    .className
+                                                                                                                                    "badge badge-sm badge-outline max-w-64 truncate"
+                                                                                                                                prop
+                                                                                                                                    .title
+                                                                                                                                    reference
+                                                                                                                                prop
+                                                                                                                                    .text
+                                                                                                                                    reference
+                                                                                                                            ]
+                                                                                                                ]
+                                                                                                        ]
+                                                                                                    Html.span
+                                                                                                        [
+                                                                                                            prop
+                                                                                                                .className
+                                                                                                                "break-words"
+                                                                                                            prop.text
+                                                                                                                commit
+                                                                                                                    .subject
+                                                                                                        ]
+                                                                                                ]
+                                                                                        ]
+                                                                                    Html.td
+                                                                                        [
+                                                                                            prop.className
+                                                                                                "max-w-48 truncate"
+                                                                                            prop.title
+                                                                                                $"{commit.authorName} <{commit.authorEmail}>"
+                                                                                            prop.text commit.authorName
+                                                                                        ]
+                                                                                    Html.td
+                                                                                        [
+                                                                                            prop.className
+                                                                                                "whitespace-nowrap text-base-content/70"
+                                                                                            prop.title commit.commitDate
+                                                                                            prop.text (
+                                                                                                commitDate
+                                                                                                    commit.commitDate
+                                                                                            )
+                                                                                        ]
+                                                                                    Html.td
+                                                                                        [
+                                                                                            prop.className
+                                                                                                "font-mono text-base-content/70"
+                                                                                            prop.title commit.oid
+                                                                                            prop.text (
+                                                                                                commit.oid.Substring(
+                                                                                                    0,
+                                                                                                    min
+                                                                                                        8
+                                                                                                        commit.oid
+                                                                                                            .Length
+                                                                                                )
+                                                                                            )
+                                                                                        ]
+                                                                                ]
+                                                                        ]
+                                                            ]
+                                                    ]
+                                            ]
+                                    elif history.error.IsNone then
+                                        Html.p
+                                            [
+                                                prop.className "p-10 text-center text-base-content/60"
+                                                prop.text (
+                                                    if loading || not history.hasLoaded then
+                                                        "Loading commit history…"
+                                                    else
+                                                        "No commits yet."
+                                                )
+                                            ]
                                 ]
                         ]
                     Html.div
                         [
-                            prop.className "flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center"
+                            prop.className
+                                "shrink-0 border-t border-base-300 px-6 py-3 flex items-center justify-between gap-3 text-sm"
                             prop.children
                                 [
-                                    svgIcons.git 40
-                                    Html.h2 [ prop.className "text-lg font-medium"; prop.text "Repository workspace" ]
-                                    Html.p
+                                    Html.span
                                         [
-                                            prop.className "text-sm text-base-content/60 max-w-md"
-                                            prop.text
-                                                "Commit history, graph and file diffs will be available here in a future update."
+                                            prop.role "status"
+                                            prop.text (
+                                                if loading then
+                                                    $"Loading… {history.commits.Length} commits shown"
+                                                elif history.hasLoaded then
+                                                    $"{history.commits.Length} commits shown"
+                                                else
+                                                    "Commit history"
+                                            )
                                         ]
+                                    if history.nextCursor.IsSome then
+                                        Html.button
+                                            [
+                                                prop.type' "button"
+                                                prop.className "btn btn-sm"
+                                                prop.disabled loading
+                                                prop.text "Load more"
+                                                prop.onClick (fun _ -> dispatch (LoadMoreCommits tab.id))
+                                            ]
                                 ]
                         ]
                 ]

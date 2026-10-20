@@ -38,8 +38,13 @@ The native menu contains File (Add project, Close repository tab, Exit), View
 (Projects, Refresh Git status), and Help (About). Add project also supports
 Ctrl/Cmd+N. About closes with Close or Escape. Tab navigation supports the arrow,
 Home and End keys. Switching tabs retains each panel's scroll position.
-Repository tabs currently show their name and path as a home for the upcoming
-history/graph/diff interface. Open tabs are kept only for the current app session.
+Repository tabs load commit history from the local Git server: subject, author,
+commit date, short hash and branch/tag labels. History loads in pages of 100;
+`Load more` appends the next page. `Refresh`, the View menu refresh action and
+window focus reload the active repository from a fresh snapshot. Failed reads
+keep previously loaded rows visible; Refresh also recovers from expired cursors
+or a restarted server. Graph and diff panels are still planned.
+Open tabs are kept only for the current app session.
 
 When a project is opened, the app updates its `lastOpened` value and rewrites the stored project record.
 
@@ -350,6 +355,7 @@ node scripts/tests/test-project-git.mjs
 node scripts/tests/test-about-version.mjs
 node scripts/tests/test-project-menu.mjs
 node scripts/tests/test-desktop-tabs.mjs
+node scripts/tests/test-repository-history.mjs
 node scripts/tests/test-logging.mjs
 ```
 
@@ -359,6 +365,8 @@ environment values, cancellation, failed saves, retry and adding new projects.
 The Git checks cover refresh races, stale responses, errors/recovery and rendered
 indicators. Rust tests also exercise workspace/solution discovery and real stdio
 status checks; build the Git sidecar first with `npm run build:git-server`.
+History checks cover paging, duplicate requests, independent tabs, late replies
+after closing a tab, empty repositories, failed reads and session recovery.
 Logging checks cover automatic runtime delivery, immediate errors/warnings,
 bounded batches, Unicode/errors, transport failure recovery and draining before
 native close. Rust logging tests write only to temporary directories.

@@ -396,7 +396,7 @@ let View (state: State) dispatch =
                             prop.hidden (state.activeRepositoryTab <> Some tab.id)
                             prop.tabIndex 0
                             prop.className "h-full overflow-auto"
-                            prop.children [ DesktopTabs.RepositoryPanel tab ]
+                            prop.children [ DesktopTabs.RepositoryPanel tab dispatch ]
                         ]
                 ]
             ]

@@ -17,11 +17,22 @@ type ProjectGitCheck =
         error: string option
     }
 
+type RepositoryHistory =
+    {
+        repoId: string option
+        commits: GitProtocol.Commit array
+        nextCursor: string option
+        requestId: string option
+        hasLoaded: bool
+        error: string option
+    }
+
 type RepositoryTab =
     {
         id: string
         root: string
         name: string
+        history: RepositoryHistory
     }
 
 type Msg =
@@ -35,6 +46,9 @@ type Msg =
     | SelectRepositoryTab of string
     | CloseRepositoryTab of string
     | CloseActiveTab
+    | RefreshRepositoryHistory of string
+    | LoadMoreCommits of string
+    | OnRepositoryHistory of string * string * bool * Result<string * GitProtocol.LogPage, exn>
     | OpenAbout
     | CloseAbout
 
@@ -192,13 +206,22 @@ let update msg state =
                     id = Guid.NewGuid().ToString()
                     root = repository.root
                     name = repository.name
+                    history =
+                        {
+                            repoId = None
+                            commits = [||]
+                            nextCursor = None
+                            requestId = None
+                            hasLoaded = false
+                            error = None
+                        }
                 }
 
             { state with
                 repositoryTabs = state.repositoryTabs @ [ tab ]
                 activeRepositoryTab = Some tab.id
             },
-            Cmd.none
+            Cmd.ofMsg (RefreshRepositoryHistory tab.id)
     | SelectRepositoryTab id ->
         if state.repositoryTabs |> List.exists (fun tab -> tab.id = id) then
             { state with
@@ -236,11 +259,107 @@ let update msg state =
             { state with isAboutOpen = true }, Cmd.none
     | CloseAbout -> { state with isAboutOpen = false }, Cmd.none
 
+    | RefreshRepositoryHistory id
+    | LoadMoreCommits id ->
+        let append =
+            match msg with
+            | LoadMoreCommits _ -> true
+            | _ -> false
+
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when
+            tab.history.requestId.IsNone
+            && (not append || (tab.history.repoId.IsSome && tab.history.nextCursor.IsSome))
+            ->
+            let requestId = Guid.NewGuid().ToString()
+
+            let history =
+                { tab.history with
+                    requestId = Some requestId
+                    error = None
+                    repoId = if append then tab.history.repoId else None
+                    nextCursor = if append then tab.history.nextCursor else None
+                }
+
+            let read () =
+                promise {
+                    let! repoId =
+                        match append, tab.history.repoId with
+                        | true, Some repoId -> promise { return repoId }
+                        | _ ->
+                            promise {
+                                let! repository = AppTauri.Git.openRepository tab.root $"history-{requestId}-open"
+                                return repository.repoId
+                            }
+
+                    let cursor = if append then tab.history.nextCursor else None
+                    let! page = AppTauri.Git.log repoId $"history-{requestId}-log" cursor 100
+                    return repoId, page
+                }
+
+            { state with
+                repositoryTabs =
+                    state.repositoryTabs
+                    |> List.map (fun item ->
+                        if item.id = id then
+                            { item with history = history }
+                        else
+                            item)
+            },
+            Cmd.OfPromise.either
+                read
+                ()
+                (fun result -> OnRepositoryHistory(id, requestId, append, Ok result))
+                (fun error -> OnRepositoryHistory(id, requestId, append, Error error))
+        | _ -> state, Cmd.none
+
+    | OnRepositoryHistory(id, requestId, append, result) ->
+        let tabs =
+            state.repositoryTabs
+            |> List.map (fun tab ->
+                if tab.id <> id || tab.history.requestId <> Some requestId then
+                    tab
+                else
+                    let history =
+                        match result with
+                        | Ok(repoId, page) ->
+                            {
+                                repoId = Some repoId
+                                commits =
+                                    (if append then
+                                         Array.append tab.history.commits page.commits
+                                     else
+                                         page.commits)
+                                    |> Array.distinctBy (fun commit -> commit.oid)
+                                nextCursor = page.nextCursor
+                                requestId = None
+                                hasLoaded = true
+                                error = None
+                            }
+                        | Error error ->
+                            // Any failed page can mean a lost session or expired cursor.
+                            // Refresh must reopen the root and start a new snapshot.
+                            { tab.history with
+                                repoId = None
+                                nextCursor = None
+                                requestId = None
+                                error = Some(string error)
+                            }
+
+                    { tab with history = history })
+
+        { state with repositoryTabs = tabs }, Cmd.none
+
     | RefreshGitStatuses ->
         state,
-        (state.projects
-         |> List.map (fun project -> Cmd.ofMsg (RefreshProjectGit project.id))
-         |> Cmd.batch)
+        Cmd.batch
+            [
+                for project in state.projects do
+                    Cmd.ofMsg (RefreshProjectGit project.id)
+                match state.activeRepositoryTab with
+                | Some id -> Cmd.ofMsg (RefreshRepositoryHistory id)
+                | None -> ()
+            ]
 
     | RefreshProjectGit id ->
         match state.projects |> List.tryFind (fun project -> project.id = id) with
