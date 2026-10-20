@@ -153,7 +153,7 @@ lifecycle, limits and tests. The graph/file/diff UI is a subsequent stage.
 - `src-tauri/migrations/` - versioned SQL schema
 - `src-test/` - xUnit test project
 - `build/` - custom F# build helper used by `build.bat`
-- `serde-probe-lib/` - local shared/library code referenced by the app
+- `serde-probe-lib/` - standalone serialization probe library
 
 ## Requirements
 

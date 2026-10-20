@@ -78,7 +78,3 @@ let Debug = false
 
 let projectsJsonStr = ""
 #endif
-
-#if !FABLE_COMPILER
-let serdeProbeSample: SerdeProbeLib.ProbeRecord = SerdeProbeLib.Probe.sample
-#endif

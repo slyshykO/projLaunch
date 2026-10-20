@@ -29,9 +29,6 @@
     <Compile Include="src/ui/View.fs" />
     <Compile Include="src/Program.fs" />
   </ItemGroup>
-  <ItemGroup Condition="'$(FABLE_COMPILER)' != 'True'">
-    <ProjectReference Include="..\serde-probe-lib\serde-probe-lib.fsproj" />
-  </ItemGroup>
   <!-- <ItemGroup>
     <PackageReference Include="Fable.Core" Version="4.5.0" />
     <PackageReference Include="Fable.Elmish" Version="5.0.2" />
