@@ -2,7 +2,7 @@
 // Exercise the compiled subscription with in-memory keyboard and Tauri events.
 import assert from 'node:assert/strict';
 
-const { onAddProject } = await import('../../src/bin/fable-js/src/ui/ProjectMenu.js');
+const { onAddProject, onActions } = await import('../../src/bin/fable-js/src/ui/ProjectMenu.js');
 const { Msg, update } = await import('../../src/bin/fable-js/src/State.js');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -98,3 +98,45 @@ for (const platform of ['Win32', 'Linux x86_64', 'MacIntel']) {
     assert.equal(count, afterDispose);
 }
 console.log('PASS: Ctrl/Cmd+N, Cyrillic layout, menu events, draft preservation, repeat/modifier guards and listener cleanup.');
+
+const actions = [];
+let menuHandler;
+let finishActions;
+let unlistened = false;
+globalThis.window = {
+    __TAURI_INTERNALS__: {
+        metadata: { currentWindow: { label: 'main' } },
+        transformCallback(callback) { menuHandler = callback; return 2; },
+        invoke(command, args) {
+            if (command === 'plugin:event|listen') {
+                assert.equal(args.event, 'menu-action');
+                return new Promise(resolve => { finishActions = () => resolve(9); });
+            }
+            if (command === 'plugin:event|unlisten') unlistened = true;
+            return Promise.resolve();
+        },
+    },
+    __TAURI_EVENT_PLUGIN_INTERNALS__: { unregisterListener() {} },
+};
+const names = new Msg(0, []).cases();
+const listener = onActions()(message => actions.push(names[message.tag]));
+await flush();
+finishActions();
+await flush();
+for (const payload of ['projects', 'refresh', 'close-tab', 'about', 'unknown']) {
+    menuHandler({ payload });
+}
+assert.deepEqual(actions, ['ShowProjects', 'RefreshGitStatuses', 'CloseActiveTab', 'OpenAbout']);
+listener.Dispose();
+await flush();
+assert.ok(unlistened);
+menuHandler({ payload: 'about' });
+assert.equal(actions.length, 4);
+unlistened = false;
+const pendingActions = onActions()(() => assert.fail('Disposed menu listener must not dispatch'));
+pendingActions.Dispose();
+await flush();
+finishActions();
+await flush();
+assert.ok(unlistened);
+console.log('PASS: desktop menu actions and asynchronous listener cleanup.');

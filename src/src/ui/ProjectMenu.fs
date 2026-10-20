@@ -66,3 +66,37 @@ let onAddProject () =
         }
 
     start
+
+let onActions () =
+    let start dispatch =
+        let mutable disposed = false
+        let mutable unsubscribe: Tauri.Event.UnlistenFn option = None
+
+        promise {
+            try
+                let! unlisten =
+                    AppTauri.Window.onMenuAction (fun action ->
+                        if not disposed then
+                            match action with
+                            | "projects" -> dispatch ShowProjects
+                            | "refresh" -> dispatch RefreshGitStatuses
+                            | "close-tab" -> dispatch CloseActiveTab
+                            | "about" -> dispatch OpenAbout
+                            | _ -> ())
+
+                if disposed then
+                    unlisten ()
+                else
+                    unsubscribe <- Some unlisten
+            with error ->
+                Browser.Dom.console.error ("Could not subscribe to the application menu", error)
+        }
+        |> ignore
+
+        { new IDisposable with
+            member _.Dispose() =
+                disposed <- true
+                unsubscribe |> Option.iter (fun unlisten -> unlisten ())
+        }
+
+    start

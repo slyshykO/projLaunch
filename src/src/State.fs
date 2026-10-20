@@ -1,7 +1,6 @@
 module state
 
 open Elmish
-open Feliz.Router
 open System
 open projectData
 
@@ -18,13 +17,26 @@ type ProjectGitCheck =
         error: string option
     }
 
+type RepositoryTab =
+    {
+        id: string
+        root: string
+        name: string
+    }
+
 type Msg =
     | Empty
 
     | Start
     | OnStart of unit
 
-    | UrlChanged of string list
+    | ShowProjects
+    | OpenRepositoryTab of GitProtocol.RepositoryStatus
+    | SelectRepositoryTab of string
+    | CloseRepositoryTab of string
+    | CloseActiveTab
+    | OpenAbout
+    | CloseAbout
 
     | GetDataDir
     | OnGetDataDir of string
@@ -76,7 +88,9 @@ type Msg =
 
 type State =
     {
-        currentUrl: string list
+        repositoryTabs: RepositoryTab list
+        activeRepositoryTab: string option
+        isAboutOpen: bool
         currentTime: DateTime
         signIn: option<SignIn>
         appVersion: string
@@ -98,11 +112,7 @@ type State =
 
 let mutable allowWindowClose = false
 
-let getCurrentUrl () = Browser.Dom.window.location.href
-
 let init () =
-
-    let currentUrl = Router.currentUrl ()
 
     let pd =
         if Debug.Debug && not (AppTauri.Core.isAvailable ()) then
@@ -118,7 +128,9 @@ let init () =
     // Initial state
     let state =
         {
-            currentUrl = currentUrl
+            repositoryTabs = []
+            activeRepositoryTab = None
+            isAboutOpen = false
             currentTime = DateTime.Now
             signIn = None
             appVersion = ""
@@ -166,7 +178,67 @@ let update msg state =
         else
             state, Cmd.none
 
-    | UrlChanged url -> { state with currentUrl = url }, Cmd.none
+    | ShowProjects ->
+        { state with
+            activeRepositoryTab = None
+        },
+        Cmd.none
+    | OpenRepositoryTab repository ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.root = repository.root) with
+        | Some tab ->
+            { state with
+                activeRepositoryTab = Some tab.id
+            },
+            Cmd.none
+        | None ->
+            let tab =
+                {
+                    id = Guid.NewGuid().ToString()
+                    root = repository.root
+                    name = repository.name
+                }
+
+            { state with
+                repositoryTabs = state.repositoryTabs @ [ tab ]
+                activeRepositoryTab = Some tab.id
+            },
+            Cmd.none
+    | SelectRepositoryTab id ->
+        if state.repositoryTabs |> List.exists (fun tab -> tab.id = id) then
+            { state with
+                activeRepositoryTab = Some id
+            },
+            Cmd.none
+        else
+            state, Cmd.none
+    | CloseActiveTab ->
+        state,
+        (state.activeRepositoryTab
+         |> Option.map (CloseRepositoryTab >> Cmd.ofMsg)
+         |> Option.defaultValue Cmd.none)
+    | CloseRepositoryTab id ->
+        let remaining = state.repositoryTabs |> List.filter (fun tab -> tab.id <> id)
+
+        let active =
+            if state.activeRepositoryTab <> Some id then
+                state.activeRepositoryTab
+            else
+                state.repositoryTabs
+                |> List.takeWhile (fun tab -> tab.id <> id)
+                |> List.tryLast
+                |> Option.map (fun tab -> tab.id)
+
+        { state with
+            repositoryTabs = remaining
+            activeRepositoryTab = active
+        },
+        Cmd.none
+    | OpenAbout ->
+        if state.projectEditor.IsSome then
+            state, Cmd.none
+        else
+            { state with isAboutOpen = true }, Cmd.none
+    | CloseAbout -> { state with isAboutOpen = false }, Cmd.none
 
     | RefreshGitStatuses ->
         state,
@@ -400,7 +472,7 @@ let update msg state =
         newState, Cmd.none
 
     | OpenAddProjectModal ->
-        if state.isProjectSaving || state.projectEditor.IsSome then
+        if state.isProjectSaving || state.projectEditor.IsSome || state.isAboutOpen then
             state, Cmd.none
         else
             let project =
@@ -460,7 +532,7 @@ let update msg state =
                         path = draft.path.Trim()
                     }
 
-                let save project =
+                let save (project: ProjectData) =
                     promise {
                         do! AppTauri.Projects.saveProject project.id (ProjectData.toJson project)
                         return project

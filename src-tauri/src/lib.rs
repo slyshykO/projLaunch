@@ -124,9 +124,23 @@ pub fn run() {
             let add_project = MenuItemBuilder::with_id("add-project", "Add project…")
                 .accelerator("CmdOrCtrl+N")
                 .build(app)?;
+            let close_tab =
+                MenuItemBuilder::with_id("close-tab", "Close repository tab").build(app)?;
+            let exit = MenuItemBuilder::with_id("exit", "Exit").build(app)?;
             let file_menu = SubmenuBuilder::new(app, "File")
                 .item(&add_project)
+                .item(&close_tab)
+                .separator()
+                .item(&exit)
                 .build()?;
+            let projects = MenuItemBuilder::with_id("projects", "Projects").build(app)?;
+            let refresh = MenuItemBuilder::with_id("refresh", "Refresh Git status").build(app)?;
+            let view_menu = SubmenuBuilder::new(app, "View")
+                .item(&projects)
+                .item(&refresh)
+                .build()?;
+            let about = MenuItemBuilder::with_id("about", "About ProjLaunch…").build(app)?;
+            let help_menu = SubmenuBuilder::new(app, "Help").item(&about).build()?;
             let menu = MenuBuilder::new(app);
             #[cfg(target_os = "macos")]
             let menu = menu.item(
@@ -134,7 +148,7 @@ pub fn run() {
                     .quit()
                     .build()?,
             );
-            let menu = menu.item(&file_menu);
+            let menu = menu.item(&file_menu).item(&view_menu).item(&help_menu);
             #[cfg(target_os = "macos")]
             let menu = menu.item(
                 &SubmenuBuilder::new(app, "Edit")
@@ -153,6 +167,15 @@ pub fn run() {
                     if let Err(error) = app.emit_to("main", "menu-add-project", ()) {
                         eprintln!("Could not open project editor: {error}");
                     }
+                } else if event.id() == "exit" {
+                    if let Some(window) = app.get_webview_window("main") {
+                        // Use the normal close flow, including saving window state.
+                        if let Err(error) = window.close() {
+                            tracing::error!(%error, "Could not close the main window");
+                        }
+                    }
+                } else if let Err(error) = app.emit_to("main", "menu-action", event.id().as_ref()) {
+                    tracing::error!(%error, "Could not dispatch menu action");
                 }
             });
             let directory = app.path().app_data_dir().map_err(|error| error.to_string());

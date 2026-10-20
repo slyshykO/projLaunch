@@ -30,7 +30,16 @@ The app currently lets you:
   - SSH
   - WSL
 - persist window state between launches
-- inspect app/runtime details on the `About` page
+- work in desktop tabs: a permanent Projects tab and closable repository tabs
+- open a repository tab by clicking its Git indicator; shared roots reuse the same tab
+- inspect app/runtime details in the `Help → About ProjLaunch` dialog
+
+The native menu contains File (Add project, Close repository tab, Exit), View
+(Projects, Refresh Git status), and Help (About). Add project also supports
+Ctrl/Cmd+N. About closes with Close or Escape. Tab navigation supports the arrow,
+Home and End keys. Switching tabs retains each panel's scroll position.
+Repository tabs currently show their name and path as a home for the upcoming
+history/graph/diff interface. Open tabs are kept only for the current app session.
 
 When a project is opened, the app updates its `lastOpened` value and rewrites the stored project record.
 
@@ -308,6 +317,8 @@ dotnet fable src -o ./src/bin/fable-js --configuration Debug
 node scripts/tests/test-project-editor.mjs
 node scripts/tests/test-project-git.mjs
 node scripts/tests/test-about-version.mjs
+node scripts/tests/test-project-menu.mjs
+node scripts/tests/test-desktop-tabs.mjs
 ```
 
 These checks use an isolated IPC stub, without accessing the user's database.

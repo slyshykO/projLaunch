@@ -23,6 +23,7 @@
     <Compile Include="src/State.fs" />
     <Compile Include="src/ui/ProjectMenu.fs" />
     <Compile Include="src/ui/SvgIcons.fs" />
+    <Compile Include="src/ui/DesktopTabs.fs" />
     <Compile Include="src/ui/ProjectEditor.fs" />
     <Compile Include="src/ui/View.fs" />
     <Compile Include="src/Program.fs" />

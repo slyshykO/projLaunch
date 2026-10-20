@@ -1,99 +1,16 @@
 module view
 
 open Feliz
-open Feliz.Router
+open System
 open Feliz.DaisyUI
 
 open projectData
 open state
 
-module JsInterop =
-    open Fable.Core
-
-    [<Emit("$0.showModal()")>]
-    let inline showModal (_modalId: string) : unit = jsNative
-
-    [<Emit("modal-add-project.showModal()")>]
-    let inline showModalAddProject () : unit = jsNative
-
-    [<Import("_showModalDialog", "../interop/_ReactVersion.js")>]
-    let _showModalDialog: unit -> unit = jsNative
-
-    [<Import("_closeModalDialog", "../interop/_ReactVersion.js")>]
-    let _closeModalDialog: unit -> unit = jsNative
-
-    [<Import("_showModalDialogById", "../interop/_ReactVersion.js")>]
-    let _showModalDialogById: string -> unit = jsNative
-
-    [<Import("_closeModalDialogById", "../interop/_ReactVersion.js")>]
-    let _closeModalDialogById: string -> unit = jsNative
-
-
-    let inline showModalDialog () = _showModalDialog ()
-    let inline closeModalDialog () = _closeModalDialog ()
-
-    let inline showModalDialogById (id: string) = _showModalDialogById id
-    let inline closeModalDialogById (id: string) = _closeModalDialogById id
-
 let pageTheme _state = theme.light
 
 [<ReactMemoComponent>]
-let private Navbar (currentUrl: string list) (randomSalt: string) =
-    Daisy.navbar [
-        prop.classes [ "bg-base-300"; "shadow-lg"; "justify-end" ]
-        prop.id $"navbar-{randomSalt}"
-        prop.children [
-            Html.div [
-                prop.className "flex-none"
-                prop.children [
-                    Daisy.menu [
-                        menu.xs
-                        prop.classes [ "sm:menu-horizontal" ]
-                        prop.children [
-                            Html.li [
-                                prop.id "menu-item-project"
-                                prop.children [
-                                    Html.a [
-                                        prop.className (
-                                            if currentUrl = [] || currentUrl = [ "projects" ] then
-                                                "menu-active"
-                                            else
-                                                ""
-                                        )
-                                        prop.href "#projects"
-                                        prop.children [
-                                            Html.span [
-                                                prop.classes [ "text-sm"; "font-bold"; "font-mono" ]
-                                                prop.children [ Html.text "Projects" ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                            ]
-                            Html.li [
-                                prop.id "menu-item-about"
-                                prop.children [
-                                    Html.a [
-                                        prop.className (if currentUrl = [ "about" ] then "menu-active" else "")
-                                        prop.href "#about"
-                                        prop.children [
-                                            Html.span [
-                                                prop.classes [ "text-sm"; "font-bold"; "font-mono" ]
-                                                prop.children [ Html.text "About" ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ] // Menu
-                ]
-            ] // Navbar children flex-none
-        ] // Navbar children
-    ] // Navbar
-
-[<ReactMemoComponent>]
-let private ProjectGitIndicators (check: ProjectGitCheck option) =
+let private ProjectGitIndicators (check: ProjectGitCheck option) (dispatch: Msg -> unit) =
     let note text title =
         Html.span [
             prop.className "text-xs text-base-content/60"
@@ -132,12 +49,14 @@ let private ProjectGitIndicators (check: ProjectGitCheck option) =
                             |> List.choose id
                             |> String.concat "\n"
 
-                        Html.div [
+                        Html.button [
+                            prop.type' "button"
                             prop.key repo.root
-                            prop.title details
-                            prop.ariaLabel $"{repo.name}: {label}. {details}"
+                            prop.title $"Open repository\n{details}"
+                            prop.ariaLabel $"Open repository {repo.name}: {label}. {details}"
+                            prop.onClick (fun _ -> dispatch (OpenRepositoryTab repo))
                             prop.className
-                                "flex items-center gap-1.5 rounded border border-base-300 px-2 py-1 text-xs min-w-0"
+                                "flex items-center gap-1.5 rounded border border-base-300 px-2 py-1 text-xs min-w-0 hover:bg-base-300 focus-visible:outline-2 focus-visible:outline-primary cursor-pointer"
                             prop.children [
                                 svgIcons.git 18
                                 Html.span [ prop.className "truncate max-w-32"; prop.text repo.name ]
@@ -211,7 +130,7 @@ let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (dispatch: Msg
                         )
                     ]
                 ]
-                ProjectGitIndicators gitCheck
+                ProjectGitIndicators gitCheck dispatch
             ]
         ]
     ]
@@ -229,7 +148,7 @@ let private Projects
         prop.children [
             Html.div [
                 prop.id $"projects-cards-grid-{randomSalt}"
-                prop.classes [ "grid"; "grid-cols-3"; "gap-4" ]
+                prop.className "grid grid-cols-[repeat(auto-fill,minmax(min(100%,350px),1fr))] gap-4"
                 prop.children [
                     for prj in projects do
                         yield
@@ -255,15 +174,16 @@ let private About
     (randomSalt: string)
     =
     Html.div [
-        prop.classes [ "p-10"; "font-mono" ]
+        prop.classes [ "text-sm" ]
         prop.id $"about-{randomSalt}"
         prop.children [
             Html.h1 [
-                prop.classes [ "text-3xl"; "font-bold" ]
+                prop.id "about-title"
+                prop.classes [ "text-xl"; "font-semibold"; "mb-4" ]
                 prop.children [ Html.text "About" ]
             ]
             Daisy.table [
-                prop.classes [ "text-lg"; "font-mono"; "table-auto"; "w-fit"; "whitespace-nowrap"; "p-1" ]
+                prop.classes [ "text-sm"; "table-auto"; "w-full"; "break-all"; "p-1" ]
                 prop.children [
                     Html.tbody [
                         Html.tr [
@@ -372,82 +292,122 @@ let private About
 
     ]
 
-[<ReactMemoComponent>]
-let private Page404 (currentUrl: string list) (randomSalt: string) =
-
-    let p = sprintf "Page `%A` not found." currentUrl
-
-    Html.div [
-        prop.className "p-10"
-        prop.id $"404-{randomSalt}"
-        prop.children [
-            Html.h1 [ prop.className "text-4xl font-bold"; prop.children [ Html.text "404" ] ]
-            Html.p [ prop.className "text-lg"; prop.children [ Html.text p ] ]
-        ]
-    ]
-
 [<ReactComponent>]
-let View state dispatch =
-    let page =
-        Html.div [
-            prop.classes [
-                "flex"
-                "flex-col"
-                "h-screen"
-                "overflow-hidden"
-                "bg-base-100"
-                "text-base-content"
-                "font-mono"
-            ]
-            prop.id $"app-{state.randomSalt}"
-            pageTheme state // Apply the theme
-            prop.children [
-                Navbar state.currentUrl state.randomSalt
-                match state.projectEditor with
-                | Some project ->
-                    Html.div [
-                        prop.key project.id
-                        prop.children [
-                            ProjectEditor.Dialog
-                                project
-                                (not (state.projects |> List.exists (fun existing -> existing.id = project.id)))
-                                state.isProjectSaving
-                                state.projectSaveError
-                                dispatch
-                        ]
-                    ]
-                | None -> Html.none
-                Html.div [
-                    prop.id "main-view"
-                    prop.classes [ "mt-0"; "overflow-y-auto"; "h-screen" ]
-                    prop.children [
-                        match state.projectStorageError with
-                        | Some error ->
-                            Html.div [
-                                prop.role "alert"
-                                prop.classes [ "alert"; "alert-error"; "m-4"; "whitespace-pre-wrap"; "break-words" ]
-                                prop.text error
-                            ]
-                        | None -> Html.none
+let private AboutDialog (state: State) (dispatch: Msg -> unit) =
+    React.useEffectOnce (fun () ->
+        let modal =
+            Browser.Dom.document.getElementById "about-dialog" :?> Browser.HTMLDialogElement
 
-                        match state.currentUrl with
-                        | [] -> Projects state.projects state.projectGit state.randomSalt dispatch
-                        | [ "projects" ] -> Projects state.projects state.projectGit state.randomSalt dispatch
-                        | [ "about" ] ->
-                            About
-                                state.appVersion
-                                state.tauriVersion
-                                state.appDataDir
-                                state.appConfigDir
-                                state.appWindowSize
-                                state.appWindowPosition
-                                state.currentTime
-                                state.errors
-                                state.randomSalt
-                        | _ -> Page404 state.currentUrl state.randomSalt
+        modal.showModal ()
+
+        { new IDisposable with
+            member _.Dispose() =
+                if modal.``open`` then
+                    modal.close ()
+        })
+
+    Html.dialog [
+        prop.id "about-dialog"
+        prop.className "modal"
+        prop.ariaLabelledBy "about-title"
+        prop.onCancel (fun event ->
+            event.preventDefault ()
+            dispatch CloseAbout)
+        prop.children [
+            Html.div [
+                prop.className "modal-box w-11/12 max-w-2xl"
+                prop.children [
+                    About
+                        state.appVersion
+                        state.tauriVersion
+                        state.appDataDir
+                        state.appConfigDir
+                        state.appWindowSize
+                        state.appWindowPosition
+                        state.currentTime
+                        state.errors
+                        state.randomSalt
+                    Html.div [
+                        prop.className "modal-action"
+                        prop.children [
+                            Html.button [
+                                prop.type' "button"
+                                prop.className "btn btn-sm"
+                                prop.autoFocus true
+                                prop.text "Close"
+                                prop.onClick (fun _ -> dispatch CloseAbout)
+                            ]
+                        ]
                     ]
                 ]
             ]
         ]
+    ]
 
-    React.router [ router.onUrlChanged (UrlChanged >> dispatch); router.children [ page ] ]
+[<ReactComponent>]
+let View (state: State) dispatch =
+    Html.div [
+        prop.className "flex flex-col h-screen overflow-hidden bg-base-100 text-base-content"
+        prop.id $"app-{state.randomSalt}"
+        pageTheme state
+        prop.children [
+            DesktopTabs.TabBar state.repositoryTabs state.activeRepositoryTab dispatch
+            match state.projectEditor with
+            | Some project ->
+                Html.div [
+                    prop.key project.id
+                    prop.children [
+                        ProjectEditor.Dialog
+                            project
+                            (not (state.projects |> List.exists (fun existing -> existing.id = project.id)))
+                            state.isProjectSaving
+                            state.projectSaveError
+                            dispatch
+                    ]
+                ]
+            | None -> Html.none
+            if state.isAboutOpen then
+                AboutDialog state dispatch
+            Html.main [
+                prop.id "main-view"
+                prop.className "flex-1 min-h-0 overflow-hidden"
+                prop.children [
+                    Html.div [
+                        prop.id "panel-projects"
+                        prop.role "tabpanel"
+                        prop.ariaLabelledBy "tab-projects"
+                        prop.hidden state.activeRepositoryTab.IsSome
+                        prop.tabIndex 0
+                        prop.className "h-full overflow-auto"
+                        prop.children [
+                            match state.projectStorageError with
+                            | Some error ->
+                                Html.div [
+                                    prop.role "alert"
+                                    prop.className "alert alert-error m-4 whitespace-pre-wrap break-words"
+                                    prop.text error
+                                ]
+                            | None -> Html.none
+                            if List.isEmpty state.projects && state.projectStorageError.IsNone then
+                                Html.div [
+                                    prop.className "p-12 text-center text-base-content/60"
+                                    prop.text "Add your first project using File → Add project… or Ctrl+N."
+                                ]
+                            Projects state.projects state.projectGit state.randomSalt dispatch
+                        ]
+                    ]
+                    for tab in state.repositoryTabs do
+                        Html.div [
+                            prop.key tab.id
+                            prop.id $"panel-{tab.id}"
+                            prop.role "tabpanel"
+                            prop.ariaLabelledBy $"tab-{tab.id}"
+                            prop.hidden (state.activeRepositoryTab <> Some tab.id)
+                            prop.tabIndex 0
+                            prop.className "h-full overflow-auto"
+                            prop.children [ DesktopTabs.RepositoryPanel tab ]
+                        ]
+                ]
+            ]
+        ]
+    ]
