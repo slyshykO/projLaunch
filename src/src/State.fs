@@ -97,7 +97,6 @@ type State =
         tauriVersion: string
         appDataDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
         appConfigDir: string // C:\Users\alex\AppData\Roaming\com.projlaunch.app
-        errors: string list
         projects: ProjectData list
         projectStorageError: string option
         projectGit: Map<string, ProjectGitCheck>
@@ -135,7 +134,6 @@ let init () =
             tauriVersion = ""
             appDataDir = ""
             appConfigDir = ""
-            errors = []
             projects = pd
             projectStorageError = None
             projectGit = Map.empty
@@ -382,7 +380,6 @@ let update msg state =
         state,
         Cmd.OfPromise.either AppTauri.Projects.getProjectsAfterStartup timeout OnGetProjectsSuccess OnGetProjectsError
     | OnGetProjectsSuccess response ->
-        let mutable err = []
         let mutable prj: ProjectData list = []
 
         for r in response do
@@ -390,16 +387,13 @@ let update msg state =
                 let pd = ProjectData.fromJson r
                 prj <- List.append prj [ pd ]
             with ex ->
-                let s = sprintf "%A" ex
-                err <- List.append err [ s ]
-                ()
+                FrontendLog.error $"Could not decode project record: {ex}"
 
         // sort by last opened
         prj <- prj |> List.sortByDescending (fun p -> p.lastOpened)
 
         let newState =
             { state with
-                errors = err |> List.append state.errors
                 projectStorageError = None
                 projectGit =
                     state.projectGit
@@ -410,11 +404,10 @@ let update msg state =
         newState, Cmd.ofMsg RefreshGitStatuses
     | OnGetProjectsError exn ->
         let e = sprintf "Error: %A" exn
-        let newErrors = List.append state.errors [ e ]
+        FrontendLog.error $"Could not load projects: {exn}"
 
         let newState =
             { state with
-                errors = newErrors
                 projectStorageError = Some e
             }
 
@@ -442,10 +435,8 @@ let update msg state =
         newState, Cmd.ofMsg (AddOrUpdateProject(id, prjJson))
 
     | OnOpenProjectError exn ->
-        let e = sprintf "Error: %A" exn
-        let newErrors = List.append state.errors [ e ]
-        let newState = { state with errors = newErrors }
-        newState, Cmd.none
+        FrontendLog.error $"Could not open project: {exn}"
+        state, Cmd.none
 
     | AddOrUpdateProject(id, json) ->
         let addOrUpdateProjectPromise (i, j) =
@@ -459,11 +450,10 @@ let update msg state =
     | OnAddOrUpdateProjectSuccess _id -> state, Cmd.ofMsg (GetProjects 0)
     | OnAddOrUpdateProjectError exn ->
         let e = sprintf "Error: %A" exn
-        let newErrors = List.append state.errors [ e ]
+        FrontendLog.error $"Could not update project: {exn}"
 
         let newState =
             { state with
-                errors = newErrors
                 projectStorageError = Some e
             }
 
@@ -599,7 +589,6 @@ let update msg state =
 
         let newState =
             { state with
-                errors = List.append state.errors [ e ]
                 isWindowClosePending = false
             }
 
@@ -612,7 +601,6 @@ let update msg state =
 
         let newState =
             { state with
-                errors = List.append state.errors [ e ]
                 isWindowClosePending = false
             }
 

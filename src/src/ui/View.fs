@@ -170,7 +170,6 @@ let private About
     (appWindowSize: Tauri.Dpi.PhysicalSize option)
     (appWindowPosition: Tauri.Dpi.PhysicalPosition option)
     (currentTime: System.DateTime)
-    (errors: string list)
     (randomSalt: string)
     =
     Html.div [
@@ -281,13 +280,6 @@ let private About
                 ]
             ]
 
-            Daisy.divider []
-            Html.div [
-                prop.children [
-                    for e in errors do
-                        yield Html.p [ Html.text (sprintf "%s" e) ]
-                ]
-            ]
         ]
 
     ]
@@ -325,7 +317,6 @@ let private AboutDialog (state: State) (dispatch: Msg -> unit) =
                         state.appWindowSize
                         state.appWindowPosition
                         state.currentTime
-                        state.errors
                         state.randomSalt
                     Html.div [
                         prop.className "modal-action"

@@ -123,6 +123,8 @@ remaining messages; logging does not wait for shutdown.
 
 `FrontendLog.info`, `FrontendLog.debug` and `FrontendLog.error` are available to
 F# code. IPC failures log the command name and error, never the argument object.
+State diagnostics go directly to the log; About does not display an error history.
+Actionable project-loading and editor errors remain visible in their respective UI.
 Avoid logging project records, environment values or credentials. Browser-only
 development keeps console output without attempting native logging.
 

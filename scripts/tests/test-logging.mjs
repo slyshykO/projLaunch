@@ -146,8 +146,22 @@ const subscription = startFrontend();
 try {
     await assert.rejects(Core_invoke('failing_command', { token: 'do-not-log-this-token' }));
     console.info('last message before close');
-    const state = init()[0];
+    let state = init()[0];
     const cases = new Msg(0, []).cases();
+    assert.ok(!('errors' in state), 'State must not accumulate a diagnostic history');
+    const failures = [
+        ['OnGetProjectsError', 'load failure'],
+        ['OnOpenProjectError', 'open failure'],
+        ['OnAddOrUpdateProjectError', 'update failure'],
+        ['OnWindowSaveError', 'window save failure'],
+        ['OnWindowCloseError', 'window close failure'],
+    ];
+    for (const [name, error] of failures) {
+        [state] = update(new Msg(cases.indexOf(name), [error]), state);
+        assert.ok(!('errors' in state));
+    }
+    assert.match(state.projectStorageError, /update failure/, 'Actionable storage errors remain in the project UI');
+    [state] = update(new Msg(cases.indexOf('OnGetProjectsSuccess'), [['invalid-json']]), state);
     const [, commands] = update(new Msg(cases.indexOf('OnWindowSaveSuccess'), []), state);
     await new Promise(resolve => { for (const run of commands) run(resolve); });
     const closeIndex = ipc.findIndex(call => call.command === 'plugin:window|close');
@@ -155,6 +169,11 @@ try {
     const sent = ipc.slice(0, closeIndex).filter(call => call.command === 'frontend_log').flatMap(call => call.args.entries);
     assert.ok(sent.some(entry => entry.message === 'last message before close'));
     assert.ok(sent.some(entry => entry.level === 'error' && entry.message.includes('failing_command')));
+    for (const [, error] of failures) {
+        assert.ok(sent.some(entry => entry.level === 'error' && entry.message.includes(error)),
+            `State failure must reach the application log: ${error}`);
+    }
+    assert.ok(sent.some(entry => entry.level === 'error' && entry.message.includes('Could not decode project record')));
     assert.ok(!JSON.stringify(sent).includes('do-not-log-this-token'), 'IPC parameters must not be copied into logs');
 } finally {
     subscription.Dispose();
