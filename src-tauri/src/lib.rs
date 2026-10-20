@@ -9,11 +9,7 @@ use tauri::{
     Emitter, Manager,
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
 };
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tauri::command]
 fn get_data_dir(app_handle: tauri::AppHandle) -> Result<String, tauri::Error> {
@@ -119,6 +115,7 @@ async fn rewrite_project_file(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_tracing();
     tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
@@ -185,4 +182,17 @@ pub fn run() {
                 tauri::async_runtime::block_on(app.state::<git_host::GitHost>().shutdown());
             }
         });
+}
+
+fn init_tracing() {
+    use tracing_subscriber::EnvFilter;
+
+    let env_var = std::env::var("PROJ_LAUNCHER_LOG").unwrap_or_else(|_| "info".into());
+
+    let filter = EnvFilter::new(env_var).add_directive("tauri=info".parse().unwrap());
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(tracing_subscriber::fmt::layer())
+        .init();
 }
