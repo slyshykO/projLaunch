@@ -291,7 +291,7 @@ dependencies = [
 
 [[package]]
 name = "git-client"
-version = "0.4.3+35.gb2a4366.dirty"
+version = "0.4.3+35.gb2a4366"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -304,14 +304,14 @@ dependencies = [
 
 [[package]]
 name = "git-protocol"
-version = "0.4.3+35.gb2a4366.dirty"
+version = "0.4.3+35.gb2a4366"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "git-server"
-version = "0.4.3+35.gb2a4366.dirty"
+version = "0.4.3+35.gb2a4366"
 dependencies = [
  "anyhow",
  "axum",
