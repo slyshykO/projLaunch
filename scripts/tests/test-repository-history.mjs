@@ -8,6 +8,7 @@ globalThis.isTauri = true;
 globalThis.window = {
     __TAURI_INTERNALS__: {
         invoke(command, args) {
+            if (command === "git_status") return Promise.resolve({ entries: [] });
             assert.ok(['git_open', 'git_log'].includes(command));
             return new Promise((resolve, reject) => requests.push({ command, params: args.params, resolve, reject }));
         },

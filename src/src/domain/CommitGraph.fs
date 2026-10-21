@@ -54,6 +54,9 @@ type Row =
         passing: Edge array
         parents: Edge array
         branch: BranchLabel option
+        uncommitted: bool
+        dashedAbove: bool
+        dashedBelow: bool
     }
 
 type Layout =
@@ -208,6 +211,9 @@ let layout (commits: GitProtocol.Commit array) : Layout =
                 passing = passing
                 parents = edges
                 branch = None
+                uncommitted = false
+                dashedAbove = false
+                dashedBelow = false
             })
 
     {
@@ -215,3 +221,40 @@ let layout (commits: GitProtocol.Commit array) : Layout =
         laneCount = laneCount
         continuations = lanes
     }
+
+/// Presentation-only node; it never enters history state or a Git commit request.
+let workingTreeOid = "working-tree"
+
+let withWorkingTree (status: GitProtocol.Status option) (commits: GitProtocol.Commit array) =
+    match status with
+    | Some status when status.entries.Length > 0 ->
+        let node: GitProtocol.Commit =
+            {
+                oid = workingTreeOid
+                parents = status.head |> Option.toArray
+                authorName = ""
+                authorEmail = ""
+                authorDate = ""
+                commitDate = ""
+                subject = "Uncommitted changes"
+                refs = [||]
+            }
+
+        let displayed = Array.append [| node |] commits
+        let graph = layout displayed
+
+        let headIndex =
+            status.head
+            |> Option.bind (fun head -> displayed |> Array.tryFindIndex (fun commit -> commit.oid = head))
+
+        let rows =
+            graph.rows
+            |> Array.mapi (fun index row ->
+                { row with
+                    uncommitted = index = 0
+                    dashedAbove = index > 0 && (headIndex |> Option.forall (fun head -> index <= head))
+                    dashedBelow = headIndex |> Option.forall (fun head -> index < head)
+                })
+
+        displayed, { graph with rows = rows }
+    | _ -> commits, layout commits

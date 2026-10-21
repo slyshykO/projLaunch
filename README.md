@@ -82,6 +82,19 @@ These labels describe graph lines, not every branch containing a commit or the
 branch on which it was originally created.
 Open tabs are kept only for the current app session.
 
+Repositories with local changes show an `Uncommitted changes` row above history.
+Its hollow node connects to the current HEAD with a dashed line, including when
+other branch tips precede HEAD. Repositories without a first commit show the node
+without a parent. Selecting it opens Staged (HEAD → index), Unstaged (index →
+working tree) and Untracked file groups in the existing file panel. A partially
+staged file can appear in both groups, with a separate diff for each. New files
+show a text preview; binary and truncated results retain their explicit messages.
+Refresh and window focus reload the status and selected working-tree file groups,
+closing any mutable diff so stale contents are not retained. Committed selections
+and their diffs remain unchanged. Clean repositories omit the extra graph row;
+status failures are displayed separately from history errors. No staging or
+other Git write operations are performed.
+
 When a project is opened, the app updates its `lastOpened` value and rewrites the stored project record.
 
 Git indicators refresh after loading or saving projects and when the app regains
@@ -396,6 +409,7 @@ node scripts/tests/test-repository-history.mjs
 node scripts/tests/test-commit-graph.mjs
 node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-commit-diff.mjs
+node scripts/tests/test-working-tree.mjs
 node scripts/tests/test-logging.mjs
 ```
 

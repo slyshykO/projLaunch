@@ -71,16 +71,20 @@ let Panel (tabId: string) (selection: CommitFiles) (diff: CommitDiff) dispatch =
                                                         [
                                                             prop.className "text-xs text-base-content/60 mt-1 break-all"
                                                             prop.text (
-                                                                CommitFilesView.parentLabel selection.commit
-                                                                + (if selection.commit.parents.Length > 1 then
-                                                                       let index =
-                                                                           (selection.parent |> Option.defaultValue 1)
-                                                                           - 1
+                                                                match selection.commit with
+                                                                | None -> CommitFilesView.targetLabel diff.target
+                                                                | Some commit ->
+                                                                    CommitFilesView.parentLabel commit
+                                                                    + (if commit.parents.Length > 1 then
+                                                                           let index =
+                                                                               (selection.parent
+                                                                                |> Option.defaultValue 1)
+                                                                               - 1
 
-                                                                       let oid = selection.commit.parents[index]
-                                                                       $" · diff: {oid.Substring(0, min 6 oid.Length)}"
-                                                                   else
-                                                                       "")
+                                                                           let oid = commit.parents[index]
+                                                                           $" · diff: {oid.Substring(0, min 6 oid.Length)}"
+                                                                       else
+                                                                           "")
                                                             )
                                                         ]
                                                 ]
@@ -159,7 +163,15 @@ let Panel (tabId: string) (selection: CommitFiles) (diff: CommitDiff) dispatch =
                                                     ]
                                             else
                                                 match patch.text with
-                                                | Some text when text.Length > 0 -> PatchText text
+                                                | Some text when text.Length > 0 ->
+                                                    if patch.untracked then
+                                                        Html.p
+                                                            [
+                                                                prop.className "px-4 py-2 bg-info/10 text-sm"
+                                                                prop.text "New file preview (not tracked by Git)."
+                                                            ]
+
+                                                    PatchText text
                                                 | _ ->
                                                     Html.p
                                                         [

@@ -122,7 +122,11 @@ let private CommitRow
     =
     let selected =
         tab.selection
-        |> Option.exists (fun selection -> selection.commit.oid = commit.oid)
+        |> Option.exists (fun selection ->
+            if graphRow.uncommitted then
+                selection.commit.IsNone
+            else
+                selection.commit |> Option.exists (fun selected -> selected.oid = commit.oid))
 
     Html.tr
         [
@@ -138,7 +142,13 @@ let private CommitRow
             prop.onMouseLeave (fun _ -> onHover None)
             prop.onFocus (fun _ -> onFocus (Some graphRow.color))
             prop.onBlur (fun _ -> onFocus None)
-            prop.onClick (fun _ -> dispatch (SelectRepositoryCommit(tab.id, commit.oid)))
+            prop.onClick (fun _ ->
+                dispatch (
+                    if graphRow.uncommitted then
+                        SelectWorkingTree tab.id
+                    else
+                        SelectRepositoryCommit(tab.id, commit.oid)
+                ))
             prop.children
                 [
                     CommitGraphView.References graphRow commit.refs
@@ -152,6 +162,7 @@ let private CommitRow
                                         [
                                             prop.type' "button"
                                             prop.ariaPressed selected
+                                            prop.disabled (graphRow.uncommitted && tab.history.requestId.IsSome)
                                             prop.className
                                                 "break-words text-left cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
                                             prop.text commit.subject
@@ -174,7 +185,12 @@ let private CommitRow
                         [
                             prop.className "font-mono text-base-content/70"
                             prop.title commit.oid
-                            prop.text (commit.oid.Substring(0, min 8 commit.oid.Length))
+                            prop.text (
+                                if graphRow.uncommitted then
+                                    ""
+                                else
+                                    commit.oid.Substring(0, min 8 commit.oid.Length)
+                            )
                         ]
                 ]
         ]
@@ -194,8 +210,17 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
         [| box history.commits |]
     )
 
-    let graph =
-        React.useMemo ((fun () -> CommitGraph.layout history.commits), [| box history.commits |])
+    let status =
+        tab.workingTree
+        |> Option.bind (function
+            | Ok status -> Some status
+            | Error _ -> None)
+
+    let displayed, graph =
+        React.useMemo (
+            (fun () -> CommitGraph.withWorkingTree status history.commits),
+            [| box history.commits; box tab.workingTree |]
+        )
 
     Html.div
         [
@@ -257,13 +282,28 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                     ]
                             ]
                     | None -> Html.none
+                    match tab.workingTree with
+                    | Some(Error error) ->
+                        Html.div
+                            [
+                                prop.role "alert"
+                                prop.className "px-6 py-3 bg-error/10 text-sm break-words"
+                                prop.text $"Could not load uncommitted changes. Refresh to try again. {error}"
+                            ]
+                    | Some(Ok status) when status.entries.Length = 0 ->
+                        Html.p
+                            [
+                                prop.className "px-6 py-2 text-sm text-base-content/60"
+                                prop.text "Working tree clean"
+                            ]
+                    | _ -> Html.none
                     Html.div
                         [
                             prop.className "flex-1 min-h-0 overflow-auto"
                             prop.ariaBusy loading
                             prop.children
                                 [
-                                    if history.commits.Length > 0 then
+                                    if displayed.Length > 0 then
                                         Html.table
                                             [
                                                 prop.className "table table-sm w-full commit-history-table"
@@ -289,7 +329,7 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                             ]
                                                         Html.tbody
                                                             [
-                                                                for index, commit in history.commits |> Array.indexed do
+                                                                for index, commit in displayed |> Array.indexed do
                                                                     CommitRow
                                                                         tab
                                                                         commit
@@ -378,7 +418,8 @@ let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                     | Some selection, Some diff ->
                                         Html.div
                                             [
-                                                prop.key $"{selection.commit.oid}-{selection.parent}-{diff.file.path}"
+                                                prop.key
+                                                    $"{selection.commit |> Option.map (fun commit -> commit.oid)}-{diff.target}-{diff.file.path}"
                                                 prop.className "h-full min-h-0"
                                                 prop.children [ CommitDiffView.Panel tab.id selection diff dispatch ]
                                             ]

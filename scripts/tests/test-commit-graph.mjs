@@ -155,7 +155,7 @@ assert.match(render(partial), /History continues below/);
 assert.match(render(partial), /stroke-dasharray="3,3"/);
 assert.match(render({ ...partial, history: { ...partial.history, nextCursor: undefined, error: 'Cursor expired' } }),
     /Some parents are outside the loaded history/);
-assert.match(render({ ...tab, selection: { commit: commits[0], parent: 1, files: [], hasLoaded: true } }), /r="9"/);
+assert.match(render({ ...tab, selection: { commit: commits[0], parent: 1, files: [], groups: [], hasLoaded: true } }), /r="9"/);
 assert.equal(render({ ...tab, history: { commits: [], hasLoaded: true } }).includes('commit-graph-node'), false);
 const namedHtml = render({ ...tab, history: { commits: namedCommits, hasLoaded: true } });
 assert.match(namedHtml, /title="refs\/heads\/feature\/x"[^>]*>feature\/x<\/span>/);

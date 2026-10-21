@@ -105,10 +105,13 @@ let References (row: CommitGraph.Row) (references: string array) =
                 ]
         ]
 
-let private path activeLine colorIndex (data: string) =
+let private path dashed activeLine colorIndex (data: string) =
     Svg.path
         [
             svg.d data
+            // The presentation-only working-tree node starts route zero.
+            if dashed && colorIndex = 0 then
+                svg.strokeDasharray [| 4; 4 |]
             svg.stroke (color colorIndex)
             svg.custom ("opacity", opacity activeLine colorIndex)
             svg.strokeWidth 2
@@ -116,7 +119,7 @@ let private path activeLine colorIndex (data: string) =
             svg.custom ("vectorEffect", "non-scaling-stroke")
         ]
 
-let private edgePath activeLine (edge: CommitGraph.Edge) passing =
+let private edgePath dashed activeLine (edge: CommitGraph.Edge) passing =
     let start = x edge.fromLane
     let finish = x edge.toLane
 
@@ -126,7 +129,7 @@ let private edgePath activeLine (edge: CommitGraph.Edge) passing =
         else
             $"M {start} 50"
 
-    path activeLine edge.color $"{prefix} C {start} 75 {finish} 75 {finish} 100"
+    path dashed activeLine edge.color $"{prefix} C {start} 75 {finish} 75 {finish} 100"
 
 let private lines laneCount children =
     Svg.svg
@@ -143,10 +146,11 @@ let private lines laneCount children =
 
 let Cell laneCount (row: CommitGraph.Row) selected activeLine =
     let description =
-        match row.parents.Length with
-        | 0 -> "Root commit"
-        | 1 -> "Commit"
-        | count -> $"Merge commit ({count} parents)"
+        match row.uncommitted, row.parents.Length with
+        | true, _ -> "Uncommitted changes"
+        | false, 0 -> "Root commit"
+        | false, 1 -> "Commit"
+        | false, count -> $"Merge commit ({count} parents)"
 
     Html.td
         [
@@ -164,16 +168,17 @@ let Cell laneCount (row: CommitGraph.Row) selected activeLine =
                         laneCount
                         [
                             for edge in row.passing do
-                                edgePath activeLine edge true
+                                edgePath row.dashedBelow activeLine edge true
                             if row.incoming then
-                                path activeLine row.color $"M {x row.lane} 0 L {x row.lane} 50"
+                                path row.dashedAbove activeLine row.color $"M {x row.lane} 0 L {x row.lane} 50"
                             for edge in row.joining do
                                 path
+                                    row.dashedAbove
                                     activeLine
                                     edge.color
                                     $"M {x edge.fromLane} 0 C {x edge.fromLane} 25 {x edge.toLane} 25 {x edge.toLane} 50"
                             for edge in row.parents do
-                                edgePath activeLine edge false
+                                edgePath row.dashedBelow activeLine edge false
                         ]
                     Html.div
                         [
@@ -210,12 +215,14 @@ let Cell laneCount (row: CommitGraph.Row) selected activeLine =
                                                             svg.cy 11
                                                             svg.r (if row.parents.Length > 1 then 6 else 4)
                                                             svg.fill (
-                                                                if row.parents.Length > 1 then
+                                                                if row.uncommitted || row.parents.Length > 1 then
                                                                     "var(--color-base-100)"
                                                                 else
                                                                     color row.color
                                                             )
                                                             svg.stroke (color row.color)
+                                                            if row.uncommitted then
+                                                                svg.strokeDasharray [| 2; 2 |]
                                                             svg.strokeWidth 2
                                                         ]
                                                     if row.parents.Length > 1 then

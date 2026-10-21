@@ -11,11 +11,14 @@ let private statusLabel (status: string) =
     | Some 'R' -> "Renamed"
     | Some 'C' -> "Copied"
     | Some 'T' -> "Type changed"
+    | Some '?' -> "Untracked"
+    | Some 'U' -> "Conflict"
     | _ -> status
 
-let private FileRow (tab: RepositoryTab) (selection: CommitFiles) (file: GitProtocol.DiffFile) dispatch =
+let private FileRow (tab: RepositoryTab) (selection: CommitFiles) target (file: GitProtocol.DiffFile) dispatch =
     let selected =
-        selection.diff |> Option.exists (fun diff -> diff.file.path = file.path)
+        selection.diff
+        |> Option.exists (fun diff -> diff.file.path = file.path && diff.target = target)
 
     Html.li
         [
@@ -31,7 +34,11 @@ let private FileRow (tab: RepositoryTab) (selection: CommitFiles) (file: GitProt
                             )
                             prop.ariaPressed selected
                             prop.ariaControls $"diff-panel-{tab.id}"
-                            prop.onClick (fun _ -> dispatch (SelectCommitFile(tab.id, file.path)))
+                            prop.onClick (fun _ ->
+                                if selection.commit.IsNone then
+                                    dispatch (SelectWorkingTreeFile(tab.id, target, file.path))
+                                else
+                                    dispatch (SelectCommitFile(tab.id, file.path)))
                             prop.children
                                 [
                                     Html.span
@@ -47,6 +54,8 @@ let private FileRow (tab: RepositoryTab) (selection: CommitFiles) (file: GitProt
                                                 | Some 'R' -> "R"
                                                 | Some 'C' -> "C"
                                                 | Some 'T' -> "T"
+                                                | Some '?' -> "?"
+                                                | Some 'U' -> "U"
                                                 | _ -> statusLabel file.status
                                             )
                                         ]
@@ -79,6 +88,13 @@ let parentLabel (commit: GitProtocol.Commit) =
 
     "parent: " + if hashes = "" then "—" else hashes
 
+let targetLabel =
+    function
+    | GitProtocol.Staged -> "Staged · HEAD → index"
+    | GitProtocol.Unstaged -> "Unstaged · index → working tree"
+    | GitProtocol.Untracked -> "Untracked · new files"
+    | GitProtocol.Commit _ -> "Commit"
+
 [<ReactMemoComponent>]
 let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
     Html.section
@@ -95,27 +111,24 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                     Html.h2 [ prop.className "font-semibold"; prop.text "Changed files" ]
                                     match tab.selection with
                                     | None -> Html.none
-                                    | Some selection ->
-                                        Html.p
-                                            [
-                                                prop.className "mt-2 text-sm break-words"
-                                                prop.text selection.commit.subject
-                                            ]
+                                    | Some selection when selection.commit.IsSome ->
+                                        let commit = selection.commit.Value
+                                        Html.p [ prop.className "mt-2 text-sm break-words"; prop.text commit.subject ]
 
                                         Html.p
                                             [
                                                 prop.className "mt-1 font-mono text-xs break-all text-base-content/60"
-                                                prop.text selection.commit.oid
+                                                prop.text commit.oid
                                             ]
 
                                         Html.p
                                             [
                                                 prop.className "mt-2 text-xs text-base-content/60"
-                                                prop.title (String.concat "," selection.commit.parents)
-                                                prop.text (parentLabel selection.commit)
+                                                prop.title (String.concat "," commit.parents)
+                                                prop.text (parentLabel commit)
                                             ]
 
-                                        if selection.commit.parents.Length > 1 then
+                                        if commit.parents.Length > 1 then
                                             Html.label
                                                 [
                                                     prop.className
@@ -142,8 +155,7 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                                     prop.children
                                                                         [
                                                                             for index, oid in
-                                                                                selection.commit.parents
-                                                                                |> Array.indexed do
+                                                                                commit.parents |> Array.indexed do
                                                                                 Html.option
                                                                                     [
                                                                                         prop.key (string index)
@@ -160,6 +172,17 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                                 ]
                                                         ]
                                                 ]
+                                    | Some _ ->
+                                        Html.p [ prop.className "mt-2 text-sm"; prop.text "Uncommitted changes" ]
+
+                                        Html.button
+                                            [
+                                                prop.type' "button"
+                                                prop.className "btn btn-xs btn-outline mt-2"
+                                                prop.disabled tab.history.requestId.IsSome
+                                                prop.text "Refresh changes"
+                                                prop.onClick (fun _ -> dispatch (RefreshRepositoryHistory tab.id))
+                                            ]
                                 ]
                         ]
                     Html.div
@@ -173,7 +196,8 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                         Html.p
                                             [
                                                 prop.className "text-sm text-base-content/60"
-                                                prop.text "Select a commit to view changed files."
+                                                prop.text
+                                                    "Select a commit or uncommitted changes to view changed files."
                                             ]
                                     | Some selection ->
                                         if
@@ -219,15 +243,24 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                         )
                                                     ]
 
-                                                Html.ul
-                                                    [
-                                                        prop.className "space-y-2"
-                                                        prop.children
+                                                for target, files in selection.groups do
+                                                    if files.Length > 0 then
+                                                        if selection.commit.IsNone then
+                                                            Html.h3
+                                                                [
+                                                                    prop.className "font-semibold text-sm mt-4 mb-2"
+                                                                    prop.text (targetLabel target)
+                                                                ]
+
+                                                        Html.ul
                                                             [
-                                                                for file in selection.files do
-                                                                    FileRow tab selection file dispatch
+                                                                prop.className "space-y-2"
+                                                                prop.children
+                                                                    [
+                                                                        for file in files do
+                                                                            FileRow tab selection target file dispatch
+                                                                    ]
                                                             ]
-                                                    ]
                                 ]
                         ]
                 ]

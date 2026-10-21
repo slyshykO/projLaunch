@@ -30,6 +30,7 @@ type RepositoryHistory =
 type CommitDiff =
     {
         file: GitProtocol.DiffFile
+        target: GitProtocol.DiffTarget
         requestId: string option
         patch: GitProtocol.Patch option
         error: string option
@@ -37,7 +38,8 @@ type CommitDiff =
 
 type CommitFiles =
     {
-        commit: GitProtocol.Commit
+        commit: GitProtocol.Commit option
+        groups: (GitProtocol.DiffTarget * GitProtocol.DiffFile array) array
         parent: int option
         files: GitProtocol.DiffFile array
         requestId: string option
@@ -52,6 +54,7 @@ type RepositoryTab =
         root: string
         name: string
         history: RepositoryHistory
+        workingTree: Result<GitProtocol.Status, string> option
         selection: CommitFiles option
     }
 
@@ -69,10 +72,20 @@ type Msg =
     | RefreshRepositoryHistory of string
     | LoadMoreCommits of string
     | OnRepositoryHistory of string * string * bool * Result<string * GitProtocol.LogPage, exn>
+    | OnRepositoryRefresh of
+        string *
+        string *
+        Result<string * GitProtocol.LogPage, exn> *
+        Result<GitProtocol.Status, string>
+    | SelectWorkingTree of string
+    | SelectWorkingTreeFile of string * GitProtocol.DiffTarget * string
     | SelectRepositoryCommit of tabId: string * oid: string
     | SelectCommitParent of tabId: string * parent: int
     | RefreshCommitFiles of tabId: string
-    | OnCommitFiles of tabId: string * requestId: string * Result<GitProtocol.DiffFile array, exn>
+    | OnCommitFiles of
+        tabId: string *
+        requestId: string *
+        Result<(GitProtocol.DiffTarget * GitProtocol.DiffFile array) array, exn>
     | SelectCommitFile of tabId: string * path: string
     | RetryCommitDiff of tabId: string
     | CloseCommitDiff of tabId: string
@@ -190,7 +203,7 @@ let init () =
 
     state, Cmd.ofMsg Start
 
-let update msg state =
+let rec update msg state =
     match msg with
     | Empty -> state, Cmd.none
     | Start ->
@@ -235,6 +248,7 @@ let update msg state =
                     root = repository.root
                     name = repository.name
                     selection = None
+                    workingTree = None
                     history =
                         {
                             repoId = None
@@ -288,15 +302,47 @@ let update msg state =
             { state with isAboutOpen = true }, Cmd.none
     | CloseAbout -> { state with isAboutOpen = false }, Cmd.none
 
+    | SelectWorkingTree id ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when tab.history.requestId.IsNone ->
+            let selection =
+                {
+                    commit = None
+                    parent = None
+                    groups = [||]
+                    files = [||]
+                    requestId = None
+                    hasLoaded = false
+                    error = None
+                    diff = None
+                }
+
+            { state with
+                repositoryTabs =
+                    state.repositoryTabs
+                    |> List.map (fun item ->
+                        if item.id = id then
+                            { item with selection = Some selection }
+                        else
+                            item)
+            },
+            Cmd.ofMsg (RefreshCommitFiles id)
+        | _ -> state, Cmd.none
+
     | SelectRepositoryCommit(id, oid) ->
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
-        | Some tab when tab.selection |> Option.exists (fun selection -> selection.commit.oid = oid) -> state, Cmd.none
+        | Some tab when
+            tab.selection
+            |> Option.exists (fun selection -> selection.commit |> Option.exists (fun commit -> commit.oid = oid))
+            ->
+            state, Cmd.none
         | Some tab ->
             match tab.history.commits |> Array.tryFind (fun commit -> commit.oid = oid) with
             | Some commit ->
                 let selection =
                     {
-                        commit = commit
+                        commit = Some commit
+                        groups = [||]
                         diff = None
                         parent = if commit.parents.Length > 0 then Some 1 else None
                         files = [||]
@@ -324,7 +370,8 @@ let update msg state =
             match tab.selection with
             | Some selection when
                 parent >= 1
-                && parent <= selection.commit.parents.Length
+                && (selection.commit
+                    |> Option.exists (fun commit -> parent <= commit.parents.Length))
                 && selection.parent <> Some parent
                 ->
                 let next =
@@ -332,6 +379,7 @@ let update msg state =
                         parent = Some parent
                         diff = None
                         files = [||]
+                        groups = [||]
                         requestId = None
                         hasLoaded = false
                         error = None
@@ -356,7 +404,8 @@ let update msg state =
             match tab.selection with
             | Some selection when
                 selection.requestId.IsNone
-                && (selection.commit.parents.Length <= 1 || selection.parent.IsSome)
+                && (selection.commit
+                    |> Option.forall (fun commit -> commit.parents.Length <= 1 || selection.parent.IsSome))
                 ->
                 let requestId = Guid.NewGuid().ToString()
 
@@ -365,6 +414,7 @@ let update msg state =
                         requestId = Some requestId
                         diff = None
                         files = [||]
+                        groups = [||]
                         hasLoaded = false
                         error = None
                     }
@@ -374,11 +424,20 @@ let update msg state =
                         // Reopen by root so retry also recovers from a restarted server.
                         let! repository = AppTauri.Git.openRepository tab.root $"files-{requestId}-open"
 
-                        return!
-                            AppTauri.Git.diffFiles
-                                repository.repoId
-                                $"files-{requestId}-list"
-                                (GitProtocol.Commit(selection.commit.oid, selection.parent))
+                        let targets =
+                            match selection.commit with
+                            | Some commit -> [| GitProtocol.Commit(commit.oid, selection.parent) |]
+                            | None -> [| GitProtocol.Staged; GitProtocol.Unstaged; GitProtocol.Untracked |]
+
+                        let groups = ResizeArray<_>()
+
+                        for index, target in targets |> Array.indexed do
+                            let! files =
+                                AppTauri.Git.diffFiles repository.repoId $"files-{requestId}-{index}" target
+
+                            groups.Add(target, files)
+
+                        return groups.ToArray()
                     }
 
                 { state with
@@ -404,9 +463,10 @@ let update msg state =
                     | Some selection when tab.id = id && selection.requestId = Some requestId ->
                         let next =
                             match result with
-                            | Ok files ->
+                            | Ok groups ->
                                 { selection with
-                                    files = files
+                                    groups = groups
+                                    files = groups |> Array.collect snd |> Array.distinctBy (fun file -> file.path)
                                     requestId = None
                                     hasLoaded = true
                                     error = None
@@ -422,31 +482,51 @@ let update msg state =
         },
         Cmd.none
 
+    | SelectWorkingTreeFile(id, _, _)
     | SelectCommitFile(id, _)
     | RetryCommitDiff id ->
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
         | Some tab ->
             match tab.selection with
             | Some selection when selection.hasLoaded && selection.requestId.IsNone ->
-                let file =
+                let requested =
                     match msg with
                     | SelectCommitFile(_, path) ->
-                        if selection.diff |> Option.exists (fun diff -> diff.file.path = path) then
-                            None
-                        else
-                            selection.files |> Array.tryFind (fun file -> file.path = path)
-                    | _ ->
+                        selection.commit
+                        |> Option.map (fun commit -> GitProtocol.Commit(commit.oid, selection.parent), path)
+                    | SelectWorkingTreeFile(_, target, path) when selection.commit.IsNone -> Some(target, path)
+                    | RetryCommitDiff _ ->
                         selection.diff
                         |> Option.filter (fun diff -> diff.requestId.IsNone)
-                        |> Option.map (fun diff -> diff.file)
+                        |> Option.map (fun diff -> diff.target, diff.file.path)
+                    | _ -> None
+
+                let file =
+                    requested
+                    |> Option.bind (fun (target, path) ->
+                        let alreadySelected =
+                            match msg with
+                            | RetryCommitDiff _ -> false
+                            | _ ->
+                                selection.diff
+                                |> Option.exists (fun diff -> diff.target = target && diff.file.path = path)
+
+                        if alreadySelected then
+                            None
+                        else
+                            selection.groups
+                            |> Array.tryFind (fun (group, _) -> group = target)
+                            |> Option.bind (fun (_, files) -> files |> Array.tryFind (fun file -> file.path = path))
+                            |> Option.map (fun file -> target, file))
 
                 match file with
-                | Some file ->
+                | Some(target, file) ->
                     let requestId = Guid.NewGuid().ToString()
 
                     let diff =
                         {
                             file = file
+                            target = target
                             requestId = Some requestId
                             patch = None
                             error = None
@@ -456,12 +536,7 @@ let update msg state =
                         promise {
                             let! repository = AppTauri.Git.openRepository tab.root $"diff-{requestId}-open"
 
-                            return!
-                                AppTauri.Git.diff
-                                    repository.repoId
-                                    $"diff-{requestId}-patch"
-                                    (GitProtocol.Commit(selection.commit.oid, selection.parent))
-                                    file.path
+                            return! AppTauri.Git.diff repository.repoId $"diff-{requestId}-patch" target file.path
                         }
 
                     { state with
@@ -559,9 +634,34 @@ let update msg state =
                                 return repository.repoId
                             }
 
-                    let cursor = if append then tab.history.nextCursor else None
-                    let! page = AppTauri.Git.log repoId $"history-{requestId}-log" cursor 100
-                    return repoId, page
+                    let! result =
+                        promise {
+                            try
+                                let! page =
+                                    AppTauri.Git.log
+                                        repoId
+                                        $"history-{requestId}-log"
+                                        (if append then tab.history.nextCursor else None)
+                                        100
+
+                                return Ok(repoId, page)
+                            with error ->
+                                return Error error
+                        }
+
+                    if append then
+                        return OnRepositoryHistory(id, requestId, true, result)
+                    else
+                        let! status =
+                            promise {
+                                try
+                                    let! status = AppTauri.Git.status repoId $"history-{requestId}-status"
+                                    return Ok status
+                                with error ->
+                                    return Error(string error)
+                            }
+
+                        return OnRepositoryRefresh(id, requestId, result, status)
                 }
 
             { state with
@@ -569,16 +669,61 @@ let update msg state =
                     state.repositoryTabs
                     |> List.map (fun item ->
                         if item.id = id then
-                            { item with history = history }
+                            { item with
+                                history = history
+                                selection =
+                                    item.selection
+                                    |> Option.map (fun selection ->
+                                        if not append && selection.commit.IsNone then
+                                            { selection with
+                                                requestId = None
+                                                files = [||]
+                                                groups = [||]
+                                                diff = None
+                                                hasLoaded = false
+                                                error = None
+                                            }
+                                        else
+                                            selection)
+                            }
                         else
                             item)
             },
-            Cmd.OfPromise.either
-                read
-                ()
-                (fun result -> OnRepositoryHistory(id, requestId, append, Ok result))
-                (fun error -> OnRepositoryHistory(id, requestId, append, Error error))
+            Cmd.OfPromise.either read () (fun message -> message) (fun error ->
+                if append then
+                    OnRepositoryHistory(tab.id, requestId, true, Error error)
+                else
+                    OnRepositoryRefresh(tab.id, requestId, Error error, Error(string error)))
         | _ -> state, Cmd.none
+
+    | OnRepositoryRefresh(id, requestId, result, status) ->
+        match
+            state.repositoryTabs
+            |> List.tryFind (fun tab -> tab.id = id && tab.history.requestId = Some requestId)
+        with
+        | None -> state, Cmd.none
+        | Some _ ->
+            let updated, _ = update (OnRepositoryHistory(id, requestId, false, result)) state
+
+            let tabs =
+                updated.repositoryTabs
+                |> List.map (fun tab ->
+                    if tab.id = id then
+                        { tab with workingTree = Some status }
+                    else
+                        tab)
+
+            let selected =
+                tabs
+                |> List.exists (fun tab ->
+                    tab.id = id
+                    && (tab.selection |> Option.exists (fun selection -> selection.commit.IsNone)))
+
+            { updated with repositoryTabs = tabs },
+            if selected then
+                Cmd.ofMsg (RefreshCommitFiles id)
+            else
+                Cmd.none
 
     | OnRepositoryHistory(id, requestId, append, result) ->
         let tabs =
