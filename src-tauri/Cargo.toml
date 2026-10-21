@@ -1,6 +1,6 @@
 [package]
 name = "projlaunch"
-version = "0.4.4+1.gedbad04.dirty"
+version = "0.4.4+1.gedbad04"
 description = "Project launcher"
 authors = ["Oleksiy Slyshyk <alexslyshyk@gmail.com>"]
 edition = "2024"
