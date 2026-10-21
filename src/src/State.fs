@@ -70,6 +70,7 @@ type Msg =
     | OnStart of unit
 
     | LoadWorkspace
+    | OnStorageAccess of Result<AppTauri.Storage.Access, exn>
     | OnWorkspaceLoaded of int * Result<Workspace.Snapshot option, exn>
     | SaveWorkspace
     | OnWorkspaceSaved of int * Result<unit, exn>
@@ -158,6 +159,7 @@ type Msg =
 
 type State =
     {
+        storageAccess: AppTauri.Storage.Access option
         workspaceReady: bool
         workspaceLoading: bool
         workspaceRevision: int
@@ -201,6 +203,7 @@ let init () =
     // Initial state
     let state =
         {
+            storageAccess = None
             workspaceReady = false
             workspaceLoading = false
             workspaceRevision = 0
@@ -309,8 +312,16 @@ let private restoreTab (saved: Workspace.Tab) =
                 })
     }
 
+let isStorageReadOnly state =
+    state.storageAccess |> Option.exists (fun access -> not access.canWrite)
+
 let rec private updateCore msg state =
     match msg with
+    | OpenAddProjectModal
+    | OpenEditProjectModal _
+    | SaveProject _
+    | AddOrUpdateProject _
+    | OnOpenProjectSuccess _ when isStorageReadOnly state -> state, Cmd.none
     | Empty -> state, Cmd.none
     | Start ->
         let delayPromise () =
@@ -335,6 +346,33 @@ let rec private updateCore msg state =
                 ]
         else
             state, Cmd.none
+
+    | LoadWorkspace when
+        state.storageAccess.IsNone
+        && not state.workspaceLoading
+        && AppTauri.Core.isAvailable ()
+        ->
+        { state with
+            workspaceLoading = true
+            workspaceError = None
+        },
+        Cmd.OfPromise.either AppTauri.Storage.access () (Ok >> OnStorageAccess) (Error >> OnStorageAccess)
+
+    | OnStorageAccess result ->
+        match result with
+        | Ok access ->
+            { state with
+                storageAccess = Some access
+                workspaceLoading = false
+                projectEditor = if access.canWrite then state.projectEditor else None
+            },
+            Cmd.ofMsg LoadWorkspace
+        | Error error ->
+            { state with
+                workspaceLoading = false
+                workspaceError = Some $"Could not open database: {error}"
+            },
+            Cmd.ofMsg ContinueWindowClose
 
     | LoadWorkspace ->
         if
@@ -415,7 +453,8 @@ let rec private updateCore msg state =
 
     | SaveWorkspace ->
         if
-            not state.workspaceReady
+            isStorageReadOnly state
+            || not state.workspaceReady
             || state.workspaceSaving.IsSome
             || state.workspaceSavedRevision >= state.workspaceRevision
         then
@@ -1492,7 +1531,11 @@ let rec private updateCore msg state =
             || state.workspaceSaving.IsSome
         then
             state, Cmd.none
-        elif state.workspaceReady && state.workspaceSavedRevision < state.workspaceRevision then
+        elif
+            not (isStorageReadOnly state)
+            && state.workspaceReady
+            && state.workspaceSavedRevision < state.workspaceRevision
+        then
             state, Cmd.ofMsg SaveWorkspace
         else
             state, Cmd.ofMsg SaveWindowAndClose
@@ -1503,7 +1546,9 @@ let rec private updateCore msg state =
     | OnWindowSaveSuccess ->
         if
             state.workspaceSaving.IsSome
-            || (state.workspaceReady && state.workspaceSavedRevision < state.workspaceRevision)
+            || (not (isStorageReadOnly state)
+                && state.workspaceReady
+                && state.workspaceSavedRevision < state.workspaceRevision)
         then
             state, Cmd.ofMsg ContinueWindowClose
         else
@@ -1602,6 +1647,6 @@ let update msg state =
             Cmd.batch
                 [
                     command
-                    if changed.workspaceReady then
+                    if changed.workspaceReady && not (isStorageReadOnly changed) then
                         Cmd.ofMsg SaveWorkspace
                 ]

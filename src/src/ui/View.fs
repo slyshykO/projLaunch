@@ -71,7 +71,7 @@ let private ProjectGitIndicators (check: ProjectGitCheck option) (dispatch: Msg 
     ]
 
 [<ReactMemoComponent>]
-let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (dispatch: Msg -> unit) =
+let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (readOnly: bool) (dispatch: Msg -> unit) =
     let title = sprintf "%s [%s]" prj.name prj.ide
 
     let remoteText =
@@ -104,6 +104,7 @@ let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (dispatch: Msg
                                 "transition-colors"
                             ]
                             prop.title "Edit project"
+                            prop.disabled readOnly
                             prop.ariaLabel $"Edit project {prj.name}"
                             prop.children [ svgIcons.edit 16 ]
                             prop.onClick (fun _ -> dispatch (OpenEditProjectModal prj.id))
@@ -140,6 +141,7 @@ let private Projects
     (projects: ProjectData list)
     (projectGit: Map<string, ProjectGitCheck>)
     (randomSalt: string)
+    (readOnly: bool)
     (dispatch: Msg -> unit)
     =
     Html.div [
@@ -154,7 +156,7 @@ let private Projects
                         yield
                             Html.div [
                                 prop.key prj.id
-                                prop.children [ Project prj (projectGit |> Map.tryFind prj.id) dispatch ]
+                                prop.children [ Project prj (projectGit |> Map.tryFind prj.id) readOnly dispatch ]
                             ]
                 ]
             ]
@@ -344,6 +346,20 @@ let View (state: State) dispatch =
         pageTheme state
         prop.children [
             DesktopTabs.TabBar state.repositoryTabs state.activeRepositoryTab dispatch
+            if isStorageReadOnly state then
+                Html.div [
+                    prop.role "status"
+                    prop.className "shrink-0 px-4 py-3 bg-warning/15 text-sm"
+                    prop.text (
+                        let owner =
+                            state.storageAccess
+                            |> Option.bind (fun access -> access.ownerPid)
+                            |> Option.map (fun pid -> $" (PID {pid})")
+                            |> Option.defaultValue ""
+
+                        $"Read-only database: another ProjLaunch instance{owner} owns write access. Projects and layout changes will not be saved. Restart this window after the owner exits to enable changes."
+                    )
+                ]
             if state.workspaceLoading then
                 Html.p [
                     prop.role "status"
@@ -411,9 +427,14 @@ let View (state: State) dispatch =
                             if List.isEmpty state.projects && state.projectStorageError.IsNone then
                                 Html.div [
                                     prop.className "p-12 text-center text-base-content/60"
-                                    prop.text "Add your first project using File → Add project… or Ctrl+N."
+                                    prop.text (
+                                        if isStorageReadOnly state then
+                                            "No saved projects."
+                                        else
+                                            "Add your first project using File → Add project… or Ctrl+N."
+                                    )
                                 ]
-                            Projects state.projects state.projectGit state.randomSalt dispatch
+                            Projects state.projects state.projectGit state.randomSalt (isStorageReadOnly state) dispatch
                         ]
                     ]
                     for tab in state.repositoryTabs do

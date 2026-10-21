@@ -1,6 +1,6 @@
 [package]
 name = "projlaunch"
-version = "0.4.4+0.g9460519.dirty"
+version = "0.4.4+1.gedbad04.dirty"
 description = "Project launcher"
 authors = ["Oleksiy Slyshyk <alexslyshyk@gmail.com>"]
 edition = "2024"
@@ -35,6 +35,7 @@ tracing-appender = "0.2"
 
 fs-err = "3.0"
 time = { version = "0.3", features = ["serde"] }
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
 
 [dev-dependencies]
 tempfile = "3"

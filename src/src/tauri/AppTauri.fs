@@ -28,6 +28,12 @@ module Core =
 
     let getTauriVersion () : JS.Promise<string> = Tauri.Tauri.Tauri.getTauriVersion ()
 
+module Storage =
+    type Access =
+        { canWrite: bool; ownerPid: int option }
+
+    let access () : JS.Promise<Access> = Core.invoke "get_storage_access" None
+
 module WorkspaceState =
     let load () : JS.Promise<Workspace.Snapshot option> = Core.invoke "load_workspace" None
 

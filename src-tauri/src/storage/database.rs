@@ -1,10 +1,17 @@
-use std::{path::Path, time::Duration};
+use std::{
+    fs::File,
+    path::Path,
+    time::{Duration, Instant},
+};
 
+use super::ownership::{self, Access};
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, Row, params};
 
 use crate::project::ProjectData;
 use crate::workspace::Workspace;
+
+pub const SCHEMA_VERSION: i64 = 3;
 
 const COLUMNS: &str =
     "id, name, last_opened, description, path, ide, environment_json, remote_json";
@@ -14,6 +21,10 @@ const INSERT: &str = "INSERT INTO projects
 
 pub(super) struct Database {
     pub(super) connection: Connection,
+    access: Access,
+    owner_token: Option<String>,
+    // Keep the lock until after the SQLite connection is closed.
+    _writer_lock: Option<File>,
 }
 
 impl Database {
@@ -30,6 +41,7 @@ impl Database {
     }
 
     pub(super) fn save_workspace(&mut self, workspace: &Workspace) -> Result<()> {
+        self.ensure_writable()?;
         workspace.validate()?;
         let content = serde_json::to_string(workspace)?;
         ensure!(
@@ -47,13 +59,96 @@ impl Database {
         std::fs::create_dir_all(app_data_dir)
             .with_context(|| format!("Cannot create {}", app_data_dir.display()))?;
         let path = app_data_dir.join("projlaunch.db");
+        let mut writer_lock = ownership::try_lock(app_data_dir)?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while writer_lock.is_none() {
+            // Another process may still be creating/migrating its database.
+            // Open strictly read-only; never migrate or import in a reader.
+            let read = (|| -> Result<Self> {
+                let connection =
+                    Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+                connection.busy_timeout(Duration::from_secs(5))?;
+                let version: i64 =
+                    connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+                ensure!(
+                    version == SCHEMA_VERSION,
+                    "Database owner is initializing the database, or its schema is incompatible (version {version})"
+                );
+                let owner_pid = ownership::owner_pid(&connection)?;
+                ensure!(
+                    owner_pid.is_some(),
+                    "Database owner is still initializing storage"
+                );
+                Ok(Self {
+                    connection,
+                    access: Access {
+                        can_write: false,
+                        owner_pid,
+                    },
+                    owner_token: None,
+                    _writer_lock: None,
+                })
+            })();
+            if read.is_ok() {
+                return read;
+            }
+            writer_lock = ownership::try_lock(app_data_dir)?;
+            if writer_lock.is_none() {
+                if Instant::now() >= deadline {
+                    return read;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
         let mut connection =
             Connection::open(&path).with_context(|| format!("Cannot open {}", path.display()))?;
         connection.busy_timeout(Duration::from_secs(5))?;
         connection.pragma_update(None, "foreign_keys", true)?;
         super::migrations::apply(&mut connection)?;
         super::legacy_import::run(&mut connection, &app_data_dir.join("projects"))?;
-        Ok(Self { connection })
+        let token = ownership::claim(&mut connection)?;
+        Ok(Self {
+            connection,
+            access: Access {
+                can_write: true,
+                owner_pid: Some(std::process::id()),
+            },
+            owner_token: Some(token),
+            _writer_lock: writer_lock,
+        })
+    }
+
+    pub(super) fn access(&self) -> Access {
+        self.access.clone()
+    }
+
+    fn ensure_writable(&self) -> Result<()> {
+        ensure!(
+            self.access.can_write,
+            "Database is read-only: another ProjLaunch instance owns write access. Restart this instance after the owner exits to enable changes."
+        );
+        let owns: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM database_owner WHERE id = 1 AND instance_token = ?1)",
+            [&self.owner_token],
+            |row| row.get(0),
+        )?;
+        ensure!(
+            owns,
+            "Database write ownership was lost; restart ProjLaunch"
+        );
+        Ok(())
+    }
+
+    pub(super) fn release(&mut self) -> Result<()> {
+        if let Some(token) = &self.owner_token {
+            self.connection.execute(
+                "DELETE FROM database_owner WHERE id = 1 AND instance_token = ?1",
+                [token],
+            )?;
+            self.owner_token = None;
+            self.access.can_write = false;
+        }
+        Ok(())
     }
 
     pub(super) fn list(&self) -> Result<Vec<String>> {
@@ -78,6 +173,7 @@ impl Database {
     }
 
     pub(super) fn save(&mut self, id: &str, content: &str) -> Result<()> {
+        self.ensure_writable()?;
         let project = ProjectData::from_json(content)?;
         ensure!(
             id == project.id,
@@ -91,6 +187,14 @@ impl Database {
              remote_json = excluded.remote_json"
         );
         write_project(&self.connection, &sql, &project)
+    }
+}
+
+impl Drop for Database {
+    fn drop(&mut self) {
+        if let Err(error) = self.release() {
+            tracing::error!(%error, "Could not clear database ownership; next writer will recover the record");
+        }
     }
 }
 

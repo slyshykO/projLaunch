@@ -4,7 +4,12 @@ use rusqlite::Connection;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
-use super::{Storage, database::Database, legacy_import::IMPORT_NAME, migrations};
+use super::{
+    Storage,
+    database::{Database, SCHEMA_VERSION},
+    legacy_import::IMPORT_NAME,
+    migrations,
+};
 use crate::project::{ProjectData, Remote};
 
 fn project(id: &str) -> Value {
@@ -57,7 +62,7 @@ fn workspace_migration_preserves_v1_projects_and_import_marker() {
         db.connection
             .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
             .unwrap(),
-        2
+        SCHEMA_VERSION
     );
 }
 
@@ -465,19 +470,23 @@ fn failed_schema_migration_rolls_back_ddl_and_version() {
 fn newer_schema_is_not_downgraded_or_imported() {
     let dir = TempDir::new().unwrap();
     let raw = raw_database(dir.path());
-    raw.pragma_update(None, "user_version", 3).unwrap();
+    let newer_version = SCHEMA_VERSION + 1;
+    raw.pragma_update(None, "user_version", newer_version)
+        .unwrap();
     drop(raw);
     legacy(dir.path(), "one", &project("one"));
     let error = format!("{:#}", Database::open(dir.path()).err().unwrap());
     assert!(
-        error.contains("Unsupported project database version 3"),
+        error.contains(&format!(
+            "Unsupported project database version {newer_version}"
+        )),
         "{error}"
     );
     let raw = raw_database(dir.path());
     let version: i64 = raw
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 3);
+    assert_eq!(version, newer_version);
 }
 
 #[test]
@@ -542,4 +551,286 @@ async fn worker_reports_initialization_error_and_blocks_writes() {
     assert_eq!(storage.get("one".into()).await.unwrap_err(), error);
     drop(storage);
     assert_eq!(count(&raw_database(dir.path()), "projects"), 0);
+}
+
+#[test]
+fn second_instance_reads_live_updates_but_cannot_write_or_release_owner() {
+    let dir = TempDir::new().unwrap();
+    let mut writer = Database::open(dir.path()).unwrap();
+    assert!(writer.access().can_write);
+    writer.save("one", &project("one").to_string()).unwrap();
+    let mut reader = Database::open(dir.path()).unwrap();
+    assert!(!reader.access().can_write);
+    assert_eq!(reader.access().owner_pid, Some(std::process::id()));
+    assert_eq!(reader.list().unwrap().len(), 1);
+    assert!(
+        reader
+            .save("two", &project("two").to_string())
+            .unwrap_err()
+            .to_string()
+            .contains("read-only")
+    );
+    assert!(reader.save_workspace(&workspace(dir.path())).is_err());
+    assert!(
+        reader
+            .connection
+            .execute("DELETE FROM projects", [])
+            .is_err(),
+        "SQLite itself enforces read-only access"
+    );
+    writer.save("two", &project("two").to_string()).unwrap();
+    assert_eq!(reader.list().unwrap().len(), 2);
+    reader.release().unwrap();
+    drop(reader);
+    assert_eq!(count(&writer.connection, "database_owner"), 1);
+    writer.save_workspace(&workspace(dir.path())).unwrap();
+    drop(writer);
+    assert_eq!(count(&raw_database(dir.path()), "database_owner"), 0);
+    assert!(Database::open(dir.path()).unwrap().access().can_write);
+}
+
+#[test]
+fn ownership_migration_preserves_v2_projects_and_workspace() {
+    let dir = TempDir::new().unwrap();
+    let raw = raw_database(dir.path());
+    raw.execute_batch(include_str!("../../migrations/0001_projects.sql"))
+        .unwrap();
+    raw.execute_batch(include_str!("../../migrations/0002_workspace.sql"))
+        .unwrap();
+    raw.pragma_update(None, "user_version", 2).unwrap();
+    raw.execute(
+        "INSERT INTO data_migrations(name, item_count) VALUES (?1, 0)",
+        [IMPORT_NAME],
+    )
+    .unwrap();
+    super::database::insert(
+        &raw,
+        &ProjectData::from_json(&project("one").to_string()).unwrap(),
+    )
+    .unwrap();
+    let saved = workspace(dir.path());
+    raw.execute(
+        "INSERT INTO workspace_state VALUES (1, ?1)",
+        [serde_json::to_string(&saved).unwrap()],
+    )
+    .unwrap();
+    let db = Database::open(dir.path()).unwrap();
+    assert!(db.access().can_write);
+    assert_eq!(db.get("one").unwrap().name, project("one")["name"]);
+    assert_eq!(
+        serde_json::to_value(db.load_workspace().unwrap().unwrap()).unwrap(),
+        serde_json::to_value(saved).unwrap()
+    );
+    assert_eq!(count(&db.connection, "data_migrations"), 1);
+    assert_eq!(
+        db.connection
+            .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+            .unwrap(),
+        SCHEMA_VERSION
+    );
+}
+
+#[test]
+fn startup_recovers_if_first_owner_dies_before_creating_database() {
+    let dir = TempDir::new().unwrap();
+    let lock = super::ownership::try_lock(dir.path()).unwrap().unwrap();
+    let directory = dir.path().to_owned();
+    let waiter = std::thread::spawn(move || Database::open(&directory).unwrap().access().can_write);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    drop(lock);
+    assert!(waiter.join().unwrap());
+}
+
+#[test]
+fn reader_stays_read_only_until_restarted_after_owner_exits() {
+    let dir = TempDir::new().unwrap();
+    let writer = Database::open(dir.path()).unwrap();
+    let mut reader = Database::open(dir.path()).unwrap();
+    drop(writer);
+    assert!(!reader.access().can_write);
+    assert!(reader.save("one", &project("one").to_string()).is_err());
+    let mut next_writer = Database::open(dir.path()).unwrap();
+    next_writer
+        .save("one", &project("one").to_string())
+        .unwrap();
+    assert_eq!(reader.list().unwrap().len(), 1);
+}
+
+#[test]
+fn simultaneous_startup_has_exactly_one_writer() {
+    let dir = TempDir::new().unwrap();
+    legacy(dir.path(), "one", &project("one"));
+    let start = Arc::new(std::sync::Barrier::new(3));
+    let (send, recv) = std::sync::mpsc::channel();
+    let mut releases = Vec::new();
+    let mut handles = Vec::new();
+    for _ in 0..2 {
+        let directory = dir.path().to_owned();
+        let start = Arc::clone(&start);
+        let send = send.clone();
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        releases.push(release);
+        handles.push(std::thread::spawn(move || {
+            start.wait();
+            let db = Database::open(&directory).unwrap();
+            assert_eq!(db.list().unwrap().len(), 1);
+            send.send(db.access().can_write).unwrap();
+            let _ = wait.recv();
+        }));
+    }
+    start.wait();
+    let modes = (0..2)
+        .map(|_| {
+            recv.recv_timeout(std::time::Duration::from_secs(15))
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(modes.iter().filter(|&&writable| writable).count(), 1);
+    drop(releases);
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    assert_eq!(count(&raw_database(dir.path()), "database_owner"), 0);
+}
+
+#[test]
+fn stale_pid_and_reused_live_pid_do_not_block_a_new_writer() {
+    let dir = TempDir::new().unwrap();
+    drop(Database::open(dir.path()).unwrap());
+    let raw = raw_database(dir.path());
+    // Include this still-live process to model PID reuse. OS ownership, not
+    // a process name alone, decides whether a stale row can be replaced.
+    for pid in [u32::MAX, std::process::id()] {
+        raw.execute(
+            "INSERT INTO database_owner VALUES (1, ?1, 0, 'old/projlaunch.exe', 'stale')",
+            [pid],
+        )
+        .unwrap();
+        let mut db = Database::open(dir.path()).unwrap();
+        assert!(db.access().can_write);
+        db.save("one", &project("one").to_string()).unwrap();
+        assert_eq!(db.access().owner_pid, Some(std::process::id()));
+        drop(db);
+        assert_eq!(count(&raw, "database_owner"), 0);
+    }
+}
+
+#[test]
+fn owner_token_prevents_writes_and_cleanup_of_another_lease() {
+    let dir = TempDir::new().unwrap();
+    let mut db = Database::open(dir.path()).unwrap();
+    let raw = raw_database(dir.path());
+    raw.execute(
+        "UPDATE database_owner SET instance_token = 'replacement'",
+        [],
+    )
+    .unwrap();
+    assert!(db.save("one", &project("one").to_string()).is_err());
+    assert!(db.save_workspace(&workspace(dir.path())).is_err());
+    drop(db);
+    let token: String = raw
+        .query_row("SELECT instance_token FROM database_owner", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(token, "replacement");
+    assert!(Database::open(dir.path()).unwrap().access().can_write);
+}
+
+#[tokio::test]
+async fn explicit_shutdown_releases_ownership_even_while_storage_handles_exist() {
+    let dir = TempDir::new().unwrap();
+    let storage = Storage::start(Ok(dir.path().to_owned()));
+    let retained = storage.clone();
+    assert!(storage.access().await.unwrap().can_write);
+    storage
+        .save("one".into(), project("one").to_string())
+        .await
+        .unwrap();
+    storage.shutdown().await.unwrap();
+    assert_eq!(count(&raw_database(dir.path()), "database_owner"), 0);
+    assert!(
+        retained
+            .save("two".into(), project("two").to_string())
+            .await
+            .is_err()
+    );
+    let db = Database::open(dir.path()).unwrap();
+    assert!(db.access().can_write);
+    assert_eq!(db.list().unwrap().len(), 1);
+}
+
+// Run only as a subprocess of the crash test below, never against user data.
+#[test]
+#[ignore]
+fn ownership_child_process() {
+    let directory = std::env::var_os("PROJLAUNCH_TEST_OWNER_DIR").expect("child test directory");
+    let directory = Path::new(&directory);
+    let mut db = Database::open(directory).unwrap();
+    assert!(db.access().can_write);
+    db.save("one", &project("one").to_string()).unwrap();
+    fs::write(directory.join("child-ready"), "ready").unwrap();
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+#[test]
+fn killed_owner_is_recovered_on_next_start_without_losing_projects() {
+    struct Child(std::process::Child);
+    impl Drop for Child {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let dir = TempDir::new().unwrap();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--ignored",
+            "--exact",
+            "storage::tests::ownership_child_process",
+            "--nocapture",
+        ])
+        .env("PROJLAUNCH_TEST_OWNER_DIR", dir.path())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    let mut child = Child(command.spawn().unwrap());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while !dir.path().join("child-ready").exists() {
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "Child failed before opening storage"
+        );
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Child did not initialize storage"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let mut reader = Database::open(dir.path()).unwrap();
+    assert!(!reader.access().can_write);
+    assert_eq!(reader.access().owner_pid, Some(child.0.id()));
+    assert_eq!(reader.list().unwrap().len(), 1);
+    assert!(reader.save("two", &project("two").to_string()).is_err());
+    child.0.kill().unwrap();
+    child.0.wait().unwrap();
+    assert_eq!(
+        count(&reader.connection, "database_owner"),
+        1,
+        "Force kill skips cleanup"
+    );
+    let mut recovered = Database::open(dir.path()).unwrap();
+    assert!(recovered.access().can_write);
+    assert_eq!(recovered.list().unwrap().len(), 1);
+    recovered.save("two", &project("two").to_string()).unwrap();
+    assert_eq!(reader.list().unwrap().len(), 2);
+    drop(recovered);
+    assert_eq!(count(&reader.connection, "database_owner"), 0);
 }

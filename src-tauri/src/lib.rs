@@ -27,6 +27,11 @@ async fn get_projects(storage: tauri::State<'_, Storage>) -> Result<Vec<String>,
 }
 
 #[tauri::command]
+async fn get_storage_access(storage: tauri::State<'_, Storage>) -> Result<storage::Access, String> {
+    storage.access().await
+}
+
+#[tauri::command]
 async fn load_workspace(
     storage: tauri::State<'_, Storage>,
 ) -> Result<Option<workspace::Workspace>, String> {
@@ -204,6 +209,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_data_dir,
             get_projects,
+            get_storage_access,
             load_workspace,
             save_workspace,
             open_project,
@@ -223,6 +229,11 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                if let Err(error) =
+                    tauri::async_runtime::block_on(app.state::<Storage>().shutdown())
+                {
+                    tracing::error!(%error, "Could not shut down database storage cleanly");
+                }
                 tauri::async_runtime::block_on(app.state::<git_host::GitHost>().shutdown());
                 tracing::info!("ProjLaunch exiting");
                 app.state::<logging::Logging>().shutdown();

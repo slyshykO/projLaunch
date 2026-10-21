@@ -1,6 +1,8 @@
 mod database;
 mod legacy_import;
 mod migrations;
+mod ownership;
+pub(crate) use ownership::Access;
 
 #[cfg(test)]
 mod tests;
@@ -21,6 +23,8 @@ enum Request {
     Save(String, String, Reply<()>),
     LoadWorkspace(Reply<Option<Workspace>>),
     SaveWorkspace(Workspace, Reply<()>),
+    Access(Reply<Access>),
+    Shutdown(Reply<()>),
 }
 
 struct Worker {
@@ -65,6 +69,18 @@ impl Storage {
                     }
                     while let Some(request) = receiver.blocking_recv() {
                         match request {
+                            Request::Access(reply) => {
+                                let _ = reply.send(run(&mut database, |db| Ok(db.access())));
+                            }
+                            Request::Shutdown(reply) => {
+                                // All earlier saves have completed. Close the connection and
+                                // release its lock before acknowledging application shutdown.
+                                receiver.close();
+                                let result = run(&mut database, |db| db.release());
+                                drop(database);
+                                let _ = reply.send(result);
+                                break;
+                            }
                             Request::LoadWorkspace(reply) => {
                                 let _ = reply.send(run(&mut database, |db| db.load_workspace()));
                             }
@@ -109,6 +125,14 @@ impl Storage {
 
     pub(crate) async fn list(&self) -> Result<Vec<String>, String> {
         self.request(Request::List).await
+    }
+
+    pub(crate) async fn access(&self) -> Result<Access, String> {
+        self.request(Request::Access).await
+    }
+
+    pub(crate) async fn shutdown(&self) -> Result<(), String> {
+        self.request(Request::Shutdown).await
     }
 
     pub(crate) async fn load_workspace(&self) -> Result<Option<Workspace>, String> {

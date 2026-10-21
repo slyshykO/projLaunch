@@ -291,7 +291,7 @@ dependencies = [
 
 [[package]]
 name = "git-client"
-version = "0.4.4+0.g9460519.dirty"
+version = "0.4.4+1.gedbad04.dirty"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -304,14 +304,14 @@ dependencies = [
 
 [[package]]
 name = "git-protocol"
-version = "0.4.4+0.g9460519.dirty"
+version = "0.4.4+1.gedbad04.dirty"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "git-server"
-version = "0.4.4+0.g9460519.dirty"
+version = "0.4.4+1.gedbad04.dirty"
 dependencies = [
  "anyhow",
  "axum",
@@ -738,7 +738,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys",
@@ -766,9 +766,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.53.3"
+version = "1.54.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce3335fa71841cda333a58d7615b03901380ecf09d59b3296d21f8bbac0dde4e"
+checksum = "a0c168a474b95bfecfe908a65d4bdffc523144b649a74c09c286afb35d53e0bc"
 dependencies = [
  "bytes",
  "libc",

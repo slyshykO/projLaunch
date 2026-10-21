@@ -89,10 +89,10 @@ after restarting. Each repository remembers its file-panel width in wide windows
 and height in narrow windows. Drag the divider to resize it; arrow keys move it,
 Shift increases the step, Home/End select the limits and double-click resets it.
 
-Workspace state is saved automatically in `projlaunch.db`. Closing waits for the
+In the writable instance, workspace state is saved automatically in `projlaunch.db`. Closing waits for the
 latest save; a failed save keeps the window open and shows Retry. A failed restore
 also shows Retry and leaves the stored session untouched. The SQLite schema is
-upgraded from version 1 to 2 without changing project records or legacy imports.
+upgraded to version 3 without changing project records or legacy imports.
 Restored tabs receive new runtime IDs and reload Git data: the active repository
 loads immediately, background repositories load when selected. Missing repositories
 remain as tabs with retryable errors. A missing saved diff file falls back to the
@@ -138,6 +138,21 @@ Saved projects are stored in `projlaunch.db` in the Tauri app data directory
 (`%APPDATA%/com.projlaunch.app` on Windows). The Rust host uses `rusqlite` with
 bundled SQLite. A dedicated worker owns the connection; frontend commands wait
 for initialization without running database work on the UI thread.
+
+Only one instance can write to a given database. The `database_owner` table
+records its PID, process start time, executable path and a unique ownership token.
+Startup checks the recorded process identity. An exclusive OS lock on the adjacent
+`projlaunch.writer.lock` file prevents simultaneous claims and is released by the
+OS even after a crash or force kill. A leftover database marker is safely replaced
+by the next lock holder; PID reuse cannot keep the database locked indefinitely.
+The lock file stays on disk and must not be deleted while instances are running.
+
+Other instances open SQLite with read-only flags and skip migrations/imports.
+They can open projects in IDEs, read Git history and change their local tabs/panels,
+but cannot edit projects or save last-opened timestamps or workspace state. The UI
+shows the read-only mode and owner PID. Close the owning instance and restart a
+reader to acquire write access. Normal exit drains prior storage operations and
+removes only that instance's ownership marker before releasing the lock.
 
 On the first launch with SQLite storage, the app creates the schema and imports
 all regular files directly inside the old `projects/` directory, including
@@ -430,6 +445,7 @@ node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-working-tree.mjs
 node scripts/tests/test-workspace-state.mjs
 node scripts/tests/test-parent-navigation.mjs
+node scripts/tests/test-storage-access.mjs
 node scripts/tests/test-logging.mjs
 ```
 
