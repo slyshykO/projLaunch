@@ -110,22 +110,19 @@ let private commitDate (value: string) =
     | true, date -> date.ToString("yyyy-MM-dd HH:mm")
     | _ -> value
 
-let private CommitRow (tab: RepositoryTab) (commit: GitProtocol.Commit) (dispatch: Msg -> unit) =
+let private CommitRow (tab: RepositoryTab) (commit: GitProtocol.Commit) laneCount graphRow (dispatch: Msg -> unit) =
+    let selected =
+        tab.selection
+        |> Option.exists (fun selection -> selection.commit.oid = commit.oid)
+
     Html.tr
         [
             prop.key commit.oid
-            prop.className (
-                if
-                    tab.selection
-                    |> Option.exists (fun selection -> selection.commit.oid = commit.oid)
-                then
-                    "bg-primary/10"
-                else
-                    "hover:bg-base-200/60"
-            )
+            prop.className (if selected then "bg-primary/10" else "hover:bg-base-200/60")
             prop.onClick (fun _ -> dispatch (SelectRepositoryCommit(tab.id, commit.oid)))
             prop.children
                 [
+                    CommitGraphView.Cell laneCount graphRow selected
                     Html.td
                         [
                             prop.className "min-w-64"
@@ -150,10 +147,7 @@ let private CommitRow (tab: RepositoryTab) (commit: GitProtocol.Commit) (dispatc
                                     Html.button
                                         [
                                             prop.type' "button"
-                                            prop.ariaPressed (
-                                                tab.selection
-                                                |> Option.exists (fun selection -> selection.commit.oid = commit.oid)
-                                            )
+                                            prop.ariaPressed selected
                                             prop.className
                                                 "break-words text-left cursor-pointer focus-visible:outline-2 focus-visible:outline-primary"
                                             prop.text commit.subject
@@ -185,6 +179,9 @@ let private CommitRow (tab: RepositoryTab) (commit: GitProtocol.Commit) (dispatc
 let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
     let history = tab.history
     let loading = history.requestId.IsSome
+
+    let graph =
+        React.useMemo ((fun () -> CommitGraph.layout history.commits), [| box history.commits |])
 
     Html.div
         [
@@ -255,7 +252,7 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                     if history.commits.Length > 0 then
                                         Html.table
                                             [
-                                                prop.className "table table-sm w-full"
+                                                prop.className "table table-sm w-full commit-history-table"
                                                 prop.children
                                                     [
                                                         Html.caption
@@ -267,6 +264,7 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                                     [
                                                                         Html.tr
                                                                             [
+                                                                                Html.th [ prop.text "Graph" ]
                                                                                 Html.th [ prop.text "Commit" ]
                                                                                 Html.th [ prop.text "Author" ]
                                                                                 Html.th [ prop.text "Date" ]
@@ -276,8 +274,17 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                             ]
                                                         Html.tbody
                                                             [
-                                                                for commit in history.commits do
-                                                                    CommitRow tab commit dispatch
+                                                                for index, commit in history.commits |> Array.indexed do
+                                                                    CommitRow
+                                                                        tab
+                                                                        commit
+                                                                        graph.laneCount
+                                                                        graph.rows[index]
+                                                                        dispatch
+                                                                if graph.continuations.Length > 0 then
+                                                                    CommitGraphView.Continuation
+                                                                        graph
+                                                                        history.nextCursor.IsSome
                                                             ]
                                                     ]
                                             ]

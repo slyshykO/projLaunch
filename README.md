@@ -61,7 +61,11 @@ File markers are `M` (modified), `+` (added), `-` (deleted), `R` (renamed),
 `C` (copied) and `T` (type changed), with full descriptions in tooltips.
 Changing the commit or merge parent closes the old diff. Diff state stays independent
 per tab; loading, retry, binary files, empty patches and server truncation are explicit.
-The graph is still planned.
+The Graph column draws colored parent connections alongside each commit. Merge
+commits use double-circle nodes; the selected commit has an outer ring. Lines
+follow wrapped row heights and continue across loaded pages without rerouting
+previous rows. Dashed tails mark parents outside the loaded history. Colors
+identify routes within the current snapshot, not permanent branch identities.
 Open tabs are kept only for the current app session.
 
 When a project is opened, the app updates its `lastOpened` value and rewrites the stored project record.
@@ -165,7 +169,8 @@ logging error there. A stalled log transport delays closing by at most 1.5 secon
 The local Git read API now runs in a separate Rust process over stdio. It provides
 real status, paginated history and file diffs, with typed Tauri/Fable wrappers.
 See [the Git server guide](crates/git-server/README.md) for methods, build steps,
-lifecycle, limits and tests. The graph/file/diff UI is a subsequent stage.
+lifecycle, limits and tests. Repository tabs use this API for the history graph,
+changed files and diff views.
 
 - `src/` - frontend project, HTML/CSS entry point and assets
 - `src/src/` - F# application entry point, state and debug fixtures
@@ -374,6 +379,7 @@ node scripts/tests/test-about-version.mjs
 node scripts/tests/test-project-menu.mjs
 node scripts/tests/test-desktop-tabs.mjs
 node scripts/tests/test-repository-history.mjs
+node scripts/tests/test-commit-graph.mjs
 node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-logging.mjs

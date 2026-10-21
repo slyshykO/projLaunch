@@ -3,4 +3,25 @@
 @source './bin/fable-js/fable_modules/Feliz.DaisyUI.5.4.0/DaisyUI.fs';
 @source './bin/fable-js/fable_modules/Feliz.DaisyUI.5.4.0/Modifiers.fs';
 
-@plugin "daisyui"
+@plugin "daisyui";
+
+/* Each segment fills its table row; nodes keep a fixed size when text wraps. */
+.commit-history-table .commit-graph-cell {
+  position: relative;
+  padding: 0;
+}
+
+.commit-graph-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: calc(100% + 1px);
+  pointer-events: none;
+}
+
+.commit-graph-node {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

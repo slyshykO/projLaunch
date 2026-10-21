@@ -18,6 +18,7 @@
     <Compile Include="src/tauri/Tauri.Window.fs" />
     <Compile Include="src/tauri/Tauri.fs" />
     <Compile Include="src/domain/GitProtocol.fs" />
+    <Compile Include="src/domain/CommitGraph.fs" />
     <Compile Include="src/tauri/AppTauri.fs" />
     <Compile Include="src/domain/ProjectData.fs" />
     <Compile Include="src/Debug.fs" />
@@ -26,6 +27,7 @@
     <Compile Include="src/ui/SvgIcons.fs" />
     <Compile Include="src/ui/CommitFiles.fs" />
     <Compile Include="src/ui/CommitDiff.fs" />
+    <Compile Include="src/ui/CommitGraph.fs" />
     <Compile Include="src/ui/DesktopTabs.fs" />
     <Compile Include="src/ui/ProjectEditor.fs" />
     <Compile Include="src/ui/View.fs" />
