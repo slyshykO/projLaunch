@@ -1,5 +1,40 @@
 module CommitGraph
 
+open System.Text.RegularExpressions
+
+/// A visual line's name, not the set of branches containing a commit.
+/// Missing reference means a hint recovered from a conventional merge subject.
+type BranchLabel =
+    {
+        name: string
+        reference: string option
+    }
+
+let branchReference (reference: string) : BranchLabel option =
+    if reference.StartsWith "refs/heads/" then
+        Some
+            {
+                name = reference.Substring("refs/heads/".Length)
+                reference = Some reference
+            }
+    elif reference.StartsWith "refs/remotes/" && not (reference.EndsWith "/HEAD") then
+        Some
+            {
+                name = reference.Substring("refs/remotes/".Length)
+                reference = Some reference
+            }
+    else
+        None
+
+let private labelFromRefs refs =
+    let branches = refs |> Array.choose branchReference
+
+    branches
+    |> Array.tryFind (fun branch ->
+        branch.reference
+        |> Option.exists (fun reference -> reference.StartsWith "refs/heads/"))
+    |> Option.orElseWith (fun () -> Array.tryHead branches)
+
 type Lane = { target: string; color: int }
 
 type Edge =
@@ -15,8 +50,10 @@ type Row =
         lane: int
         color: int
         incoming: bool
+        joining: Edge array
         passing: Edge array
         parents: Edge array
+        branch: BranchLabel option
     }
 
 type Layout =
@@ -26,8 +63,48 @@ type Layout =
         continuations: Lane array
     }
 
+let private labelRows (commits: GitProtocol.Commit array) (rows: Row array) =
+    // Colors are unique route identities even when a route moves to a different
+    // column. Palette reuse must never join unrelated lines or their labels.
+    let labels = System.Collections.Generic.Dictionary<int, BranchLabel>()
+    let hints = System.Collections.Generic.Dictionary<int, BranchLabel>()
+
+    let addHint color name =
+        if not (hints.ContainsKey color) then
+            hints[color] <- { name = name; reference = None }
+
+    for index, row in rows |> Array.indexed do
+        let commit = commits[index]
+
+        if not (labels.ContainsKey row.color) then
+            labelFromRefs commit.refs
+            |> Option.iter (fun label -> labels[row.color] <- label)
+
+        if row.parents.Length > 1 then
+            let merge =
+                Regex.Match(commit.subject, "^Merge (?:remote-tracking )?branch '([^']+)'(?: into (.+))?$")
+
+            if merge.Success then
+                if merge.Groups[2].Success then
+                    addHint row.color merge.Groups[2].Value
+
+                // An octopus subject cannot identify which parent it names.
+                if row.parents.Length = 2 && row.parents[1].color <> row.color then
+                    addHint row.parents[1].color merge.Groups[1].Value
+
+    rows
+    |> Array.map (fun row ->
+        let branch =
+            match labels.TryGetValue row.color, hints.TryGetValue row.color with
+            | (true, label), _ -> Some label
+            | _, (true, hint) -> Some hint
+            | _ -> None
+
+        { row with branch = branch })
+
 /// The server supplies children before parents. Only the processed prefix affects
 /// a row, so appending a history page preserves all existing routes and colors.
+/// Names can become more precise when a later page contains a branch ref.
 let layout (commits: GitProtocol.Commit array) : Layout =
     let mutable lanes: Lane array = [||]
     let mutable nextColor = 0
@@ -59,10 +136,11 @@ let layout (commits: GitProtocol.Commit array) : Layout =
             let parents = commit.parents |> Array.distinct
             let mutable insertAt = min nodeIndex after.Count
 
-            // Reuse an existing route to a parent instead of drawing duplicate
-            // lanes for a shared ancestor. New first parents inherit the color.
+            // Keep the first-parent line until the shared ancestor is emitted.
+            // Collapsing it earlier would give that ancestor the other branch's
+            // identity depending on which side of a merge was traversed first.
             for index, parent in parents |> Array.indexed do
-                if not (after |> Seq.exists (fun lane -> lane.target = parent)) then
+                if index = 0 || not (after |> Seq.exists (fun lane -> lane.target = parent)) then
                     after.Insert(
                         insertAt,
                         {
@@ -73,8 +151,21 @@ let layout (commits: GitProtocol.Commit array) : Layout =
 
                     insertAt <- insertAt + 1
 
-            let parentLane target =
-                after |> Seq.findIndex (fun lane -> lane.target = target)
+            let laneByColor = after |> Seq.mapi (fun index lane -> lane.color, index) |> dict
+
+            let joining =
+                lanes
+                |> Array.mapi (fun index lane -> index, lane)
+                |> Array.choose (fun (index, lane) ->
+                    if lane.target = commit.oid && index <> nodeIndex then
+                        Some
+                            {
+                                fromLane = index
+                                toLane = nodeIndex
+                                color = lane.color
+                            }
+                    else
+                        None)
 
             let passing =
                 lanes
@@ -86,14 +177,18 @@ let layout (commits: GitProtocol.Commit array) : Layout =
                         Some
                             {
                                 fromLane = index
-                                toLane = parentLane lane.target
+                                toLane = laneByColor[lane.color]
                                 color = lane.color
                             })
 
             let edges =
                 parents
-                |> Array.map (fun parent ->
-                    let index = parentLane parent
+                |> Array.mapi (fun parentIndex parent ->
+                    let index =
+                        if parentIndex = 0 then
+                            laneByColor[node.color]
+                        else
+                            after |> Seq.findIndex (fun lane -> lane.target = parent)
 
                     {
                         fromLane = nodeIndex
@@ -109,12 +204,14 @@ let layout (commits: GitProtocol.Commit array) : Layout =
                 lane = nodeIndex
                 color = node.color
                 incoming = incoming.IsSome
+                joining = joining
                 passing = passing
                 parents = edges
+                branch = None
             })
 
     {
-        rows = rows
+        rows = labelRows commits rows
         laneCount = laneCount
         continuations = lanes
     }

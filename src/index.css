@@ -25,3 +25,19 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
+
+/* Reserve the hint's space so revealing a branch never moves graph nodes. */
+.commit-branch-hint {
+  visibility: hidden;
+  border-style: dashed;
+}
+
+.commit-history-row:hover .commit-branch-hint,
+.commit-history-row:focus-within .commit-branch-hint,
+.commit-history-row[data-selected="true"] .commit-branch-hint {
+  visibility: visible;
+}
+
+.commit-history-row[data-graph-member="true"]:not([data-selected="true"]) {
+  background-color: color-mix(in oklab, var(--commit-graph-color) 8%, transparent);
+}

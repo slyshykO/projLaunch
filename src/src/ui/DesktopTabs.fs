@@ -110,7 +110,16 @@ let private commitDate (value: string) =
     | true, date -> date.ToString("yyyy-MM-dd HH:mm")
     | _ -> value
 
-let private CommitRow (tab: RepositoryTab) (commit: GitProtocol.Commit) laneCount graphRow (dispatch: Msg -> unit) =
+let private CommitRow
+    (tab: RepositoryTab)
+    (commit: GitProtocol.Commit)
+    laneCount
+    (graphRow: CommitGraph.Row)
+    activeLine
+    onHover
+    onFocus
+    (dispatch: Msg -> unit)
+    =
     let selected =
         tab.selection
         |> Option.exists (fun selection -> selection.commit.oid = commit.oid)
@@ -118,11 +127,21 @@ let private CommitRow (tab: RepositoryTab) (commit: GitProtocol.Commit) laneCoun
     Html.tr
         [
             prop.key commit.oid
-            prop.className (if selected then "bg-primary/10" else "hover:bg-base-200/60")
+            prop.className (
+                "commit-history-row "
+                + if selected then "bg-primary/10" else "hover:bg-base-200/60"
+            )
+            prop.custom ("data-selected", selected)
+            prop.custom ("data-graph-member", (activeLine = Some graphRow.color))
+            prop.style [ style.custom ("--commit-graph-color", CommitGraphView.color graphRow.color) ]
+            prop.onMouseEnter (fun _ -> onHover (Some graphRow.color))
+            prop.onMouseLeave (fun _ -> onHover None)
+            prop.onFocus (fun _ -> onFocus (Some graphRow.color))
+            prop.onBlur (fun _ -> onFocus None)
             prop.onClick (fun _ -> dispatch (SelectRepositoryCommit(tab.id, commit.oid)))
             prop.children
                 [
-                    CommitGraphView.Cell laneCount graphRow selected
+                    CommitGraphView.Cell laneCount graphRow selected activeLine
                     Html.td
                         [
                             prop.className "min-w-64"
@@ -130,18 +149,13 @@ let private CommitRow (tab: RepositoryTab) (commit: GitProtocol.Commit) laneCoun
                                 [
                                     Html.div
                                         [
-                                            prop.className "flex flex-wrap items-center gap-1 mb-1"
+                                            prop.className "flex flex-wrap items-center gap-1 mb-1 min-h-5"
                                             prop.children
                                                 [
                                                     for reference in commit.refs do
-                                                        Html.span
-                                                            [
-                                                                prop.key reference
-                                                                prop.className
-                                                                    "badge badge-sm badge-outline max-w-64 truncate"
-                                                                prop.title reference
-                                                                prop.text reference
-                                                            ]
+                                                        CommitGraphView.Reference graphRow reference
+                                                    if commit.refs.Length = 0 then
+                                                        CommitGraphView.BranchHint graphRow
                                                 ]
                                         ]
                                     Html.button
@@ -179,6 +193,16 @@ let private CommitRow (tab: RepositoryTab) (commit: GitProtocol.Commit) laneCoun
 let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
     let history = tab.history
     let loading = history.requestId.IsSome
+    let hoveredLine, setHoveredLine = React.useState<int option> None
+    let focusedLine, setFocusedLine = React.useState<int option> None
+    let activeLine = hoveredLine |> Option.orElse focusedLine
+
+    React.useEffect (
+        (fun () ->
+            setHoveredLine None
+            setFocusedLine None),
+        [| box history.commits |]
+    )
 
     let graph =
         React.useMemo ((fun () -> CommitGraph.layout history.commits), [| box history.commits |])
@@ -280,11 +304,15 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                                         commit
                                                                         graph.laneCount
                                                                         graph.rows[index]
+                                                                        activeLine
+                                                                        setHoveredLine
+                                                                        setFocusedLine
                                                                         dispatch
                                                                 if graph.continuations.Length > 0 then
                                                                     CommitGraphView.Continuation
                                                                         graph
                                                                         history.nextCursor.IsSome
+                                                                        activeLine
                                                             ]
                                                     ]
                                             ]

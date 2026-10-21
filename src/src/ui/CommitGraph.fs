@@ -14,21 +14,69 @@ let private colors =
         "#ec4899"
     |]
 
-let private color index = colors[index % colors.Length]
+let color index = colors[index % colors.Length]
 let private x lane = 24 + lane * 20
 let width laneCount = 48 + max 0 (laneCount - 1) * 20
 
-let private path colorIndex (data: string) =
+let private opacity activeLine colorIndex =
+    match activeLine with
+    | Some active when active <> colorIndex -> 0.2
+    | _ -> 1.0
+
+let private branchDescription (branch: CommitGraph.BranchLabel) =
+    match branch.reference with
+    | Some reference -> $"Branch line: {branch.name} ({reference})"
+    | None -> $"Branch line: {branch.name} (inferred from merge message)"
+
+let Reference (row: CommitGraph.Row) reference =
+    let branch = CommitGraph.branchReference reference
+
+    let label =
+        match branch with
+        | Some branch -> branch.name
+        | None when reference.StartsWith "refs/tags/" -> "tag: " + reference.Substring("refs/tags/".Length)
+        | None -> reference
+
+    Html.span
+        [
+            prop.key reference
+            prop.className "badge badge-sm badge-outline max-w-64 truncate"
+            if branch.IsSome then
+                prop.style [ style.borderColor (color row.color) ]
+            prop.title reference
+            prop.text label
+        ]
+
+let BranchHint (row: CommitGraph.Row) =
+    match row.branch with
+    | None -> Html.none
+    | Some branch ->
+        Html.span
+            [
+                prop.className "commit-branch-hint badge badge-sm badge-outline max-w-64 truncate"
+                prop.style [ style.borderColor (color row.color) ]
+                prop.title (branchDescription branch)
+                prop.ariaLabel (branchDescription branch)
+                prop.text (
+                    if branch.reference.IsSome then
+                        branch.name
+                    else
+                        "~ " + branch.name
+                )
+            ]
+
+let private path activeLine colorIndex (data: string) =
     Svg.path
         [
             svg.d data
             svg.stroke (color colorIndex)
+            svg.custom ("opacity", opacity activeLine colorIndex)
             svg.strokeWidth 2
             svg.fill "none"
             svg.custom ("vectorEffect", "non-scaling-stroke")
         ]
 
-let private edgePath (edge: CommitGraph.Edge) passing =
+let private edgePath activeLine (edge: CommitGraph.Edge) passing =
     let start = x edge.fromLane
     let finish = x edge.toLane
 
@@ -38,7 +86,7 @@ let private edgePath (edge: CommitGraph.Edge) passing =
         else
             $"M {start} 50"
 
-    path edge.color $"{prefix} C {start} 75 {finish} 75 {finish} 100"
+    path activeLine edge.color $"{prefix} C {start} 75 {finish} 75 {finish} 100"
 
 let private lines laneCount children =
     Svg.svg
@@ -53,7 +101,7 @@ let private lines laneCount children =
             svg.children children
         ]
 
-let Cell laneCount (row: CommitGraph.Row) selected =
+let Cell laneCount (row: CommitGraph.Row) selected activeLine =
     let description =
         match row.parents.Length with
         | 0 -> "Root commit"
@@ -64,7 +112,11 @@ let Cell laneCount (row: CommitGraph.Row) selected =
         [
             prop.className "commit-graph-cell"
             prop.style [ style.width (width laneCount); style.minWidth (width laneCount) ]
-            prop.title description
+            prop.title (
+                row.branch
+                |> Option.map (fun branch -> description + " — " + branchDescription branch)
+                |> Option.defaultValue description
+            )
             prop.children
                 [
                     Html.span [ prop.className "sr-only"; prop.text description ]
@@ -72,11 +124,16 @@ let Cell laneCount (row: CommitGraph.Row) selected =
                         laneCount
                         [
                             for edge in row.passing do
-                                edgePath edge true
+                                edgePath activeLine edge true
                             if row.incoming then
-                                path row.color $"M {x row.lane} 0 L {x row.lane} 50"
+                                path activeLine row.color $"M {x row.lane} 0 L {x row.lane} 50"
+                            for edge in row.joining do
+                                path
+                                    activeLine
+                                    edge.color
+                                    $"M {x edge.fromLane} 0 C {x edge.fromLane} 25 {x edge.toLane} 25 {x edge.toLane} 50"
                             for edge in row.parents do
-                                edgePath edge false
+                                edgePath activeLine edge false
                         ]
                     Html.div
                         [
@@ -90,6 +147,10 @@ let Cell laneCount (row: CommitGraph.Row) selected =
                                             svg.width 22
                                             svg.height 22
                                             svg.viewBox (0, 0, 22, 22)
+                                            svg.custom (
+                                                "opacity",
+                                                if selected then 1.0 else opacity activeLine row.color
+                                            )
                                             svg.custom ("focusable", false)
                                             svg.children
                                                 [
@@ -132,7 +193,7 @@ let Cell laneCount (row: CommitGraph.Row) selected =
                 ]
         ]
 
-let Continuation (graph: CommitGraph.Layout) hasMore =
+let Continuation (graph: CommitGraph.Layout) hasMore activeLine =
     Html.tr
         [
             prop.className "commit-graph-continuation"
@@ -151,6 +212,7 @@ let Continuation (graph: CommitGraph.Layout) hasMore =
                                                     [
                                                         svg.d $"M {x index} 0 L {x index} 80"
                                                         svg.stroke (color lane.color)
+                                                        svg.custom ("opacity", opacity activeLine lane.color)
                                                         svg.strokeWidth 2
                                                         svg.strokeDasharray [| 3; 3 |]
                                                         svg.custom ("vectorEffect", "non-scaling-stroke")

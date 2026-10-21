@@ -66,6 +66,15 @@ commits use double-circle nodes; the selected commit has an outer ring. Lines
 follow wrapped row heights and continue across loaded pages without rerouting
 previous rows. Dashed tails mark parents outside the loaded history. Colors
 identify routes within the current snapshot, not permanent branch identities.
+Hover or keyboard-focus a commit to highlight its line. Rows without refs reveal
+the line's branch name in a dashed badge; selection keeps that name visible.
+Branch ref badges use the graph color and short names, with full refs in tooltips.
+Names come from the topmost branch ref on each line (local preferred over remote
+at the same commit). Tags and remote HEAD refs do not name lines. For a deleted
+branch, a standard merge subject can supply a hint marked `~`; a real ref takes
+precedence. A name may resolve when loading more history without moving lines.
+These labels describe graph lines, not every branch containing a commit or the
+branch on which it was originally created.
 Open tabs are kept only for the current app session.
 
 When a project is opened, the app updates its `lastOpened` value and rewrites the stored project record.
