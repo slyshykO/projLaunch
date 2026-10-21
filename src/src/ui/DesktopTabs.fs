@@ -3,6 +3,10 @@ module DesktopTabs
 open System
 open Feliz
 open state
+open Fable.Core
+
+[<Fable.Core.Emit("$0.scrollIntoView({block: 'nearest', inline: 'nearest'})")>]
+let private revealRow (element: Browser.Types.Element) : unit = jsNative
 
 [<ReactComponent>]
 let TabBar (tabs: RepositoryTab list) (active: string option) (dispatch: Msg -> unit) =
@@ -131,6 +135,7 @@ let private CommitRow
     Html.tr
         [
             prop.key commit.oid
+            prop.id $"commit-{tab.id}-{commit.oid}"
             prop.className (
                 "commit-history-row "
                 + if selected then "bg-primary/10" else "hover:bg-base-200/60"
@@ -202,6 +207,22 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
     let hoveredLine, setHoveredLine = React.useState<int option> None
     let focusedLine, setFocusedLine = React.useState<int option> None
     let activeLine = hoveredLine |> Option.orElse focusedLine
+
+    let selectedOid =
+        tab.selection
+        |> Option.bind (fun selection -> selection.commit)
+        |> Option.map (fun commit -> commit.oid)
+
+    React.useEffect (
+        (fun () ->
+            selectedOid
+            |> Option.iter (fun oid ->
+                let row = Browser.Dom.document.getElementById $"commit-{tab.id}-{oid}"
+
+                if not (isNull row) then
+                    revealRow row)),
+        [| box selectedOid |]
+    )
 
     React.useEffect (
         (fun () ->

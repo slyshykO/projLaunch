@@ -70,22 +70,30 @@ let Panel (tabId: string) (selection: CommitFiles) (diff: CommitDiff) dispatch =
                                                     Html.p
                                                         [
                                                             prop.className "text-xs text-base-content/60 mt-1 break-all"
-                                                            prop.text (
-                                                                match selection.commit with
-                                                                | None -> CommitFilesView.targetLabel diff.target
-                                                                | Some commit ->
-                                                                    CommitFilesView.parentLabel commit
-                                                                    + (if commit.parents.Length > 1 then
-                                                                           let index =
-                                                                               (selection.parent
-                                                                                |> Option.defaultValue 1)
-                                                                               - 1
+                                                            prop.children
+                                                                [
+                                                                    match selection.commit with
+                                                                    | None ->
+                                                                        Html.text (
+                                                                            CommitFilesView.targetLabel diff.target
+                                                                        )
+                                                                    | Some commit ->
+                                                                        CommitFilesView.ParentLinks
+                                                                            tabId
+                                                                            commit
+                                                                            dispatch
 
-                                                                           let oid = commit.parents[index]
-                                                                           $" · diff: {oid.Substring(0, min 6 oid.Length)}"
-                                                                       else
-                                                                           "")
-                                                            )
+                                                                        if commit.parents.Length > 1 then
+                                                                            let index =
+                                                                                (selection.parent
+                                                                                 |> Option.defaultValue 1)
+                                                                                - 1
+
+                                                                            let oid = commit.parents[index]
+
+                                                                            Html.text
+                                                                                $" · diff: {oid.Substring(0, min 6 oid.Length)}"
+                                                                ]
                                                         ]
                                                 ]
                                         ]

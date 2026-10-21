@@ -56,6 +56,8 @@ type RepositoryTab =
         filesWidth: float
         filesHeight: float
         restoreFile: Workspace.File option
+        parentNavigation: string option
+        parentNavigationError: string option
         history: RepositoryHistory
         workingTree: Result<GitProtocol.Status, string> option
         selection: CommitFiles option
@@ -90,6 +92,9 @@ type Msg =
     | SelectWorkingTree of string
     | SelectWorkingTreeFile of string * GitProtocol.DiffTarget * string
     | SelectRepositoryCommit of tabId: string * oid: string
+    | NavigateToParent of tabId: string * oid: string
+    | ContinueParentNavigation of tabId: string * oid: string
+    | CancelParentNavigation of tabId: string
     | SelectCommitParent of tabId: string * parent: int
     | RefreshCommitFiles of tabId: string
     | OnCommitFiles of
@@ -233,6 +238,8 @@ let private newRepositoryTab root name =
         filesWidth = 40.0
         filesHeight = 40.0
         restoreFile = None
+        parentNavigation = None
+        parentNavigationError = None
         selection = None
         workingTree = None
         history =
@@ -566,6 +573,90 @@ let rec private updateCore msg state =
             Cmd.ofMsg (RefreshCommitFiles id)
         | _ -> state, Cmd.none
 
+    | NavigateToParent(id, oid) ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when
+            tab.selection
+            |> Option.bind (fun selection -> selection.commit)
+            |> Option.exists (fun commit -> Array.contains oid commit.parents)
+            ->
+            let next =
+                { state with
+                    repositoryTabs =
+                        state.repositoryTabs
+                        |> List.map (fun item ->
+                            if item.id = id then
+                                { item with
+                                    parentNavigation = Some oid
+                                    parentNavigationError = None
+                                }
+                            else
+                                item)
+                }
+
+            if tab.history.commits |> Array.exists (fun commit -> commit.oid = oid) then
+                updateCore (ContinueParentNavigation(id, oid)) next
+            elif tab.history.requestId.IsSome then
+                next, Cmd.none
+            elif
+                tab.history.error.IsSome
+                || not tab.history.hasLoaded
+                || tab.history.nextCursor.IsNone
+            then
+                next, Cmd.ofMsg (RefreshRepositoryHistory id)
+            else
+                next, Cmd.ofMsg (ContinueParentNavigation(id, oid))
+        | _ -> state, Cmd.none
+
+    | CancelParentNavigation id ->
+        { state with
+            repositoryTabs =
+                state.repositoryTabs
+                |> List.map (fun tab ->
+                    if tab.id = id then
+                        { tab with
+                            parentNavigation = None
+                            parentNavigationError = None
+                        }
+                    else
+                        tab)
+        },
+        Cmd.none
+
+    | ContinueParentNavigation(id, oid) ->
+        match
+            state.repositoryTabs
+            |> List.tryFind (fun tab -> tab.id = id && tab.parentNavigation = Some oid)
+        with
+        | Some tab ->
+            if tab.history.commits |> Array.exists (fun commit -> commit.oid = oid) then
+                updateCore (SelectRepositoryCommit(id, oid)) state
+            elif tab.history.requestId.IsSome then
+                state, Cmd.none
+            elif tab.history.error.IsNone && tab.history.nextCursor.IsSome then
+                state, Cmd.ofMsg (LoadMoreCommits id)
+            else
+                let error =
+                    match tab.history.error with
+                    | Some error -> $"Could not open parent {oid}. Click its hash to retry. {error}"
+                    | None ->
+                        $"Parent {oid} is not available in this repository's history. It may be missing from a shallow clone or no longer reachable."
+
+                { state with
+                    repositoryTabs =
+                        state.repositoryTabs
+                        |> List.map (fun item ->
+                            if item.id = id then
+                                { item with
+                                    parentNavigation = None
+                                    parentNavigationError = Some error
+                                }
+                            else
+                                item)
+                },
+                Cmd.none
+        | None -> state, Cmd.none
+
     | SelectRepositoryCommit(id, oid) ->
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
         | Some tab when
@@ -596,6 +687,8 @@ let rec private updateCore msg state =
                                 { item with
                                     selection = Some selection
                                     restoreFile = None
+                                    parentNavigation = None
+                                    parentNavigationError = None
                                 }
                             else
                                 item)
@@ -985,7 +1078,7 @@ let rec private updateCore msg state =
         with
         | None -> state, Cmd.none
         | Some _ ->
-            let updated, _ =
+            let updated, navigation =
                 updateCore (OnRepositoryHistory(id, requestId, false, result)) state
 
             let tabs =
@@ -1004,10 +1097,12 @@ let rec private updateCore msg state =
                         |> Option.exists (fun selection -> selection.commit.IsNone || not selection.hasLoaded)))
 
             { updated with repositoryTabs = tabs },
-            if selected then
-                Cmd.ofMsg (RefreshCommitFiles id)
-            else
-                Cmd.none
+            Cmd.batch
+                [
+                    navigation
+                    if selected then
+                        Cmd.ofMsg (RefreshCommitFiles id)
+                ]
 
     | OnRepositoryHistory(id, requestId, append, result) ->
         let tabs =
@@ -1044,7 +1139,14 @@ let rec private updateCore msg state =
 
                     { tab with history = history })
 
-        { state with repositoryTabs = tabs }, Cmd.none
+        let navigation =
+            state.repositoryTabs
+            |> List.tryFind (fun tab -> tab.id = id && tab.history.requestId = Some requestId)
+            |> Option.bind (fun tab -> tab.parentNavigation)
+            |> Option.map (fun oid -> Cmd.ofMsg (ContinueParentNavigation(id, oid)))
+            |> Option.defaultValue Cmd.none
+
+        { state with repositoryTabs = tabs }, navigation
 
     | RefreshGitStatuses ->
         state,
@@ -1465,7 +1567,25 @@ let rec private updateCore msg state =
 /// Serialize durable choices only when they change. One writer is in flight;
 /// newer choices are coalesced and flushed after its acknowledgement.
 let update msg state =
-    let next, command = updateCore msg state
+    let prepared =
+        match msg with
+        | SelectRepositoryCommit(id, _)
+        | SelectWorkingTree id ->
+            { state with
+                repositoryTabs =
+                    state.repositoryTabs
+                    |> List.map (fun tab ->
+                        if tab.id = id then
+                            { tab with
+                                parentNavigation = None
+                                parentNavigationError = None
+                            }
+                        else
+                            tab)
+            }
+        | _ -> state
+
+    let next, command = updateCore msg prepared
 
     match msg with
     | OnWorkspaceLoaded _ -> next, command

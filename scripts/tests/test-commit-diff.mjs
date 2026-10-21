@@ -135,7 +135,7 @@ await loadFiles();
 send('SelectCommitFile', id, files[0].path);
 (await openDiff(files[0].path, merge.oid, 1)).resolve(patch(files[0].path, '+right parent\n'));
 await tick();
-assert.match(render(), /parent: aaaaaa,cccccc/);
+assert.match(render().replace(/<[^>]*>/g, ''), /parent: aaaaaa,cccccc/);
 assert.doesNotMatch(render(), /compared with|Compare with parent/);
 assert.match(render(), /right parent/);
 send('SelectCommitFile', id, files[1].path);

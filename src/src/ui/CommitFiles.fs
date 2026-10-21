@@ -80,13 +80,30 @@ let private FileRow (tab: RepositoryTab) (selection: CommitFiles) target (file: 
                 ]
         ]
 
-let parentLabel (commit: GitProtocol.Commit) =
-    let hashes =
-        commit.parents
-        |> Array.map (fun oid -> oid.Substring(0, min 6 oid.Length))
-        |> String.concat ","
+let ParentLinks tabId (commit: GitProtocol.Commit) dispatch =
+    Html.span
+        [
+            prop.children
+                [
+                    Html.text "parent: "
+                    if commit.parents.Length = 0 then
+                        Html.text "—"
+                    for index, oid in commit.parents |> Array.indexed do
+                        if index > 0 then
+                            Html.text ","
 
-    "parent: " + if hashes = "" then "—" else hashes
+                        Html.button
+                            [
+                                prop.type' "button"
+                                prop.className
+                                    "font-mono link link-hover text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                                prop.title $"Open parent {oid}"
+                                prop.ariaLabel $"Open parent {oid}"
+                                prop.text (oid.Substring(0, min 6 oid.Length))
+                                prop.onClick (fun _ -> dispatch (NavigateToParent(tabId, oid)))
+                            ]
+                ]
+        ]
 
 let targetLabel =
     function
@@ -124,8 +141,7 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                         Html.p
                                             [
                                                 prop.className "mt-2 text-xs text-base-content/60"
-                                                prop.title (String.concat "," commit.parents)
-                                                prop.text (parentLabel commit)
+                                                prop.children [ ParentLinks tab.id commit dispatch ]
                                             ]
 
                                         if commit.parents.Length > 1 then
@@ -185,6 +201,37 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                             ]
                                 ]
                         ]
+                    match tab.parentNavigation with
+                    | Some oid ->
+                        Html.div
+                            [
+                                prop.className "shrink-0 px-4 py-2 text-sm border-b border-base-300"
+                                prop.children
+                                    [
+                                        Html.span
+                                            [
+                                                prop.role "status"
+                                                prop.text $"Finding parent {oid.Substring(0, min 8 oid.Length)}…"
+                                            ]
+                                        Html.button
+                                            [
+                                                prop.type' "button"
+                                                prop.className "btn btn-xs ml-2"
+                                                prop.text "Cancel"
+                                                prop.onClick (fun _ -> dispatch (CancelParentNavigation tab.id))
+                                            ]
+                                    ]
+                            ]
+                    | None -> Html.none
+                    match tab.parentNavigationError with
+                    | Some error ->
+                        Html.p
+                            [
+                                prop.role "alert"
+                                prop.className "shrink-0 p-4 text-sm text-error break-words"
+                                prop.text error
+                            ]
+                    | None -> Html.none
                     Html.div
                         [
                             prop.className "flex-1 min-h-0 overflow-auto p-4"

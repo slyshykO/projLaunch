@@ -99,7 +99,7 @@ assert.doesNotMatch(render(), /obsolete.txt/);
 assert.match(render(), /parent: —/);
 
 const parentOne = await start(step('SelectRepositoryCommit', firstId, merge.oid));
-assert.match(render(), /parent: bbbbbb,aaaaaa/);
+assert.match(render().replace(/<[^>]*>/g, ''), /parent: bbbbbb,aaaaaa/);
 assert.doesNotMatch(render(), /Choose a parent|Compared with/);
 assert.match(render(), /aria-label="Diff parent"/);
 assert.equal(tab().selection.parent, 1);

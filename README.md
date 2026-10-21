@@ -49,7 +49,10 @@ Select a commit row (or focus its subject and press Enter/Space) to load changed
 files through the Git server. The file panel shows change types and old/new paths
 for renames. Parents are shown as `parent: abc123,def456`. Merge commits initially
 compare with the first parent; the compact `diff:` selector switches parents.
-Parent hashes are not navigation links yet. Initial commits compare
+Click a parent hash in the file panel or diff header to select that commit and
+reveal its graph row. Missing pages load automatically; Cancel stops the search
+after the current read. A missing parent or failed read leaves the current selection
+intact; click the hash again to retry from a fresh history snapshot. Initial commits compare
 against an empty tree. Loading, empty results and errors are shown separately;
 Retry reopens the repository after a server restart. Selection is independent per
 tab and stays visible when refreshing history, even outside its new first page.
@@ -426,6 +429,7 @@ node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-working-tree.mjs
 node scripts/tests/test-workspace-state.mjs
+node scripts/tests/test-parent-navigation.mjs
 node scripts/tests/test-logging.mjs
 ```
 
