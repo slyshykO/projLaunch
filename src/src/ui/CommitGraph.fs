@@ -28,7 +28,7 @@ let private branchDescription (branch: CommitGraph.BranchLabel) =
     | Some reference -> $"Branch line: {branch.name} ({reference})"
     | None -> $"Branch line: {branch.name} (inferred from merge message)"
 
-let Reference (row: CommitGraph.Row) reference =
+let private Reference (row: CommitGraph.Row) reference =
     let branch = CommitGraph.branchReference reference
 
     let label =
@@ -40,20 +40,20 @@ let Reference (row: CommitGraph.Row) reference =
     Html.span
         [
             prop.key reference
-            prop.className "badge badge-sm badge-outline max-w-64 truncate"
+            prop.className "commit-ref-label badge badge-sm badge-outline"
             if branch.IsSome then
                 prop.style [ style.borderColor (color row.color) ]
             prop.title reference
             prop.text label
         ]
 
-let BranchHint (row: CommitGraph.Row) =
+let private BranchHint (row: CommitGraph.Row) =
     match row.branch with
     | None -> Html.none
     | Some branch ->
         Html.span
             [
-                prop.className "commit-branch-hint badge badge-sm badge-outline max-w-64 truncate"
+                prop.className "commit-branch-hint commit-ref-label badge badge-sm badge-outline"
                 prop.style [ style.borderColor (color row.color) ]
                 prop.title (branchDescription branch)
                 prop.ariaLabel (branchDescription branch)
@@ -64,6 +64,46 @@ let BranchHint (row: CommitGraph.Row) =
                         "~ " + branch.name
                 )
             ]
+
+let References (row: CommitGraph.Row) (references: string array) =
+    Html.td
+        [
+            prop.className "commit-refs-cell"
+            prop.children
+                [
+                    if references.Length > 0 || row.branch.IsSome then
+                        Html.div
+                            [
+                                prop.className (
+                                    "commit-refs-content"
+                                    + if references.Length = 0 then
+                                          " commit-branch-context"
+                                      else
+                                          ""
+                                )
+                                prop.children
+                                    [
+                                        Html.div
+                                            [
+                                                prop.className "commit-ref-labels"
+                                                prop.children
+                                                    [
+                                                        for reference in references do
+                                                            Reference row reference
+                                                        if references.Length = 0 then
+                                                            BranchHint row
+                                                    ]
+                                            ]
+                                        Html.span
+                                            [
+                                                prop.className "commit-ref-connector"
+                                                prop.style [ style.custom ("--commit-graph-node-x", $"{x row.lane}px") ]
+                                                prop.ariaHidden true
+                                            ]
+                                    ]
+                            ]
+                ]
+        ]
 
 let private path activeLine colorIndex (data: string) =
     Svg.path
@@ -199,6 +239,7 @@ let Continuation (graph: CommitGraph.Layout) hasMore activeLine =
             prop.className "commit-graph-continuation"
             prop.children
                 [
+                    Html.td [ prop.className "commit-refs-cell" ]
                     Html.td
                         [
                             prop.className "commit-graph-cell"

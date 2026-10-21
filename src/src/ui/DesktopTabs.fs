@@ -141,23 +141,13 @@ let private CommitRow
             prop.onClick (fun _ -> dispatch (SelectRepositoryCommit(tab.id, commit.oid)))
             prop.children
                 [
+                    CommitGraphView.References graphRow commit.refs
                     CommitGraphView.Cell laneCount graphRow selected activeLine
                     Html.td
                         [
-                            prop.className "min-w-64"
+                            prop.className "commit-subject-cell min-w-64"
                             prop.children
                                 [
-                                    Html.div
-                                        [
-                                            prop.className "flex flex-wrap items-center gap-1 mb-1 min-h-5"
-                                            prop.children
-                                                [
-                                                    for reference in commit.refs do
-                                                        CommitGraphView.Reference graphRow reference
-                                                    if commit.refs.Length = 0 then
-                                                        CommitGraphView.BranchHint graphRow
-                                                ]
-                                        ]
                                     Html.button
                                         [
                                             prop.type' "button"
@@ -288,6 +278,7 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                                                     [
                                                                         Html.tr
                                                                             [
+                                                                                Html.th [ prop.text "Branch / Tag" ]
                                                                                 Html.th [ prop.text "Graph" ]
                                                                                 Html.th [ prop.text "Commit" ]
                                                                                 Html.th [ prop.text "Author" ]

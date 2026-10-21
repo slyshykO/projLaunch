@@ -61,13 +61,18 @@ File markers are `M` (modified), `+` (added), `-` (deleted), `R` (renamed),
 `C` (copied) and `T` (type changed), with full descriptions in tooltips.
 Changing the commit or merge parent closes the old diff. Diff state stays independent
 per tab; loading, retry, binary files, empty patches and server truncation are explicit.
+The Branch / Tag column sits to the left of Graph, with horizontal connectors
+from labels to their commit nodes. Actual refs are always visible; multiple refs
+stack in the same cell, and long names truncate with full refs in tooltips.
+Commit messages occupy their own column to the right of the graph.
 The Graph column draws colored parent connections alongside each commit. Merge
 commits use double-circle nodes; the selected commit has an outer ring. Lines
 follow wrapped row heights and continue across loaded pages without rerouting
 previous rows. Dashed tails mark parents outside the loaded history. Colors
 identify routes within the current snapshot, not permanent branch identities.
 Hover or keyboard-focus a commit to highlight its line. Rows without refs reveal
-the line's branch name in a dashed badge; selection keeps that name visible.
+the line's branch name in a dashed badge in the left column, together with its
+connector; selection keeps that name visible without changing the row height.
 Branch ref badges use the graph color and short names, with full refs in tooltips.
 Names come from the topmost branch ref on each line (local preferred over remote
 at the same commit). Tags and remote HEAD refs do not name lines. For a deleted

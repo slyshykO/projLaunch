@@ -144,7 +144,7 @@ const tab = {
 };
 const render = tab => renderToStaticMarkup(React.createElement(RepositoryPanel, { tab, dispatch() {} }));
 const html = render(tab);
-assert.match(html, /<th>Graph<\/th>/);
+assert.match(html, /<th>Branch \/ Tag<\/th><th>Graph<\/th><th>Commit<\/th>/);
 assert.equal((html.match(/class="commit-graph-node"/g) ?? []).length, commits.length);
 assert.match(html, /Merge commit \(3 parents\)/);
 assert.match(html, /Root commit/);
@@ -161,6 +161,27 @@ const namedHtml = render({ ...tab, history: { commits: namedCommits, hasLoaded: 
 assert.match(namedHtml, /title="refs\/heads\/feature\/x"[^>]*>feature\/x<\/span>/);
 assert.match(namedHtml, /class="commit-branch-hint[^>]*Branch line: main/);
 assert.match(namedHtml, /data-graph-member="false"/);
+// Refs occupy their own column to the left of the graph, never the message cell.
+const historyRows = markup => [...markup.matchAll(/<tr class="commit-history-row[^>]*>(.*?)<\/tr>/g)]
+    .map(match => [...match[1].matchAll(/<td\b[^>]*>(.*?)<\/td>/g)].map(cell => cell[1]));
+for (const [index, cells] of historyRows(namedHtml).entries()) {
+    assert.equal(cells.length, 6);
+    assert.match(cells[1], /commit-graph-node/);
+    assert.match(cells[2], new RegExp(`>${namedCommits[index].subject}<\/button>`));
+    assert.doesNotMatch(cells[2], /badge|commit-ref-label/);
+    for (const reference of namedCommits[index].refs) {
+        assert.ok(cells[0].includes(`title="${reference}"`), 'Every ref stays beside its own graph node');
+    }
+    if (namedCommits[index].refs.length) {
+        assert.doesNotMatch(cells[0] + cells[1], /commit-branch-context/, 'Tip refs and connectors are always visible');
+    } else {
+        assert.match(cells[0], /commit-branch-context/);
+        assert.match(cells[0], /commit-ref-connector/, 'Context label and its entire connector appear together');
+    }
+}
+const tail = render(partial).match(/<tr class="commit-graph-continuation">(.*?)<\/tr>/)[1];
+assert.match(tail, /^<td class="commit-refs-cell"><\/td><td class="commit-graph-cell">/);
+assert.match(tail, /colSpan="4"/);
 assert.match(render({ ...tab, history: { commits: merged, hasLoaded: true } }), /~ deleted-feature/);
 const unsafeName = [named('tip', ['root'], ['refs/heads/<img>']), named('root', [])];
 const escapedHtml = render({ ...tab, history: { commits: unsafeName, hasLoaded: true } });

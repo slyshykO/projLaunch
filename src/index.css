@@ -5,6 +5,61 @@
 
 @plugin "daisyui";
 
+.commit-history-table .commit-refs-cell {
+  width: 176px;
+  min-width: 176px;
+  max-width: 176px;
+  padding: 6px 0 6px 12px;
+}
+
+.commit-refs-content {
+  display: flex;
+  align-items: center;
+  width: 164px;
+  min-height: 20px;
+}
+
+.commit-ref-labels {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  max-width: 144px;
+}
+
+.commit-ref-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 18px;
+}
+
+.commit-ref-connector {
+  position: relative;
+  height: 1px;
+  pointer-events: none;
+}
+
+/* Draw across both cells in one piece to avoid a subpixel seam at their edge. */
+.commit-ref-connector::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(100% + var(--commit-graph-node-x));
+  height: 100%;
+  background-color: var(--commit-graph-color);
+}
+
+.commit-refs-content > .commit-ref-connector {
+  flex: 1;
+  min-width: 16px;
+  margin-left: 4px;
+}
+
 /* Each segment fills its table row; nodes keep a fixed size when text wraps. */
 .commit-history-table .commit-graph-cell {
   position: relative;
@@ -27,14 +82,17 @@
 }
 
 /* Reserve the hint's space so revealing a branch never moves graph nodes. */
-.commit-branch-hint {
+.commit-branch-context {
   visibility: hidden;
+}
+
+.commit-branch-hint {
   border-style: dashed;
 }
 
-.commit-history-row:hover .commit-branch-hint,
-.commit-history-row:focus-within .commit-branch-hint,
-.commit-history-row[data-selected="true"] .commit-branch-hint {
+.commit-history-row:hover .commit-branch-context,
+.commit-history-row:focus-within .commit-branch-context,
+.commit-history-row[data-selected="true"] .commit-branch-context {
   visibility: visible;
 }
 
