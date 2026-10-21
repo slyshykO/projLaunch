@@ -398,7 +398,12 @@ let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
 
     Html.div
         [
-            prop.className "h-full flex flex-col lg:flex-row min-h-0"
+            prop.className "repository-split h-full min-h-0"
+            prop.style
+                [
+                    style.custom ("--files-width", string tab.filesWidth + "%")
+                    style.custom ("--files-height", string tab.filesHeight + "%")
+                ]
             prop.children
                 [
                     Html.div
@@ -426,10 +431,11 @@ let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                     | _ -> Html.none
                                 ]
                         ]
+                    RepositorySplitter.Handle tab.id tab.filesWidth tab.filesHeight dispatch
                     Html.div
                         [
-                            prop.className
-                                "h-2/5 lg:h-full lg:w-2/5 shrink-0 min-h-0 border-t lg:border-t-0 lg:border-l border-base-300"
+                            prop.id $"files-panel-{tab.id}"
+                            prop.className "repository-files-panel min-w-0 min-h-0"
                             prop.children [ CommitFilesView.Panel tab dispatch ]
                         ]
                 ]

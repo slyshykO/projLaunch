@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::project::ProjectData;
+use crate::workspace::Workspace;
 
 const COLUMNS: &str =
     "id, name, last_opened, description, path, ide, environment_json, remote_json";
@@ -16,6 +17,32 @@ pub(super) struct Database {
 }
 
 impl Database {
+    pub(super) fn load_workspace(&self) -> Result<Option<Workspace>> {
+        let content: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT content FROM workspace_state WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        content.as_deref().map(Workspace::from_json).transpose()
+    }
+
+    pub(super) fn save_workspace(&mut self, workspace: &Workspace) -> Result<()> {
+        workspace.validate()?;
+        let content = serde_json::to_string(workspace)?;
+        ensure!(
+            content.len() <= 1024 * 1024,
+            "Workspace state exceeds 1 MiB"
+        );
+        self.connection.execute(
+            "INSERT INTO workspace_state (id, content) VALUES (1, ?1) ON CONFLICT(id) DO UPDATE SET content = excluded.content",
+            [content],
+        )?;
+        Ok(())
+    }
+
     pub(super) fn open(app_data_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(app_data_dir)
             .with_context(|| format!("Cannot create {}", app_data_dir.display()))?;

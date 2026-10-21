@@ -10,6 +10,7 @@ use std::{path::PathBuf, sync::Arc, thread};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::project::ProjectData;
+use crate::workspace::Workspace;
 use database::Database;
 
 type Reply<T> = oneshot::Sender<Result<T, String>>;
@@ -18,6 +19,8 @@ enum Request {
     List(Reply<Vec<String>>),
     Get(String, Reply<ProjectData>),
     Save(String, String, Reply<()>),
+    LoadWorkspace(Reply<Option<Workspace>>),
+    SaveWorkspace(Workspace, Reply<()>),
 }
 
 struct Worker {
@@ -62,6 +65,12 @@ impl Storage {
                     }
                     while let Some(request) = receiver.blocking_recv() {
                         match request {
+                            Request::LoadWorkspace(reply) => {
+                                let _ = reply.send(run(&mut database, |db| db.load_workspace()));
+                            }
+                            Request::SaveWorkspace(workspace, reply) => {
+                                let _ = reply.send(run(&mut database, |db| db.save_workspace(&workspace)));
+                            }
                             Request::List(reply) => {
                                 let _ = reply.send(run(&mut database, |db| db.list()));
                             }
@@ -100,6 +109,15 @@ impl Storage {
 
     pub(crate) async fn list(&self) -> Result<Vec<String>, String> {
         self.request(Request::List).await
+    }
+
+    pub(crate) async fn load_workspace(&self) -> Result<Option<Workspace>, String> {
+        self.request(Request::LoadWorkspace).await
+    }
+
+    pub(crate) async fn save_workspace(&self, workspace: Workspace) -> Result<(), String> {
+        self.request(|reply| Request::SaveWorkspace(workspace, reply))
+            .await
     }
 
     pub(crate) async fn get(&self, id: String) -> Result<ProjectData, String> {

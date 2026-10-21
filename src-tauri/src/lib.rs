@@ -3,6 +3,7 @@ mod logging;
 mod project;
 mod project_git;
 mod storage;
+mod workspace;
 
 use project::Remote;
 use storage::Storage;
@@ -23,6 +24,21 @@ fn get_data_dir(app_handle: tauri::AppHandle) -> Result<String, tauri::Error> {
 #[tauri::command]
 async fn get_projects(storage: tauri::State<'_, Storage>) -> Result<Vec<String>, String> {
     storage.list().await
+}
+
+#[tauri::command]
+async fn load_workspace(
+    storage: tauri::State<'_, Storage>,
+) -> Result<Option<workspace::Workspace>, String> {
+    storage.load_workspace().await
+}
+
+#[tauri::command]
+async fn save_workspace(
+    storage: tauri::State<'_, Storage>,
+    workspace: workspace::Workspace,
+) -> Result<(), String> {
+    storage.save_workspace(workspace).await
 }
 
 fn ide_to_command(ide: &str) -> String {
@@ -188,6 +204,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_data_dir,
             get_projects,
+            load_workspace,
+            save_workspace,
             open_project,
             rewrite_project_file,
             logging::frontend_log,

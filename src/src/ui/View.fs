@@ -340,9 +340,38 @@ let View (state: State) dispatch =
     Html.div [
         prop.className "flex flex-col h-screen overflow-hidden bg-base-100 text-base-content"
         prop.id $"app-{state.randomSalt}"
+        prop.custom ("inert", state.isWindowClosePending)
         pageTheme state
         prop.children [
             DesktopTabs.TabBar state.repositoryTabs state.activeRepositoryTab dispatch
+            if state.workspaceLoading then
+                Html.p [
+                    prop.role "status"
+                    prop.className "px-4 py-2 text-sm"
+                    prop.text "Restoring workspace…"
+                ]
+            match state.workspaceError with
+            | Some error ->
+                Html.div [
+                    prop.role "alert"
+                    prop.className "shrink-0 flex items-center gap-3 px-4 py-2 bg-error/10 text-sm"
+                    prop.children [
+                        Html.span [ prop.className "break-words"; prop.text error ]
+                        Html.button [
+                            prop.type' "button"
+                            prop.className "btn btn-xs shrink-0"
+                            prop.text "Retry"
+                            prop.onClick (fun _ ->
+                                dispatch (
+                                    if state.workspaceReady then
+                                        SaveWorkspace
+                                    else
+                                        LoadWorkspace
+                                ))
+                        ]
+                    ]
+                ]
+            | None -> Html.none
             match state.projectEditor with
             | Some project ->
                 Html.div [

@@ -20,6 +20,178 @@ fn project(id: &str) -> Value {
     })
 }
 
+fn workspace(root: &Path) -> crate::workspace::Workspace {
+    serde_json::from_value(json!({
+        "version": 1,
+        "activeRoot": root,
+        "tabs": [{
+            "root": root, "name": "Репозиторій", "filesWidth": 32.5, "filesHeight": 60.0,
+            "selection": { "commit": null, "parent": null, "file": { "target": "unstaged", "path": "src/main.rs" } }
+        }]
+    })).unwrap()
+}
+
+#[test]
+fn workspace_migration_preserves_v1_projects_and_import_marker() {
+    let dir = TempDir::new().unwrap();
+    let raw = raw_database(dir.path());
+    raw.execute_batch(include_str!("../../migrations/0001_projects.sql"))
+        .unwrap();
+    raw.pragma_update(None, "user_version", 1).unwrap();
+    raw.execute(
+        "INSERT INTO data_migrations(name, item_count) VALUES (?1, 0)",
+        [IMPORT_NAME],
+    )
+    .unwrap();
+    super::database::insert(
+        &raw,
+        &ProjectData::from_json(&project("one").to_string()).unwrap(),
+    )
+    .unwrap();
+    drop(raw);
+    let db = Database::open(dir.path()).unwrap();
+    assert!(db.load_workspace().unwrap().is_none());
+    assert_eq!(db.get("one").unwrap().name, project("one")["name"]);
+    assert_eq!(count(&db.connection, "data_migrations"), 1);
+    assert_eq!(
+        db.connection
+            .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
+}
+
+#[test]
+fn workspace_roundtrip_keeps_order_selection_layout_and_empty_session() {
+    let dir = TempDir::new().unwrap();
+    let mut db = Database::open(dir.path()).unwrap();
+    let mut saved = workspace(dir.path());
+    let mut other = saved.tabs[0].clone();
+    other.root = dir
+        .path()
+        .join("missing-repository")
+        .to_string_lossy()
+        .into_owned();
+    other.selection = None;
+    saved.tabs.push(other);
+    db.save_workspace(&saved).unwrap();
+    drop(db);
+    let mut db = Database::open(dir.path()).unwrap();
+    assert_eq!(
+        serde_json::to_value(db.load_workspace().unwrap().unwrap()).unwrap(),
+        serde_json::to_value(&saved).unwrap()
+    );
+    saved.tabs.clear();
+    saved.active_root = None;
+    db.save_workspace(&saved).unwrap();
+    drop(db);
+    assert!(
+        Database::open(dir.path())
+            .unwrap()
+            .load_workspace()
+            .unwrap()
+            .unwrap()
+            .tabs
+            .is_empty()
+    );
+}
+
+#[test]
+fn invalid_workspace_never_overwrites_the_last_saved_session() {
+    let dir = TempDir::new().unwrap();
+    let mut db = Database::open(dir.path()).unwrap();
+    let saved = workspace(dir.path());
+    db.save_workspace(&saved).unwrap();
+    for invalid in [
+        {
+            let mut v = saved.clone();
+            v.version = 2;
+            v
+        },
+        {
+            let mut v = saved.clone();
+            v.tabs[0].files_width = f64::NAN;
+            v
+        },
+        {
+            let mut v = saved.clone();
+            v.tabs[0].files_height = 99.0;
+            v
+        },
+        {
+            let mut v = saved.clone();
+            v.tabs.push(v.tabs[0].clone());
+            v
+        },
+        {
+            let mut v = saved.clone();
+            v.active_root = Some("missing".into());
+            v
+        },
+        {
+            let mut v = saved.clone();
+            v.tabs[0]
+                .selection
+                .as_mut()
+                .unwrap()
+                .file
+                .as_mut()
+                .unwrap()
+                .target = "commit".into();
+            v
+        },
+    ] {
+        assert!(db.save_workspace(&invalid).is_err());
+    }
+    assert_eq!(
+        serde_json::to_value(db.load_workspace().unwrap().unwrap()).unwrap(),
+        serde_json::to_value(saved).unwrap()
+    );
+}
+
+#[test]
+fn corrupt_workspace_is_reported_without_blocking_project_storage() {
+    let dir = TempDir::new().unwrap();
+    let mut db = Database::open(dir.path()).unwrap();
+    db.connection
+        .execute(
+            "INSERT INTO workspace_state(id, content) VALUES (1, 'invalid json')",
+            [],
+        )
+        .unwrap();
+    assert!(db.load_workspace().is_err());
+    db.save("one", &project("one").to_string()).unwrap();
+    assert_eq!(db.list().unwrap().len(), 1);
+    assert_eq!(
+        db.connection
+            .query_row("SELECT content FROM workspace_state", [], |row| row
+                .get::<_, String>(0))
+            .unwrap(),
+        "invalid json"
+    );
+}
+
+#[tokio::test]
+async fn workspace_worker_acknowledges_durable_writes() {
+    let dir = TempDir::new().unwrap();
+    let storage = Storage::start(Ok(dir.path().to_owned()));
+    assert!(storage.load_workspace().await.unwrap().is_none());
+    let saved = workspace(dir.path());
+    storage.save_workspace(saved.clone()).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(storage.load_workspace().await.unwrap().unwrap()).unwrap(),
+        serde_json::to_value(saved).unwrap()
+    );
+    drop(storage);
+    assert!(
+        Database::open(dir.path())
+            .unwrap()
+            .load_workspace()
+            .unwrap()
+            .is_some()
+    );
+}
+
 fn legacy(dir: &Path, filename: &str, value: &Value) -> Vec<u8> {
     fs::create_dir_all(dir.join("projects")).unwrap();
     let bytes = serde_json::to_vec_pretty(value).unwrap();
@@ -293,19 +465,19 @@ fn failed_schema_migration_rolls_back_ddl_and_version() {
 fn newer_schema_is_not_downgraded_or_imported() {
     let dir = TempDir::new().unwrap();
     let raw = raw_database(dir.path());
-    raw.pragma_update(None, "user_version", 2).unwrap();
+    raw.pragma_update(None, "user_version", 3).unwrap();
     drop(raw);
     legacy(dir.path(), "one", &project("one"));
     let error = format!("{:#}", Database::open(dir.path()).err().unwrap());
     assert!(
-        error.contains("Unsupported project database version 2"),
+        error.contains("Unsupported project database version 3"),
         "{error}"
     );
     let raw = raw_database(dir.path());
     let version: i64 = raw
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
 }
 
 #[test]

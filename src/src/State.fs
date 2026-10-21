@@ -53,6 +53,9 @@ type RepositoryTab =
         id: string
         root: string
         name: string
+        filesWidth: float
+        filesHeight: float
+        restoreFile: Workspace.File option
         history: RepositoryHistory
         workingTree: Result<GitProtocol.Status, string> option
         selection: CommitFiles option
@@ -64,6 +67,13 @@ type Msg =
     | Start
     | OnStart of unit
 
+    | LoadWorkspace
+    | OnWorkspaceLoaded of int * Result<Workspace.Snapshot option, exn>
+    | SaveWorkspace
+    | OnWorkspaceSaved of int * Result<unit, exn>
+    | ContinueWindowClose
+    | SaveWindowAndClose
+    | ResizeRepositoryPanels of string * bool * float
     | ShowProjects
     | OpenRepositoryTab of GitProtocol.RepositoryStatus
     | SelectRepositoryTab of string
@@ -143,6 +153,12 @@ type Msg =
 
 type State =
     {
+        workspaceReady: bool
+        workspaceLoading: bool
+        workspaceRevision: int
+        workspaceSavedRevision: int
+        workspaceSaving: int option
+        workspaceError: string option
         repositoryTabs: RepositoryTab list
         activeRepositoryTab: string option
         isAboutOpen: bool
@@ -180,6 +196,12 @@ let init () =
     // Initial state
     let state =
         {
+            workspaceReady = false
+            workspaceLoading = false
+            workspaceRevision = 0
+            workspaceSavedRevision = 0
+            workspaceSaving = None
+            workspaceError = None
             repositoryTabs = []
             activeRepositoryTab = None
             isAboutOpen = false
@@ -203,7 +225,84 @@ let init () =
 
     state, Cmd.ofMsg Start
 
-let rec update msg state =
+let private newRepositoryTab root name =
+    {
+        id = Guid.NewGuid().ToString()
+        root = root
+        name = name
+        filesWidth = 40.0
+        filesHeight = 40.0
+        restoreFile = None
+        selection = None
+        workingTree = None
+        history =
+            {
+                repoId = None
+                commits = [||]
+                nextCursor = None
+                requestId = None
+                hasLoaded = false
+                error = None
+            }
+    }
+
+let workspaceSnapshot (state: State) : Workspace.Snapshot =
+    {
+        version = 1
+        activeRoot =
+            state.repositoryTabs
+            |> List.tryFind (fun tab -> Some tab.id = state.activeRepositoryTab)
+            |> Option.map (fun tab -> tab.root)
+        tabs =
+            state.repositoryTabs
+            |> List.map (fun tab ->
+                ({
+                    Workspace.Tab.root = tab.root
+                    name = tab.name
+                    filesWidth = tab.filesWidth
+                    filesHeight = tab.filesHeight
+                    selection =
+                        tab.selection
+                        |> Option.map (fun selection ->
+                            {
+                                Workspace.Selection.commit = selection.commit
+                                parent = selection.parent
+                                file =
+                                    selection.diff
+                                    |> Option.map (fun diff ->
+                                        ({
+                                            Workspace.File.target = Workspace.targetName diff.target
+                                            path = diff.file.path
+                                        }
+                                        : Workspace.File))
+                                    |> Option.orElse tab.restoreFile
+                            })
+                }
+                : Workspace.Tab))
+            |> List.toArray
+    }
+
+let private restoreTab (saved: Workspace.Tab) =
+    { newRepositoryTab saved.root saved.name with
+        filesWidth = Workspace.panelSize saved.filesWidth
+        filesHeight = Workspace.panelSize saved.filesHeight
+        restoreFile = saved.selection |> Option.bind (fun selection -> selection.file)
+        selection =
+            saved.selection
+            |> Option.map (fun selection ->
+                {
+                    commit = selection.commit
+                    parent = selection.parent
+                    groups = [||]
+                    files = [||]
+                    requestId = None
+                    hasLoaded = false
+                    error = None
+                    diff = None
+                })
+    }
+
+let rec private updateCore msg state =
     match msg with
     | Empty -> state, Cmd.none
     | Start ->
@@ -220,6 +319,7 @@ let rec update msg state =
             state,
             Cmd.batch
                 [
+                    Cmd.ofMsg LoadWorkspace
                     Cmd.ofMsg (GetProjects 50)
                     Cmd.ofMsg GetConfigDir
                     Cmd.ofMsg GetDataDir
@@ -228,6 +328,145 @@ let rec update msg state =
                 ]
         else
             state, Cmd.none
+
+    | LoadWorkspace ->
+        if
+            state.workspaceLoading
+            || state.workspaceReady
+            || not (AppTauri.Core.isAvailable ())
+        then
+            state, Cmd.none
+        else
+            { state with
+                workspaceLoading = true
+                workspaceError = None
+            },
+            Cmd.OfPromise.either
+                AppTauri.WorkspaceState.load
+                ()
+                (fun snapshot -> OnWorkspaceLoaded(state.workspaceRevision, Ok snapshot))
+                (fun error -> OnWorkspaceLoaded(state.workspaceRevision, Error error))
+
+    | OnWorkspaceLoaded(revision, result) ->
+        if not state.workspaceLoading then
+            state, Cmd.none
+        else
+            match result with
+            | Error error ->
+                { state with
+                    workspaceLoading = false
+                    workspaceError = Some $"Could not restore workspace: {error}"
+                },
+                Cmd.ofMsg ContinueWindowClose
+            | Ok snapshot ->
+                let restored =
+                    snapshot
+                    |> Option.map (fun saved -> saved.tabs |> Array.map restoreTab |> Array.toList)
+                    |> Option.defaultValue []
+
+                let changed = revision <> state.workspaceRevision
+
+                let tabs =
+                    if changed then
+                        state.repositoryTabs
+                        @ (restored
+                           |> List.filter (fun tab ->
+                               state.repositoryTabs |> List.forall (fun existing -> existing.root <> tab.root)))
+                    else
+                        restored
+
+                let active =
+                    if changed then
+                        state.activeRepositoryTab
+                    else
+                        snapshot
+                        |> Option.bind (fun saved -> saved.activeRoot)
+                        |> Option.bind (fun root -> tabs |> List.tryFind (fun tab -> tab.root = root))
+                        |> Option.map (fun tab -> tab.id)
+
+                { state with
+                    workspaceReady = true
+                    workspaceLoading = false
+                    workspaceError = None
+                    repositoryTabs = tabs
+                    activeRepositoryTab = active
+                    workspaceSavedRevision =
+                        if changed then
+                            state.workspaceSavedRevision
+                        else
+                            state.workspaceRevision
+                },
+                Cmd.batch
+                    [
+                        if changed then
+                            Cmd.ofMsg SaveWorkspace
+                        match active with
+                        | Some id -> Cmd.ofMsg (RefreshRepositoryHistory id)
+                        | None -> ()
+                        Cmd.ofMsg ContinueWindowClose
+                    ]
+
+    | SaveWorkspace ->
+        if
+            not state.workspaceReady
+            || state.workspaceSaving.IsSome
+            || state.workspaceSavedRevision >= state.workspaceRevision
+        then
+            state, Cmd.none
+        else
+            let revision = state.workspaceRevision
+
+            { state with
+                workspaceSaving = Some revision
+                workspaceError = None
+            },
+            Cmd.OfPromise.either
+                AppTauri.WorkspaceState.save
+                (workspaceSnapshot state)
+                (fun () -> OnWorkspaceSaved(revision, Ok()))
+                (fun error -> OnWorkspaceSaved(revision, Error error))
+
+    | OnWorkspaceSaved(revision, result) ->
+        if state.workspaceSaving <> Some revision then
+            state, Cmd.none
+        else
+            match result with
+            | Error error ->
+                { state with
+                    workspaceSaving = None
+                    workspaceError = Some $"Could not save workspace: {error}"
+                    isWindowClosePending = false
+                },
+                Cmd.none
+            | Ok() ->
+                { state with
+                    workspaceSaving = None
+                    workspaceSavedRevision = revision
+                    workspaceError = None
+                },
+                Cmd.batch
+                    [
+                        if state.workspaceRevision > revision then
+                            Cmd.ofMsg SaveWorkspace
+                        Cmd.ofMsg ContinueWindowClose
+                    ]
+
+    | ResizeRepositoryPanels(id, horizontal, size) ->
+        let tabs =
+            state.repositoryTabs
+            |> List.map (fun tab ->
+                if tab.id <> id then
+                    tab
+                elif horizontal then
+                    { tab with
+                        filesWidth = Workspace.panelSize size
+                    }
+                else
+                    { tab with
+                        filesHeight = Workspace.panelSize size
+                    })
+
+        { state with repositoryTabs = tabs }, Cmd.none
 
     | ShowProjects ->
         { state with
@@ -240,25 +479,12 @@ let rec update msg state =
             { state with
                 activeRepositoryTab = Some tab.id
             },
-            Cmd.none
+            if not tab.history.hasLoaded && tab.history.requestId.IsNone then
+                Cmd.ofMsg (RefreshRepositoryHistory tab.id)
+            else
+                Cmd.none
         | None ->
-            let tab =
-                {
-                    id = Guid.NewGuid().ToString()
-                    root = repository.root
-                    name = repository.name
-                    selection = None
-                    workingTree = None
-                    history =
-                        {
-                            repoId = None
-                            commits = [||]
-                            nextCursor = None
-                            requestId = None
-                            hasLoaded = false
-                            error = None
-                        }
-                }
+            let tab = newRepositoryTab repository.root repository.name
 
             { state with
                 repositoryTabs = state.repositoryTabs @ [ tab ]
@@ -266,13 +492,16 @@ let rec update msg state =
             },
             Cmd.ofMsg (RefreshRepositoryHistory tab.id)
     | SelectRepositoryTab id ->
-        if state.repositoryTabs |> List.exists (fun tab -> tab.id = id) then
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab ->
             { state with
                 activeRepositoryTab = Some id
             },
-            Cmd.none
-        else
-            state, Cmd.none
+            if not tab.history.hasLoaded && tab.history.requestId.IsNone then
+                Cmd.ofMsg (RefreshRepositoryHistory id)
+            else
+                Cmd.none
+        | None -> state, Cmd.none
     | CloseActiveTab ->
         state,
         (state.activeRepositoryTab
@@ -294,7 +523,12 @@ let rec update msg state =
             repositoryTabs = remaining
             activeRepositoryTab = active
         },
-        Cmd.none
+        (if active <> state.activeRepositoryTab then
+             active
+             |> Option.map (SelectRepositoryTab >> Cmd.ofMsg)
+             |> Option.defaultValue Cmd.none
+         else
+             Cmd.none)
     | OpenAbout ->
         if state.projectEditor.IsSome then
             state, Cmd.none
@@ -322,7 +556,10 @@ let rec update msg state =
                     state.repositoryTabs
                     |> List.map (fun item ->
                         if item.id = id then
-                            { item with selection = Some selection }
+                            { item with
+                                selection = Some selection
+                                restoreFile = None
+                            }
                         else
                             item)
             },
@@ -356,7 +593,10 @@ let rec update msg state =
                         state.repositoryTabs
                         |> List.map (fun item ->
                             if item.id = id then
-                                { item with selection = Some selection }
+                                { item with
+                                    selection = Some selection
+                                    restoreFile = None
+                                }
                             else
                                 item)
                 },
@@ -390,7 +630,10 @@ let rec update msg state =
                         state.repositoryTabs
                         |> List.map (fun item ->
                             if item.id = id then
-                                { item with selection = Some next }
+                                { item with
+                                    selection = Some next
+                                    restoreFile = None
+                                }
                             else
                                 item)
                 },
@@ -455,32 +698,69 @@ let rec update msg state =
         | None -> state, Cmd.none
 
     | OnCommitFiles(id, requestId, result) ->
-        { state with
-            repositoryTabs =
-                state.repositoryTabs
-                |> List.map (fun tab ->
-                    match tab.selection with
-                    | Some selection when tab.id = id && selection.requestId = Some requestId ->
-                        let next =
-                            match result with
-                            | Ok groups ->
-                                { selection with
-                                    groups = groups
-                                    files = groups |> Array.collect snd |> Array.distinctBy (fun file -> file.path)
-                                    requestId = None
-                                    hasLoaded = true
-                                    error = None
-                                }
-                            | Error error ->
-                                { selection with
-                                    requestId = None
-                                    error = Some(string error)
-                                }
+        let mutable restore = Cmd.none
 
-                        { tab with selection = Some next }
-                    | _ -> tab)
-        },
-        Cmd.none
+        let tabs =
+            state.repositoryTabs
+            |> List.map (fun tab ->
+                match tab.selection with
+                | Some selection when tab.id = id && selection.requestId = Some requestId ->
+                    match result with
+                    | Error error ->
+                        { tab with
+                            selection =
+                                Some
+                                    { selection with
+                                        requestId = None
+                                        error = Some(string error)
+                                    }
+                        }
+                    | Ok groups ->
+                        let pending =
+                            tab.restoreFile
+                            |> Option.bind (fun file ->
+                                let saved: Workspace.Selection =
+                                    {
+                                        commit = selection.commit
+                                        parent = selection.parent
+                                        file = Some file
+                                    }
+
+                                Workspace.fileTarget saved file
+                                |> Option.bind (fun target ->
+                                    if
+                                        groups
+                                        |> Array.exists (fun (group, files) ->
+                                            group = target
+                                            && (files |> Array.exists (fun entry -> entry.path = file.path)))
+                                    then
+                                        restore <-
+                                            Cmd.ofMsg (
+                                                if selection.commit.IsSome then
+                                                    SelectCommitFile(id, file.path)
+                                                else
+                                                    SelectWorkingTreeFile(id, target, file.path)
+                                            )
+
+                                        Some file
+                                    else
+                                        None))
+
+                        { tab with
+                            restoreFile = pending
+                            selection =
+                                Some
+                                    { selection with
+                                        groups = groups
+                                        files = groups |> Array.collect snd |> Array.distinctBy (fun file -> file.path)
+                                        requestId = None
+                                        hasLoaded = true
+                                        error = None
+                                    }
+                        }
+                | _ -> tab)
+
+        { state with repositoryTabs = tabs }, restore
 
     | SelectWorkingTreeFile(id, _, _)
     | SelectCommitFile(id, _)
@@ -546,6 +826,7 @@ let rec update msg state =
                                 if item.id = id then
                                     { item with
                                         selection = Some { selection with diff = Some diff }
+                                        restoreFile = None
                                     }
                                 else
                                     item)
@@ -564,6 +845,7 @@ let rec update msg state =
                     if tab.id = id then
                         { tab with
                             selection = tab.selection |> Option.map (fun selection -> { selection with diff = None })
+                            restoreFile = None
                         }
                     else
                         tab)
@@ -703,7 +985,8 @@ let rec update msg state =
         with
         | None -> state, Cmd.none
         | Some _ ->
-            let updated, _ = update (OnRepositoryHistory(id, requestId, false, result)) state
+            let updated, _ =
+                updateCore (OnRepositoryHistory(id, requestId, false, result)) state
 
             let tabs =
                 updated.repositoryTabs
@@ -717,7 +1000,8 @@ let rec update msg state =
                 tabs
                 |> List.exists (fun tab ->
                     tab.id = id
-                    && (tab.selection |> Option.exists (fun selection -> selection.commit.IsNone)))
+                    && (tab.selection
+                        |> Option.exists (fun selection -> selection.commit.IsNone || not selection.hasLoaded)))
 
             { updated with repositoryTabs = tabs },
             if selected then
@@ -1092,26 +1376,44 @@ let rec update msg state =
         if state.isWindowClosePending || not (AppTauri.Core.isAvailable ()) then
             state, Cmd.none
         else
-            let saveWindowStatePromise () =
-                promise { do! AppTauri.Window.saveState () }
-
-            let newState =
-                { state with
-                    isWindowClosePending = true
-                }
-
             allowWindowClose <- false
-            newState, Cmd.OfPromise.either saveWindowStatePromise () (fun () -> OnWindowSaveSuccess) OnWindowSaveError
+
+            { state with
+                isWindowClosePending = true
+            },
+            Cmd.ofMsg ContinueWindowClose
+
+    | ContinueWindowClose ->
+        if
+            not state.isWindowClosePending
+            || state.workspaceLoading
+            || state.workspaceSaving.IsSome
+        then
+            state, Cmd.none
+        elif state.workspaceReady && state.workspaceSavedRevision < state.workspaceRevision then
+            state, Cmd.ofMsg SaveWorkspace
+        else
+            state, Cmd.ofMsg SaveWindowAndClose
+
+    | SaveWindowAndClose ->
+        state, Cmd.OfPromise.either AppTauri.Window.saveState () (fun () -> OnWindowSaveSuccess) OnWindowSaveError
 
     | OnWindowSaveSuccess ->
-        let closeWindowPromise () =
-            promise {
-                do! FrontendLog.flush ()
-                allowWindowClose <- true
-                do! AppTauri.Window.closeCurrent ()
-            }
+        if
+            state.workspaceSaving.IsSome
+            || (state.workspaceReady && state.workspaceSavedRevision < state.workspaceRevision)
+        then
+            state, Cmd.ofMsg ContinueWindowClose
+        else
+            let closeWindowPromise () =
+                promise {
+                    do! FrontendLog.flush ()
+                    allowWindowClose <- true
+                    do! AppTauri.Window.closeCurrent ()
+                }
 
-        state, Cmd.OfPromise.either closeWindowPromise () (fun () -> Empty) OnWindowCloseError
+            state, Cmd.OfPromise.either closeWindowPromise () (fun () -> Empty) OnWindowCloseError
+
 
     | OnWindowSaveError exn ->
         let e = sprintf "Error while saving window state before close: %A" exn
@@ -1159,3 +1461,27 @@ let rec update msg state =
     | Tick time ->
         let newState = { state with currentTime = time }
         newState, Cmd.none
+
+/// Serialize durable choices only when they change. One writer is in flight;
+/// newer choices are coalesced and flushed after its acknowledgement.
+let update msg state =
+    let next, command = updateCore msg state
+
+    match msg with
+    | OnWorkspaceLoaded _ -> next, command
+    | _ ->
+        if workspaceSnapshot state = workspaceSnapshot next then
+            next, command
+        else
+            let changed =
+                { next with
+                    workspaceRevision = next.workspaceRevision + 1
+                }
+
+            changed,
+            Cmd.batch
+                [
+                    command
+                    if changed.workspaceReady then
+                        Cmd.ofMsg SaveWorkspace
+                ]

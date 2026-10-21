@@ -80,7 +80,22 @@ branch, a standard merge subject can supply a hint marked `~`; a real ref takes
 precedence. A name may resolve when loading more history without moving lines.
 These labels describe graph lines, not every branch containing a commit or the
 branch on which it was originally created.
-Open tabs are kept only for the current app session.
+Open repository tabs, their order, the active tab (including Projects), the selected
+commit/merge parent or working-tree changes, and the open diff file are restored
+after restarting. Each repository remembers its file-panel width in wide windows
+and height in narrow windows. Drag the divider to resize it; arrow keys move it,
+Shift increases the step, Home/End select the limits and double-click resets it.
+
+Workspace state is saved automatically in `projlaunch.db`. Closing waits for the
+latest save; a failed save keeps the window open and shows Retry. A failed restore
+also shows Retry and leaves the stored session untouched. The SQLite schema is
+upgraded from version 1 to 2 without changing project records or legacy imports.
+Restored tabs receive new runtime IDs and reload Git data: the active repository
+loads immediately, background repositories load when selected. Missing repositories
+remain as tabs with retryable errors. A missing saved diff file falls back to the
+file list. Patches, cursors, loaded history pages and scroll offsets are not persisted;
+history starts with a fresh first page, while a selected older commit can still be
+inspected. Existing in-session scroll retention is unchanged.
 
 Repositories with local changes show an `Uncommitted changes` row above history.
 Its hollow node connects to the current HEAD with a dashed line, including when
@@ -410,6 +425,7 @@ node scripts/tests/test-commit-graph.mjs
 node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-working-tree.mjs
+node scripts/tests/test-workspace-state.mjs
 node scripts/tests/test-logging.mjs
 ```
 

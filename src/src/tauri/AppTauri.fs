@@ -28,6 +28,12 @@ module Core =
 
     let getTauriVersion () : JS.Promise<string> = Tauri.Tauri.Tauri.getTauriVersion ()
 
+module WorkspaceState =
+    let load () : JS.Promise<Workspace.Snapshot option> = Core.invoke "load_workspace" None
+
+    let save (workspace: Workspace.Snapshot) : JS.Promise<unit> =
+        Core.invoke "save_workspace" (Some(createObj [ "workspace" ==> workspace ]))
+
 module Projects =
 
     let getProjects () : JS.Promise<string array> = Core.invoke "get_projects" None

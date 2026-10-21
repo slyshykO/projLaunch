@@ -139,6 +139,7 @@ for (let trial = 0; trial < 80; trial++) {
 }
 
 const tab = {
+    filesWidth: 40, filesHeight: 40,
     id: 'graph-test', name: 'Graph repository', root: 'C:/graph',
     history: { commits, hasLoaded: true },
 };

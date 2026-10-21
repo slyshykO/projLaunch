@@ -99,3 +99,37 @@
 .commit-history-row[data-graph-member="true"]:not([data-selected="true"]) {
   background-color: color-mix(in oklab, var(--commit-graph-color) 8%, transparent);
 }
+
+.repository-split {
+  display: flex;
+  flex-direction: column;
+}
+
+.repository-files-panel {
+  flex: 0 0 var(--files-height, 40%);
+}
+
+.repository-splitter {
+  flex: 0 0 8px;
+  cursor: row-resize;
+  touch-action: none;
+  background-color: var(--color-base-200);
+  border-block: 1px solid var(--color-base-300);
+}
+
+.repository-splitter:hover,
+.repository-splitter:focus-visible {
+  background-color: color-mix(in oklab, var(--color-primary) 25%, var(--color-base-200));
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+@media (min-width: 64rem) {
+  .repository-split { flex-direction: row; }
+  .repository-files-panel { flex-basis: var(--files-width, 40%); }
+  .repository-splitter {
+    cursor: col-resize;
+    border-block: 0;
+    border-inline: 1px solid var(--color-base-300);
+  }
+}

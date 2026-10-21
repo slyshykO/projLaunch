@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 
 const { onAddProject, onActions } = await import('../../src/bin/fable-js/src/ui/ProjectMenu.js');
-const { Msg, update } = await import('../../src/bin/fable-js/src/State.js');
+const { Msg, update, init } = await import('../../src/bin/fable-js/src/State.js');
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 // Node's EventTarget removal needs an options object for capture listeners.
@@ -34,7 +34,7 @@ for (const platform of ['Win32', 'Linux x86_64', 'MacIntel']) {
         __TAURI_EVENT_PLUGIN_INTERNALS__: { unregisterListener() {} },
     });
     let count = 0;
-    let state = { isProjectSaving: false, projectEditor: undefined };
+    let state = init()[0];
     const subscribe = () => onAddProject()(message => {
         count++;
         [state] = update(message, state);
