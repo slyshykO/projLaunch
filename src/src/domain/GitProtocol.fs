@@ -5,21 +5,31 @@ type Endpoint =
     {
         kind: string
         distribution: string option
+        host: string option
+        username: string option
     }
 
 let endpointKey (endpoint: Endpoint option) =
     match endpoint with
     | Some value when value.kind = "wsl" -> "wsl:" + (value.distribution |> Option.defaultValue "")
+    | Some value when value.kind = "ssh" ->
+        let host = value.host |> Option.defaultValue ""
+        let username = value.username |> Option.defaultValue ""
+        $"ssh:{host.Length}:{host}:{username}"
     | _ -> "local"
 
 let endpointLabel (endpoint: Endpoint option) =
     match endpoint with
     | Some value when value.kind = "wsl" -> "WSL: " + (value.distribution |> Option.defaultValue "")
+    | Some value when value.kind = "ssh" ->
+        let host = value.host |> Option.defaultValue ""
+        let username = value.username |> Option.defaultValue ""
+        "SSH: " + (if username = "" then host else username + "@" + host)
     | _ -> "Local"
 
 let repositoryLabel endpoint name =
     match endpoint with
-    | Some value when value.kind = "wsl" -> name + " [" + endpointLabel endpoint + "]"
+    | Some value when value.kind = "wsl" || value.kind = "ssh" -> name + " [" + endpointLabel endpoint + "]"
     | _ -> name
 
 type RepositoryStatus =

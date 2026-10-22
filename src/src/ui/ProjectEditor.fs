@@ -375,7 +375,7 @@ let Dialog (initial: ProjectData) (isNew: bool) (isSaving: bool) (saveError: str
                                                                     | Some(Ssh(host, username)) ->
                                                                         input
                                                                             "project-host"
-                                                                            "SSH host"
+                                                                            "SSH host / IP / config alias"
                                                                             host
                                                                             true
                                                                             (fun value ->
@@ -387,7 +387,7 @@ let Dialog (initial: ProjectData) (isNew: bool) (isSaving: bool) (saveError: str
 
                                                                         input
                                                                             "project-username"
-                                                                            "SSH username (optional)"
+                                                                            "SSH username (empty = SSH config)"
                                                                             username
                                                                             false
                                                                             (fun value ->

@@ -20,7 +20,7 @@ The app currently lets you:
 - view saved projects in a grid sorted by `lastOpened`
 - add a project from the UI with name, description, IDE, and solution/workspace path
 - edit a project using the pencil button at the top right of its card, including SSH/WSL and environment variables
-- see a Git icon and clean/uncommitted status for each associated local or WSL repository at the bottom of a card
+- see a Git icon and clean/uncommitted status for each associated local, WSL or SSH repository at the bottom of a card
 - open projects in:
   - VS Code
   - Visual Studio 2022
@@ -38,7 +38,7 @@ The native menu contains File (Add project, Close repository tab, Exit), View
 (Projects, Refresh Git status), and Help (About). Add project also supports
 Ctrl/Cmd+N. About closes with Close or Escape. Tab navigation supports the arrow,
 Home and End keys. Switching tabs retains each panel's scroll position.
-Repository tabs load commit history from the Git server in the selected local/WSL endpoint: subject, author,
+Repository tabs load commit history from the Git server in the selected local/WSL/SSH endpoint: subject, author,
 commit date, short hash and branch/tag labels. History loads in pages of 100;
 `Load more` appends the next page. `Refresh`, the View menu refresh action and
 window focus reload the active repository from a fresh snapshot. Failed reads
@@ -136,7 +136,7 @@ also checked, with duplicate worktree roots shown once. Child directories are no
 scanned. Hover over an indicator for its full path, branch or error details.
 Paths in workspace/solution files resolve relative to those files; the card's own
 path must be absolute. Untracked, staged and unstaged files count as changes.
-SSH checks and failed checks are shown as unavailable, never as clean.
+Failed checks are shown as unavailable, never as clean.
 
 ## Git in WSL
 
@@ -165,11 +165,47 @@ uses stdin/stdout for RPC. No listening port, sudo or Rust installation is neede
 Each endpoint has its own connection; disconnect/app exit closes its server.
 Missing distributions, Git or incompatible binaries are reported as Git errors.
 
+## Git over SSH
+
+Select **Remote / SSH** in the project editor and use either:
+
+- **Host / IP** `192.0.2.10` and **username** `alex`.
+- **Config alias** `devbox`, leaving username empty to use `User` from OpenSSH
+  configuration. An explicit username overrides the configured user.
+
+The project path is an absolute Linux path such as `/home/alex/project`.
+The app uses the system `ssh` client and its usual configuration
+(`~/.ssh/config`, or `%USERPROFILE%\.ssh\config` on Windows), including ports,
+identity files, ssh-agent and ProxyJump. For example:
+
+```sshconfig
+Host devbox
+    HostName 192.0.2.10
+    User alex
+    Port 2222
+    IdentityFile ~/.ssh/id_ed25519
+```
+
+First confirm that `ssh devbox true` works with key/agent authentication and the
+host's trusted key in `known_hosts`. The GUI uses non-interactive SSH and does not
+prompt for passwords or accept unknown/changed host keys. Connection errors
+include the SSH diagnostic. No credentials or key files are copied into the database.
+
+The remote machine needs Linux x86_64, glibc compatible with Ubuntu 22.04, Git in
+its non-interactive PATH, and standard Linux utilities (`sh`, `sha256sum`, `mktemp`).
+The same bundled Linux server and atomic SHA-256/version installation as WSL are
+used, in the remote user's `~/.local/share/projlaunch/git-server/<sha256>/`.
+Only missing/different/corrupted binaries are transferred. Installation requires
+no root privileges, Rust toolchain or separately installed Git-server service.
+RPC travels over SSH stdin/stdout, without an additional listening port. Each
+host/username pair has a separate connection, and repository discovery runs on
+the remote system. SSH host/user information is saved with tabs and their layouts.
+
 ## Current Limitations
 
 - Deleting projects from the UI is not implemented yet.
 - Remote launch options are only wired up for VS Code.
-- Git supports local and WSL repositories; SSH Git connections are not implemented.
+- Remote Git currently supports x86_64 Linux with glibc (Ubuntu 22.04 or compatible); remote Windows, macOS and ARM64 binaries are not supported.
 - Visual Studio launch paths are currently hard-coded for Windows installs.
 - The test project exists, but it only contains a placeholder test right now.
 
@@ -395,7 +431,7 @@ binaries/
 
 The GUI first looks for its platform's server in `binaries/` next to itself.
 Legacy adjacent-server and source-checkout paths remain fallback locations.
-The Linux server is deployed automatically for WSL endpoints; local Windows
+The Linux server is deployed automatically for WSL and SSH endpoints; local Windows
 repositories use the Windows server. This is a Windows GUI distribution, not a Linux GUI build.
 The destination Windows system still needs WebView2 Runtime and Git on PATH.
 The archive contains only the GUI and two servers, without symbols or user data.
@@ -525,6 +561,7 @@ node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-working-tree.mjs
 node scripts/tests/test-workspace-state.mjs
 node scripts/tests/test-wsl-endpoints.mjs
+node scripts/tests/test-ssh-endpoints.mjs
 node scripts/tests/test-parent-navigation.mjs
 node scripts/tests/test-branches.mjs
 node scripts/tests/test-storage-access.mjs

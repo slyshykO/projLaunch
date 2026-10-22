@@ -10,6 +10,11 @@ pub enum Endpoint {
     Wsl {
         distribution: String,
     },
+    Ssh {
+        host: String,
+        #[serde(default)]
+        username: String,
+    },
 }
 
 impl Endpoint {
@@ -22,6 +27,25 @@ impl Endpoint {
                 "Invalid WSL distribution name"
             );
         }
+        if let Self::Ssh { host, username } = self {
+            ensure!(
+                !host.is_empty()
+                    && host.len() <= 256
+                    && !host.starts_with('-')
+                    && host
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"._-:[]%".contains(&b)),
+                "Enter an SSH host/IP or config alias (without user@, spaces or command-line options); use the separate username field"
+            );
+            ensure!(
+                username.len() <= 256
+                    && !username.starts_with('-')
+                    && username
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b"._-@".contains(&b)),
+                "Invalid SSH username; leave it empty to use SSH config"
+            );
+        }
         Ok(())
     }
 
@@ -29,7 +53,7 @@ impl Endpoint {
         !path.contains('\0')
             && match self {
                 Self::Local => std::path::Path::new(path).is_absolute(),
-                Self::Wsl { .. } => path.starts_with('/'),
+                Self::Wsl { .. } | Self::Ssh { .. } => path.starts_with('/'),
             }
     }
 }

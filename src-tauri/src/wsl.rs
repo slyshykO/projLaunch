@@ -1,42 +1,9 @@
+use crate::remote_server::{self, BOOTSTRAP, find_binary};
 use anyhow::{Context, Result, ensure};
 use git_client::Client;
-use git_protocol::{Hello, PROTOCOL_VERSION, ServerInfo};
-use sha2::{Digest, Sha256};
-use std::{
-    fmt::Write as _,
-    path::{Path, PathBuf},
-    process::Stdio,
-    time::Duration,
-};
-use tokio::{io::AsyncWriteExt, process::Command};
-
-const TARGET: &str = "x86_64-unknown-linux-gnu";
-const FILENAME: &str = "project-launch-git-server-x86_64-unknown-linux-gnu";
-const BOOTSTRAP: &str = include_str!("wsl/bootstrap.sh");
-
-// wsl.exe's own errors can be UTF-16LE; Linux process output is UTF-8.
-fn diagnostic(bytes: &[u8]) -> String {
-    if bytes.starts_with(&[0xff, 0xfe])
-        || bytes
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .take(32)
-            .any(|pair| pair[1] == 0)
-    {
-        let bytes = bytes.strip_prefix(&[0xff, 0xfe]).unwrap_or(bytes);
-        String::from_utf16_lossy(
-            &bytes
-                .as_chunks::<2>()
-                .0
-                .iter()
-                .map(|b| u16::from_le_bytes([b[0], b[1]]))
-                .collect::<Vec<_>>(),
-        )
-    } else {
-        String::from_utf8_lossy(bytes).into_owned()
-    }
-}
+use git_protocol::{Hello, ServerInfo};
+use std::path::Path;
+use tokio::process::Command;
 
 pub async fn connect(distribution: &str) -> Result<Client> {
     ensure!(cfg!(windows), "WSL endpoints are supported on Windows only");
@@ -60,17 +27,6 @@ pub async fn connect(distribution: &str) -> Result<Client> {
     Ok(client)
 }
 
-fn find_binary(executable: &Path, development: &Path) -> Result<PathBuf> {
-    let candidates = [
-        executable.with_file_name("binaries").join(FILENAME),
-        development.join("binaries").join(FILENAME),
-    ];
-    candidates.iter().find(|p| p.is_file()).cloned().with_context(|| format!(
-        "Linux Git server is unavailable (checked {}). Build it with build.bat build-git-server ubuntu22 --release",
-        candidates.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
-    ))
-}
-
 fn command(distribution: &str) -> Command {
     let mut command = Command::new("wsl.exe");
     command.args(["--distribution", distribution, "--cd", "~", "--exec"]);
@@ -80,98 +36,33 @@ fn command(distribution: &str) -> Command {
     command
 }
 
-async fn bootstrap(
-    distribution: &str,
-    digest: &str,
-    base: &str,
-    binary: Option<&[u8]>,
-) -> Result<std::process::Output> {
-    let mut command = command(distribution);
-    command.args([
-        "sh",
-        "-c",
-        BOOTSTRAP,
-        "projlaunch-bootstrap",
-        if binary.is_some() { "install" } else { "probe" },
-        digest,
-        base,
-    ]);
-    command
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command
-        .spawn()
-        .with_context(|| format!("Cannot start WSL '{distribution}'"))?;
-    let mut stdin = child.stdin.take().unwrap();
-    tokio::time::timeout(Duration::from_secs(60), async move {
-        // Drain output concurrently with upload to avoid deadlocking on startup errors.
-        let upload = async move {
-            if let Some(bytes) = binary {
-                stdin.write_all(bytes).await?;
-            }
-            drop(stdin);
-            Ok::<_, std::io::Error>(())
-        };
-        let (upload, output) = tokio::join!(upload, child.wait_with_output());
-        let output = output?;
-        if output.status.success() {
-            upload?;
-        }
-        Ok(output)
-    })
-    .await
-    .with_context(|| format!("Timed out preparing Git server in WSL '{distribution}'"))?
-}
-
 async fn prepare(distribution: &str, binary: &Path, base: &str) -> Result<(String, ServerInfo)> {
-    let bytes = tokio::fs::read(binary)
-        .await
-        .with_context(|| format!("Cannot read '{}'", binary.display()))?;
-    ensure!(
-        bytes.len() <= 64 * 1024 * 1024,
-        "Linux Git server exceeds 64 MiB"
-    );
-    let mut digest = String::with_capacity(64);
-    for byte in Sha256::digest(&bytes) {
-        write!(digest, "{byte:02x}").expect("Writing to a String cannot fail");
-    }
-    let mut output = bootstrap(distribution, &digest, base, None).await?;
-    if output.status.code() == Some(10) {
-        tracing::info!(distribution, "Installing bundled Git server in WSL");
-        output = bootstrap(distribution, &digest, base, Some(&bytes)).await?;
-    }
-    ensure!(
-        output.status.success(),
-        "Cannot prepare Git server in WSL '{distribution}': {} {}",
-        diagnostic(&output.stderr).trim(),
-        diagnostic(&output.stdout).trim()
-    );
-    let text = String::from_utf8(output.stdout).context("Invalid WSL bootstrap output")?;
-    let (path, json) = text
-        .trim_end()
-        .split_once('\n')
-        .context("Missing WSL Git server version. Rebuild the Linux server")?;
-    ensure!(
-        path.starts_with('/') && !path.contains('\r'),
-        "Invalid WSL Git server path"
-    );
-    let info: ServerInfo = serde_json::from_str(json).context("Invalid WSL Git server version")?;
-    ensure!(
-        info.protocol_version == PROTOCOL_VERSION
-            && info.target == TARGET
-            && !info.server_version.is_empty(),
-        "Incompatible WSL Git server: version {}, protocol {}, target {}",
-        info.server_version,
-        info.protocol_version,
-        info.target
-    );
-    Ok((path.to_owned(), info))
+    remote_server::prepare(
+        binary,
+        base,
+        &format!("WSL '{distribution}'"),
+        |mode, digest, base| {
+            let mut command = command(distribution);
+            command.args([
+                "sh",
+                "-c",
+                BOOTSTRAP,
+                "projlaunch-bootstrap",
+                mode,
+                digest,
+                base,
+            ]);
+            command
+        },
+    )
+    .await
 }
 
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    const TARGET: &str = "x86_64-unknown-linux-gnu";
     use git_protocol::*;
 
     async fn shell(distribution: &str, script: &str, args: &[&str]) -> Result<String> {

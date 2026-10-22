@@ -1,11 +1,11 @@
 #!/bin/sh
-# Arguments are passed separately by wsl.exe; stdin carries the binary only for install.
+# Shared Linux installer; stdin carries the binary only for install.
 set -eu
 umask 077
 mode=$1
 digest=$2
 base=$3
-[ "$(uname -m)" = x86_64 ] || { echo 'The bundled Git server requires x86_64 Linux' >&2; exit 1; }
+[ "$(uname -s)" = Linux ] && [ "$(uname -m)" = x86_64 ] || { echo 'The bundled Git server requires x86_64 Linux' >&2; exit 1; }
 if [ -z "$base" ]; then base="$HOME/.local/share/projlaunch/git-server"; fi
 case "$base" in /*) ;; *) echo 'Git server directory must be absolute' >&2; exit 1;; esac
 directory="$base/$digest"

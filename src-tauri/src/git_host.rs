@@ -56,6 +56,7 @@ impl GitHost {
             match endpoint {
                 Endpoint::Local => Client::connect(&server_path()?).await,
                 Endpoint::Wsl { distribution } => crate::wsl::connect(distribution).await,
+                Endpoint::Ssh { host, username } => crate::ssh::connect(host, username).await,
             }
             .map_err(|e| format!("{e:#}"))?,
         );
@@ -79,12 +80,10 @@ impl GitHost {
             Some(Remote::Wsl(distribution)) => Endpoint::Wsl {
                 distribution: distribution.clone(),
             },
-            Some(Remote::Ssh { .. }) => {
-                return Ok(ProjectGitStatus {
-                    unsupported: true,
-                    ..Default::default()
-                });
-            }
+            Some(Remote::Ssh { host, username }) => Endpoint::Ssh {
+                host: host.clone(),
+                username: username.clone(),
+            },
         };
         endpoint.validate().map_err(|e| e.to_string())?;
         let _permit = self
@@ -99,7 +98,7 @@ impl GitHost {
                     .map_err(|e| e.to_string())?
                     .map_err(|e| format!("{e:#}"))?
             }
-            Endpoint::Wsl { .. } => self
+            Endpoint::Wsl { .. } | Endpoint::Ssh { .. } => self
                 .client(&endpoint)
                 .await?
                 .call::<_, git_discovery::Discovery>(
@@ -472,15 +471,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn remote_and_non_repository_projects_do_not_start_server_and_invalid_git_is_unknown() {
+    async fn invalid_remote_and_non_repository_projects_do_not_start_server_and_invalid_git_is_unknown()
+     {
         let temp = tempfile::tempdir().unwrap();
         let host = GitHost::default();
         let mut remote = project(temp.path());
         remote.remote = Some(crate::project::Remote::Ssh {
-            host: "example".into(),
+            host: "-oProxyCommand=invalid".into(),
             username: "user".into(),
         });
-        assert!(host.project_status(remote).await.unwrap().unsupported);
+        assert!(host.project_status(remote).await.is_err());
         assert!(
             host.project_status(project(temp.path()))
                 .await

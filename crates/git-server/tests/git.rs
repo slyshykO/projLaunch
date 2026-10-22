@@ -1,6 +1,6 @@
 use git_client::Client;
 use serde_json::{Value, json};
-use std::{fs, path::Path, process::Command};
+use std::{collections::BTreeSet, fs, path::Path, process::Command};
 use tempfile::TempDir;
 
 struct Fixture(TempDir);
@@ -276,6 +276,83 @@ async fn history_snapshot_survives_new_commits_and_branch_movement() {
     )
     .await;
     assert!(patch["text"].as_str().unwrap().contains("+1"));
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn history_accepts_1024_distinct_roots_and_rejects_1025() {
+    let fixture = Fixture::new();
+    // Fast-import creates independent tips in one process. 1024 SHA-1 roots
+    // exceed Windows' command-line limit when passed as individual arguments.
+    let mut input = String::new();
+    for index in 0..1024 {
+        let message = format!("root {index}");
+        input.push_str(&format!(
+            "commit refs/heads/root-{index}\ncommitter Test <test@example.invalid> 1700000000 +0000\ndata {}\n{message}\n\n",
+            message.len()
+        ));
+    }
+    let import = fixture.path().join("import.txt");
+    fs::write(&import, input).unwrap();
+    let output = Command::new("git")
+        .current_dir(fixture.path())
+        .args(["fast-import", "--quiet"])
+        .stdin(fs::File::open(import).unwrap())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    fixture.git(&["update-ref", "refs/heads/main", "refs/heads/root-0"]);
+    fixture.git(&["tag", "duplicate-tip", "refs/heads/root-0"]);
+    let expected: BTreeSet<_> = fixture
+        .git(&["rev-list", "--all"])
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(expected.len(), 1024);
+
+    let (client, repo) = fixture.connect().await;
+    let mut cursor = Value::Null;
+    let mut seen = BTreeSet::new();
+    loop {
+        let page = request(
+            &client,
+            "git.log",
+            json!({"repoId":repo,"limit":200,"cursor":cursor}),
+        )
+        .await;
+        for commit in page["commits"].as_array().unwrap() {
+            assert!(
+                seen.insert(commit["oid"].as_str().unwrap().to_owned()),
+                "duplicate commit across pages"
+            );
+        }
+        cursor = page["nextCursor"].clone();
+        if cursor.is_null() {
+            break;
+        }
+    }
+    assert_eq!(seen, expected);
+
+    let tree = fixture.git(&["rev-parse", "HEAD^{tree}"]);
+    let extra = fixture.git(&["commit-tree", &tree, "-m", "root 1025"]);
+    fixture.git(&["update-ref", "refs/heads/extra", &extra]);
+    let error = client
+        .call::<_, Value>(
+            "git.log",
+            &json!({"repoId":repo,"operationId":"too-many-roots"}),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Too many history roots (limit 1024 in protocol v1)"),
+        "{error}"
+    );
     client.shutdown().await;
 }
 

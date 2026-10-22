@@ -1,6 +1,10 @@
 use anyhow::{Context, Result, bail};
 use std::{path::Path, process::Stdio, sync::Arc, time::Duration};
-use tokio::{io::AsyncReadExt, process::Command, sync::Semaphore};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    process::Command,
+    sync::Semaphore,
+};
 use tokio_util::sync::CancellationToken;
 
 pub const OUTPUT_LIMIT: usize = 8 * 1024 * 1024;
@@ -54,6 +58,38 @@ impl GitRunner {
             _ = cancel.cancelled() => bail!("Operation cancelled"),
             permit = self.slots.acquire() => permit?,
         };
+        self.execute(
+            Self::command(root, args),
+            None,
+            cancel,
+            limit,
+            truncate,
+            allow_failure,
+        )
+        .await
+    }
+
+    pub async fn run_with_input(
+        &self,
+        root: &Path,
+        args: &[String],
+        input: &[u8],
+        cancel: &CancellationToken,
+    ) -> Result<Vec<u8>> {
+        let _slot = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => bail!("Operation cancelled"),
+            permit = self.slots.acquire() => permit?,
+        };
+        let mut command = Self::command(root, args);
+        command.stdin(Stdio::piped());
+        Ok(self
+            .execute(command, Some(input), cancel, OUTPUT_LIMIT, false, false)
+            .await?
+            .bytes)
+    }
+
+    fn command(root: &Path, args: &[String]) -> Command {
         let mut command = Command::new("git");
         command
             .current_dir(root)
@@ -85,13 +121,13 @@ impl GitRunner {
             .env("GIT_NO_REPLACE_OBJECTS", "1");
         #[cfg(windows)]
         command.creation_flags(0x08000000);
-        self.execute(command, cancel, limit, truncate, allow_failure)
-            .await
+        command
     }
 
     async fn execute(
         &self,
         mut command: Command,
+        input: Option<&[u8]>,
         cancel: &CancellationToken,
         limit: usize,
         truncate: bool,
@@ -110,6 +146,20 @@ impl GitRunner {
         })?;
         let mut stdout = child.stdout.take().unwrap();
         let mut stderr = child.stderr.take().unwrap();
+        let stdin = child.stdin.take();
+        let mut input_done = input.is_none();
+        let write_input = async move {
+            if let Some(input) = input {
+                let mut stdin = stdin.context("Git stdin is not piped")?;
+                stdin
+                    .write_all(input)
+                    .await
+                    .context("Cannot write Git stdin")?;
+                // Dropping the pipe signals EOF so Git can finish reading revisions.
+            }
+            Ok::<_, anyhow::Error>(())
+        };
+        tokio::pin!(write_input);
         let mut bytes = Vec::new();
         let mut errors = Vec::new();
         let mut out = [0u8; 8192];
@@ -118,11 +168,15 @@ impl GitRunner {
         let deadline = tokio::time::sleep(self.timeout);
         tokio::pin!(deadline);
         let result: Result<bool> = async {
-            while !out_done || !err_done {
+            while !input_done || !out_done || !err_done {
                 tokio::select! {
                     biased;
                     _ = cancel.cancelled() => bail!("Operation cancelled"),
                     _ = &mut deadline => bail!("Git command timed out"),
+                    result = &mut write_input, if !input_done => {
+                        result?;
+                        input_done = true;
+                    },
                     n = stdout.read(&mut out), if !out_done => {
                         let n = n?;
                         out_done = n == 0;
@@ -267,10 +321,13 @@ mod tests {
         let other = crate::session::Session::new(service, None);
         let operation = session.operation("slow").unwrap();
         let cancel = operation.cancel.clone();
-        let command = fixture(&marker, "sleep");
+        let mut command = fixture(&marker, "sleep");
+        command.stdin(Stdio::piped());
         let task = tokio::spawn(async move {
+            // A child that never reads stdin must still be cancellable.
+            let input = vec![b'x'; 1024 * 1024];
             GitRunner::default()
-                .execute(command, &cancel, 8192, false, false)
+                .execute(command, Some(&input), &cancel, 8192, false, false)
                 .await
         });
         wait_started(&marker).await;
@@ -296,16 +353,25 @@ mod tests {
 
     #[tokio::test]
     async fn timeout_and_output_limits_reap_children() {
-        for mode in ["sleep", "stdout", "stderr"] {
+        for mode in ["sleep", "stdout", "stderr", "stdin"] {
             let dir = tempfile::TempDir::new().unwrap();
             let marker = dir.path().join("heartbeat");
             let runner = GitRunner {
                 timeout: Duration::from_millis(500),
                 ..GitRunner::default()
             };
+            let mut command = fixture(&marker, mode);
+            let input = vec![b'x'; 1024 * 1024];
+            let input = if mode == "stdin" {
+                command.stdin(Stdio::piped());
+                Some(input.as_slice())
+            } else {
+                None
+            };
             let error = runner
                 .execute(
-                    fixture(&marker, mode),
+                    command,
+                    input,
                     &CancellationToken::new(),
                     4096,
                     false,
@@ -314,11 +380,13 @@ mod tests {
                 .await
                 .unwrap_err();
             assert!(
-                error.to_string().contains(if mode == "sleep" {
-                    "timed out"
-                } else {
-                    "exceeds"
-                }),
+                error
+                    .to_string()
+                    .contains(if matches!(mode, "sleep" | "stdin") {
+                        "timed out"
+                    } else {
+                        "exceeds"
+                    }),
                 "{error}"
             );
             assert_stopped(&marker).await;
@@ -334,7 +402,7 @@ mod tests {
         let command = fixture(&marker, "sleep");
         let task = tokio::spawn(async move {
             GitRunner::default()
-                .execute(command, &operation.cancel, 8192, false, false)
+                .execute(command, None, &operation.cancel, 8192, false, false)
                 .await
         });
         wait_started(&marker).await;

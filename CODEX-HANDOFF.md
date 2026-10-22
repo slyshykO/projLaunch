@@ -8,6 +8,33 @@
 Актуальные инструкции по сборке: [README.md](README.md).
 Контракт Git API: [crates/git-server/README.md](crates/git-server/README.md).
 
+## Git через SSH (22 октября 2026)
+
+Добавлен Endpoint Ssh { host, username }: отдельные IP/host + username или alias
+из OpenSSH config с пустым username. Явный username передаётся через `-l`, иначе
+OpenSSH сам выбирает User. Порт, IdentityFile, ProxyJump задаются в обычном SSH
+config. Формат ProjectData.remote и SQLite-схема не меняются. Вкладки сохраняют
+endpoint, различаются по host/user/root и подписаны SSH-адресом.
+
+`src-tauri/src/ssh.rs` запускает системный OpenSSH без PTY и интерактивных запросов.
+Требуются ключ/agent и доверенный host key в known_hosts. Ошибки авторизации и
+проверки ключа показываются пользователю. Используются отдельные процессы SSH
+без общего ControlPath, перенаправления портов или фонового режима.
+
+Установщик вынесен из WSL в `src-tauri/src/remote_server.rs` и
+`src-tauri/src/remote/bootstrap.sh`; оба транспорта используют проверку SHA-256,
+версии/протокола и атомарную установку одного Linux x86_64 glibc-бинарника.
+Удалённые Windows/macOS/ARM64 пока не поддерживаются. RPC идёт через stdio,
+remote daemon/TCP-порт не нужны. Поиск workspace/репозиториев выполняется удалённо.
+
+Проверены Fable/Vite, 17 frontend-скриптов, 40 native-тестов и Clippy. Реальный
+SSH-тест выполнен Windows OpenSSH → временный sshd в WSL с отдельными ключами:
+как config alias, так и user + IP, неизвестный host key, отказ авторизации,
+установка/повторное использование/повреждение, версия/протокол, quoted/Unicode
+пути, Git RPC, reconnect и завершение remote PID. WSL regression тоже прошла.
+Тесты: `scripts/tests/test-ssh-endpoints.mjs`, opt-in Rust
+`ssh_install_reuse_repair_rpc_and_shutdown`; запуск описан в README Git-сервера.
+
 ## Git в WSL (22 октября 2026)
 
 Реализован Endpoint Local/WSL: существующий `ProjectData.remote` задаёт среду,
@@ -17,7 +44,7 @@ endpoint рядом с params. Вкладки различаются по endpoi
 Workspace JSON v2 сохраняет endpoint вкладок и активной вкладки; v1 читается как
 локальное состояние. Версия SQLite не менялась.
 
-`src-tauri/src/wsl.rs` и `wsl/bootstrap.sh` доставляют bundled Linux sidecar через
+`src-tauri/src/wsl.rs` и общий `remote/bootstrap.sh` доставляют bundled Linux sidecar через
 stdin в `~/.local/share/projlaunch/git-server/<sha256>/`. Проверяются SHA-256,
 `--version-json`, target и protocolVersion. Неизменённый бинарник не копируется;
 повреждённый восстанавливается атомарно. Разные сборки имеют отдельные каталоги.
@@ -26,7 +53,7 @@ TCP-порт и установка Rust не нужны, Git требуется 
 На выходе закрывается stdin, сервер завершает дочерние процессы; WSL не выключается.
 
 Обнаружение workspace/solution вынесено в `crates/git-discovery`; новый RPC
-`project.discover` выполняет его внутри Linux. SSH Git пока не реализован.
+`project.discover` выполняет его внутри Linux (WSL и SSH).
 Регрессии: `scripts/tests/test-wsl-endpoints.mjs`, native workspace tests и opt-in
 `wsl_install_reuse_repair_rpc_and_shutdown` (переменная `PROJLAUNCH_TEST_WSL_DISTRO`).
 Последний проверяет реальный WSL в изолированном `/tmp`, включая обновление,
@@ -411,7 +438,7 @@ JSONC поддерживает комментарии и завершающие 
 Лимиты: 2 MiB на определение, 512 путей, 64 репозитория, 4 проверки карточек
 одновременно. Относительный путь карточки требует замены на абсолютный;
 относительные пути внутри workspace/solution считаются от файла определения.
-SSH показывается как недоступный; WSL проверяется в своём дистрибутиве. В БД связи не создаются.
+SSH и WSL проверяются в соответствующем endpoint. В БД связи не создаются.
 
 Git-сервер запускается автоматически, когда проверка карточки впервые находит
 локальный репозиторий. Tauri управляет одним stdio-процессом и завершает его при
@@ -437,8 +464,7 @@ Git-сервер запускается автоматически, когда �
 - SQLite через rusqlite принадлежит приложению; Git-серверу база проектов не нужна.
 - Целевая последовательность: локальный stdio → status/log/diff → UI с графом →
   WSL/SSH stdio → bootstrap и защищённый HTTPS/WSS с настраиваемым портом.
-  SSH сможет копировать/запускать сервер; SSH stdio также остаётся транспортом.
-  WSL stdio и bootstrap реализованы; следующие этапы — SSH и защищённая сеть.
+  WSL/SSH stdio и bootstrap реализованы; отдельный сетевой API остаётся будущим этапом.
 
 ## Карта исходников
 
@@ -453,7 +479,8 @@ Git-сервер запускается автоматически, когда �
 | `src-tauri/src/git_host.rs` | Ленивый запуск sidecar, IPC-команды и shutdown |
 | `src-tauri/src/logging.rs`, `src/src/interop/FrontendLog.fs`, `_Logging.js` | Общий файловый лог Rust/frontend и доставка через IPC |
 | `src-tauri/src/project_git.rs`, `crates/git-discovery/` | DTO индикаторов и общее обнаружение workspace/solution |
-| `src-tauri/src/endpoint.rs`, `src-tauri/src/wsl.rs` | Среда выполнения и доставка/запуск WSL sidecar |
+| `src-tauri/src/endpoint.rs`, `src-tauri/src/wsl.rs`, `src-tauri/src/ssh.rs` | Среда выполнения и транспорт WSL/SSH |
+| `src-tauri/src/remote_server.rs`, `src-tauri/src/remote/bootstrap.sh` | Общая доставка Linux sidecar, версия и SHA-256 |
 | `src-tauri/src/project.rs` | Rust DTO, совместимость старого JSON |
 | `src-tauri/src/storage/` | SQLite worker, запросы, миграции, legacy import и тесты |
 | `src-tauri/migrations/` | Версионированная SQL-схема |
@@ -468,7 +495,7 @@ Git-сервер запускается автоматически, когда �
 
 `crates/Cargo.toml` — отдельный workspace; у Tauri сохраняется собственный
 `src-tauri/Cargo.lock`. Проверять обе части. Native launcher Remote используется для
-`code --remote`; вариант WSL также выбирает endpoint Git-сервера. SSH Git ещё нет.
+`code --remote`; варианты WSL и SSH также выбирают endpoint Git-сервера.
 
 ## SQLite: текущее поведение
 
@@ -513,7 +540,8 @@ caller-generated `operationId` для операций. Batch отключён, 
   untracked и conflicts. Unicode поддерживается; non-UTF-8 paths пока отклоняются.
 - Log возвращает OID, родителей, автора, даты, subject, refs; порядок топологический.
   Snapshot фиксирует начальные OID и refs, новые коммиты не сдвигают следующие страницы.
-  Страница по умолчанию 100, максимум 200; до 256 начальных OID. Курсоры живут
+Страница по умолчанию 100, максимум 200; до 1024 начальных OID (передаются Git через stdin,
+чтобы не превышать лимит командной строки Windows). Курсоры живут
   до 5 минут или вытеснения, максимум 128. Traversal пока использует `--skip`.
 - Diff: unstaged index→worktree, staged HEAD→index, commit parent→commit.
   Для merge обязателен явный родитель (нумерация с 1); root использует empty tree
@@ -529,7 +557,8 @@ caller-generated `operationId` для операций. Batch отключён, 
   Это development loopback-адаптер, а не готовый удалённый endpoint.
 
 Синтетические fetchDemo/watch/unwatch из прототипа не перенесены. Нет Git-записей,
-watchers, TLS/auth, SSH/WSL deployment или постоянных repository bindings в БД.
+watchers, standalone TLS/auth или постоянных repository bindings в БД.
+WSL/SSH deployment реализован, SSH использует аутентификацию OpenSSH.
 
 ## Сборка Git sidecar
 

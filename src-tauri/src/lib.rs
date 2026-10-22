@@ -3,6 +3,8 @@ mod git_host;
 mod logging;
 mod project;
 mod project_git;
+mod remote_server;
+mod ssh;
 mod storage;
 mod workspace;
 mod wsl;

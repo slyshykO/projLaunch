@@ -20,6 +20,27 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn ssh_tabs_keep_host_user_and_config_alias_on_roundtrip() {
+        let endpoint =
+            |username: &str| json!({"kind": "ssh", "host": "work-alias", "username": username});
+        let tab = |username: &str| json!({"endpoint": endpoint(username), "root": "/repo", "name": "repo", "filesWidth": 40, "filesHeight": 40});
+        let value = json!({"version": 2, "activeRoot": "/repo", "activeEndpoint": endpoint("bob"), "tabs": [tab(""), tab("alice"), tab("bob")]});
+        let saved = Workspace::from_json(&value.to_string()).unwrap();
+        let restored = Workspace::from_json(&serde_json::to_string(&saved).unwrap()).unwrap();
+        assert_eq!(restored.tabs.len(), 3);
+        assert_eq!(
+            restored.active_endpoint,
+            Some(Endpoint::Ssh {
+                host: "work-alias".into(),
+                username: "bob".into()
+            })
+        );
+        let mut invalid = value;
+        invalid["activeEndpoint"]["username"] = json!("missing");
+        assert!(Workspace::from_json(&invalid.to_string()).is_err());
+    }
+
+    #[test]
     fn endpoints_distinguish_identical_paths_and_restore_active_distribution() {
         let tab = |distribution: &str| {
             json!({

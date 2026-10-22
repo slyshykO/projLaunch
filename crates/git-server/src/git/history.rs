@@ -8,6 +8,8 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
+const MAX_HISTORY_ROOTS: usize = 1024;
+
 pub struct History {
     pub repo_id: String,
     pub created: Instant,
@@ -75,8 +77,8 @@ impl Repo {
             .into_iter()
             .collect();
         ensure!(
-            roots.len() <= 256,
-            "Too many history roots (limit 256 in protocol v1)"
+            roots.len() <= MAX_HISTORY_ROOTS,
+            "Too many history roots (limit {MAX_HISTORY_ROOTS} in protocol v1)"
         );
         Ok(Arc::new(History {
             repo_id: self.info.repo_id.clone(),
@@ -105,8 +107,9 @@ impl Repo {
                 false,
             ));
         }
-        let mut command = args(&[
+        let command = args(&[
             "log",
+            "--stdin",
             "--topo-order",
             "--no-decorate",
             "--no-show-signature",
@@ -117,9 +120,13 @@ impl Repo {
             &format!("--max-count={}", limit + 1),
             &format!("--skip={}", cursor.offset),
         ]);
-        command.extend(cursor.history.roots.clone());
-        command.push("--".into());
-        let bytes = self.runner.run(&self.root, &command, cancel).await?;
+        // Keep the captured OIDs (not live ref names) without exceeding Windows'
+        // command-line limit. The separator belongs to the stdin revision list.
+        let revisions = format!("{}\n--\n", cursor.history.roots.join("\n"));
+        let bytes = self
+            .runner
+            .run_with_input(&self.root, &command, revisions.as_bytes(), cancel)
+            .await?;
         let text = std::str::from_utf8(&bytes).context("Commit metadata is not valid UTF-8")?;
         let fields: Vec<_> = text
             .strip_suffix('\0')

@@ -1,4 +1,4 @@
-# Git server (local and WSL)
+# Git server (local, WSL and SSH)
 
 The launcher runs `project-launch-git-server stdio` as a separate process on demand. It is based
 on the `jsonrpc-axum-probe` transport and `json-rpc-rs` dispatcher; the synthetic
@@ -71,7 +71,7 @@ Debug and release builds replace the same destination, just like the native buil
 their Cargo outputs remain separate. Generated binaries are ignored and removed
 by the existing clean command. Shell scripts are checked out with LF.
 The native Tauri sidecar remains separate. The Linux output is included in the
-portable release ZIP and deployed automatically to WSL endpoints. An Ubuntu build failure returns a nonzero
+portable release ZIP and deployed automatically to WSL and SSH endpoints. An Ubuntu build failure returns a nonzero
 exit status and never copies the failed output over the last verified binary.
 
 Build helper regression checks (after `dotnet build build/build.fsproj -f net11.0`):
@@ -98,7 +98,7 @@ separate client/process and session-scoped repository IDs. Workspace JSON v2
 persists the tab endpoint and active endpoint; old v1 local snapshots still load.
 The SQLite schema and project remote encoding are unchanged.
 
-`src-tauri/src/wsl.rs` looks for the Linux binary in packaged `binaries/`, then
+`src-tauri/src/remote_server.rs` looks for the Linux binary in packaged `binaries/`, then
 in the checkout. The bootstrap script checks its SHA-256 and runs
 `--version-json`, which reports `serverVersion`, `protocolVersion`, and `target`
 without requiring Git. The installation key is the complete binary hash, so
@@ -126,6 +126,50 @@ selection and protocol rejection, Unicode/quoted paths, discovery, status,
 history, diff, reconnect and process exit. It does not read the app database.
 Frontend routing/persistence regression: `node scripts/tests/test-wsl-endpoints.mjs`
 after compiling Fable.
+
+## SSH lifecycle
+
+`Remote::Ssh { host, username }` maps to the endpoint
+`{"kind":"ssh","host":"devbox","username":""}`. `host` can be a DNS name,
+IPv4/IPv6 address, or an OpenSSH config alias. A nonempty username is passed with
+`-l`; empty/omitted means OpenSSH resolves the user from configuration/defaults.
+Port, identity files and ProxyJump are configured in the normal OpenSSH config.
+The existing project schema is retained. Tabs and connections use host + username
+as their identity (two aliases resolving to one machine remain separate endpoints).
+
+`src-tauri/src/ssh.rs` launches system OpenSSH with no PTY, `BatchMode=yes` and
+`StrictHostKeyChecking=yes`. Known host keys and key/agent authentication must
+already work; passwords and interactive host-key enrollment are not handled in
+this stage. SSH config cannot replace the server command, discard stdin, allocate
+a TTY, fork into the background, or attach this process to a shared control socket.
+Port/agent/X11 forwarding is disabled. Connection setup has a 10-second timeout;
+server-alive messages detect a lost connection. All remote arguments are POSIX
+shell-quoted separately, because SSH remote commands are interpreted by a shell.
+
+The installer in `remote_server.rs` and `remote/bootstrap.sh` is shared with WSL.
+It accepts Linux x86_64 only, transfers bytes via stdin, verifies the SHA-256 and
+`--version-json`, and installs by atomic rename in a directory keyed by the hash.
+Unsupported OS/architecture or glibc yields an error instead of trying another
+platform's binary. Old versions remain available for running app instances.
+The final SSH command `exec <quoted-server-path> stdio` owns the RPC session.
+Closing stdin lets the remote server cancel Git children and exit; no service or
+remote TCP listener is created. Host-key/auth/install errors surface on the card.
+
+Opt-in SSH test against a **disposable** Linux host (the test creates and removes
+its own `/tmp/projlaunch-ssh-test-*` directory):
+
+```powershell
+$env:PROJLAUNCH_TEST_SSH_CONFIG = 'C:/path/to/test-ssh-config'
+$env:PROJLAUNCH_TEST_SSH_HOST = 'test-alias'
+# Optional explicit user for the host/IP form:
+$env:PROJLAUNCH_TEST_SSH_USER = 'alex'
+cargo test --manifest-path src-tauri/Cargo.toml --lib ssh_install_reuse_repair_rpc_and_shutdown --locked -- --ignored
+```
+
+It checks unknown host keys, failed authentication, install/reuse/repair, version
+selection/protocol rejection, quoted/Unicode paths, discovery/status/history/diff,
+reconnection and remote process exit. `scripts/tests/test-ssh-endpoints.mjs`
+checks frontend routing, host/user/alias isolation and workspace restoration.
 
 ## Protocol v1
 
@@ -217,11 +261,12 @@ the child. Patch truncation also stops and reaps its child. Client requests have
 a 90-second deadline; expiry closes the connection. Stream writes have 5 seconds.
 
 Each connection holds up to 128 repositories and 128 cursors. History is limited
-to 256 distinct starting OIDs to fit Windows command-line limits. These are
+to 1024 distinct starting OIDs. The captured OIDs are passed through Git's stdin
+to avoid Windows command-line limits while keeping pagination stable. These are
 explicit errors/refresh conditions, never silent partial results.
 
-No Git mutation methods, watchers, SSH bootstrap, TLS or authentication are
-implemented. The prototype HTTP/WS
+No Git mutation methods, watchers or standalone TLS/authentication layer are
+implemented; SSH transport uses OpenSSH authentication and encryption. The prototype HTTP/WS
 adapter remains behind the optional `network` feature for development on loopback;
 it is not enabled in the sidecar build and is not a production remote endpoint.
 
