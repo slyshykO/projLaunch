@@ -4,7 +4,7 @@
   "version": "0.5.1",
   "type": "module",
   "scripts": {
-    "gen:version": "dotnet fsi --exec scripts/version/version.fsx src/bin",
+    "gen:version": "dotnet fsi --exec build/scripts/version/version.fsx src/bin",
     "pretauri": "npm run gen:version",
     "prebuild": "npm run build:git-server -- --release && dotnet tool restore && dotnet paket restore && npm run gen:version",
     "predev": "npm run build:git-server && npm run gen:version",

@@ -7,7 +7,7 @@ open System.Text
 open System.Text.Json
 open System.Text.RegularExpressions
 
-let projectRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", ".."))
+let projectRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, ".."))
 
 let private git root (args: string list) =
     let info = ProcessStartInfo("git", args)
@@ -39,10 +39,20 @@ let validateVersion (version: string) =
 let private tags root =
     (git root [ "tag"; "--list" ]).Split('\n', StringSplitOptions.RemoveEmptyEntries)
 
+let private releaseVersionFromTag tag =
+    let matched = Regex.Match(tag, "\\Av?(" + releasePattern + ")\\z")
+
+    if matched.Success then
+        Some matched.Groups.[1].Value
+    else
+        None
+
+let private versionNumbers (version: string) =
+    version.Split('.')
+    |> Array.map (fun part -> Numerics.BigInteger.Parse(part, Globalization.CultureInfo.InvariantCulture))
+
 let private describe root options =
-    let releaseTags =
-        tags root
-        |> Array.filter (fun tag -> Regex.IsMatch(tag, "^v?" + releasePattern + "$"))
+    let releaseTags = tags root |> Array.filter (releaseVersionFromTag >> Option.isSome)
 
     if Array.isEmpty releaseTags then
         failwith "No release tag found. Run build.bat set-version X.Y.Z first."
@@ -324,9 +334,23 @@ let sync root =
 let setVersion root version =
     validateVersion version
     let tag = "v" + version
+    let existingTags = tags root
 
-    if tags root |> Array.exists (fun existing -> existing = tag || existing = version) then
+    if
+        existingTags
+        |> Array.exists (fun existing -> existing = tag || existing = version)
+    then
         failwith $"Release tag {tag} or {version} already exists."
+
+    // Use every known release tag, not just the nearest tag on this branch:
+    // an earlier accidental downgrade must not allow another lower release.
+    let releases = existingTags |> Array.choose releaseVersionFromTag
+
+    if not (Array.isEmpty releases) then
+        let latest = releases |> Array.maxBy versionNumbers
+
+        if versionNumbers version <= versionNumbers latest then
+            failwith $"Release version {version} must be greater than the latest release {latest}."
 
     git root [ "rev-parse"; "--verify"; "HEAD" ] |> ignore
     git root [ "var"; "GIT_AUTHOR_IDENT" ] |> ignore

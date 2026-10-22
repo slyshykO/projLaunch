@@ -13,7 +13,7 @@
     <Compile Include="obj/hashes.fs" />
     <Compile Include="SelfBuild.fs" />
     <Compile Include="Print.fs" />
-    <Compile Include="../scripts/version/Versioning.fs" />
+    <Compile Include="Versioning.fs" />
     <Compile Include="GitServerUbuntu22.fs" />
     <Compile Include="GitServerProcess.fs" />
     <Compile Include="GitServer.fs" />

@@ -17,6 +17,7 @@ module Args =
         | Run = 7
         | SetVersion = 8
         | Publish = 9
+        | Version = 10
 
     let extractSubCommandStr (args: string array) =
         if args.Length = 0 then
@@ -30,6 +31,7 @@ module Args =
         | "run" -> Some SubCommand.Run
         | "publish" -> Some SubCommand.Publish
         | "set-version" -> Some SubCommand.SetVersion
+        | "version" -> Some SubCommand.Version
         | "clean" -> Some SubCommand.Clean
         | "test" -> Some SubCommand.Test
         | "update" -> Some SubCommand.Update
@@ -51,7 +53,8 @@ module Help =
         Print.println "  run           Build and run the app (--release for release mode)"
         Print.println "  publish       Build a Windows release ZIP with Windows/Linux Git servers"
         Print.println "                --wsl-distro NAME selects the Linux build distribution"
-        Print.println "  set-version X.Y.Z  Update versions, commit and tag vX.Y.Z"
+        Print.println "  set-version X.Y.Z  Increase the release version, commit and tag vX.Y.Z"
+        Print.println "  version       Print the current Git version without changing files"
         Print.println "  clean         Clean all projects/configurations, including the helper (via build.bat)"
         Print.println "  test          Reserved for test workflow"
         Print.println "  update        Update dependencies"
@@ -360,6 +363,17 @@ module Build =
 module Main =
     open System
 
+    let private printVersion (argv: string array) =
+        try
+            if argv.Length <> 1 then
+                failwith "Usage: build version"
+
+            Console.WriteLine(Versioning.displayVersion Versioning.projectRoot)
+            AppResult.Success
+        with ex ->
+            Console.Error.WriteLine ex.Message
+            AppResult.Failure
+
     let private run argv =
         let startTime = DateTime.Now
 
@@ -412,4 +426,8 @@ module Main =
         | SelfBuild.NeedToRebuild ->
             Print.printlnRed "Self-build is required. Run build.bat to rebuild the helper."
             42
-        | SelfBuild.AllGood -> run argv
+        | SelfBuild.AllGood ->
+            if Args.subCommand argv = Some Args.SubCommand.Version then
+                printVersion argv
+            else
+                run argv

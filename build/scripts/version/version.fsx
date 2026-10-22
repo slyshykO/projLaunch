@@ -1,9 +1,9 @@
-#load "Versioning.fs"
+#load "../../Versioning.fs"
 
 open System.IO
 
 if fsi.CommandLineArgs.Length <> 2 then
-    failwith "Usage: dotnet fsi --exec scripts/version/version.fsx <output-directory>"
+    failwith "Usage: dotnet fsi --exec build/scripts/version/version.fsx <output-directory>"
 
 // Versioning.sync Versioning.projectRoot |> ignore
 let version = Versioning.displayVersion Versioning.projectRoot

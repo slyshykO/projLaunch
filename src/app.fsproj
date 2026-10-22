@@ -48,7 +48,7 @@
     <PackageReference Include="Fable.Browser.Dom" Version="2.20.0" />
   </ItemGroup> -->
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="dotnet fsi --exec &quot;$(MSBuildProjectDirectory)\..\scripts\version\version.fsx&quot; &quot;$(MSBuildThisFileDirectory)bin&quot;" />
+    <Exec Command="dotnet fsi --exec &quot;$(MSBuildProjectDirectory)\..\build\scripts\version\version.fsx&quot; &quot;$(MSBuildThisFileDirectory)bin&quot;" />
   </Target>
   <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>

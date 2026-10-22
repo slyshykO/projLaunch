@@ -391,7 +391,8 @@ The repo also includes a custom Windows helper:
 .\build.bat build-git-server
 .\build.bat build-git-server ubuntu22 --release
 .\build.bat build-git-server ubuntu22 --release --wsl-distro Ubuntu
-.\build.bat set-version 0.4.2
+.\build.bat version
+.\build.bat set-version 0.5.2
 .\build.bat help
 ```
 
@@ -418,7 +419,11 @@ What these do:
   for prerequisites and output paths. This is an explicit build target; ordinary
   app/native sidecar builds do not require WSL.
 - `set-version X.Y.Z` updates project versions, creates a `Release vX.Y.Z` commit,
-  and creates the local Git tag `vX.Y.Z`. It does not push.
+  and creates the local Git tag `vX.Y.Z`. The version must exceed every existing
+  local release tag (`vX.Y.Z` or `X.Y.Z`), compared numerically. It does not push.
+- `version` prints the current Git version as one line, using the same format as
+  About (`X.Y.Z`, optional commit distance/hash, and `+` for tracked changes).
+  It does not synchronize manifests, commit or tag. Extra arguments are rejected.
 
 Git server build commands use explicit stdin/stdout/stderr pipes, including WSL.
 Output is forwarded to the current terminal; failures also report the hexadecimal
@@ -450,7 +455,7 @@ using `git describe --tags`. The version is synchronized into every tracked
 the matching local-package entries in npm/Cargo lockfiles. Rust workspace members
 keep `version.workspace = true`; dependency versions are preserved.
 
-`build`, `run`, `build-git-server`, and `scripts/version/version.fsx` synchronize
+`build`, `run`, `build-git-server`, and `build/scripts/version/version.fsx` synchronize
 versions before building when tracked files or the index have uncommitted
 changes, without committing those changes or tagging. On a clean checkout, if the
 committed project versions still contain a generated `.dirty` suffix, the helper
@@ -489,7 +494,10 @@ when enabling installer bundling (currently disabled).
 
 Before `set-version`, commit or stash changes other than project-version updates.
 Version-only changes left by a build are accepted. Existing tags (with or without
-`v`) and invalid release numbers are rejected before writing files. If no release
+`v`), invalid release numbers and versions no higher than the maximum existing
+release tag are rejected before writing files. All local release tags are checked,
+including tags on other branches; the first release is allowed if none exist.
+If no release
 tag is reachable, builds fail with a Git/version error; create the initial release
 with `set-version X.Y.Z` first. Only files tracked by Git participate in versioning.
 

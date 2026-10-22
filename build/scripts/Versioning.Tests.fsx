@@ -1,4 +1,4 @@
-#load "../../scripts/version/Versioning.fs"
+#load "../Versioning.fs"
 
 open System
 open System.Diagnostics
@@ -56,6 +56,32 @@ let expectFailure action message =
             true
 
     check failed message
+
+let snapshot () =
+    let files =
+        (run [ "ls-files"; "-z" ]).Split('\000', StringSplitOptions.RemoveEmptyEntries)
+        |> Array.map (fun path ->
+            let fullPath = Path.Combine(fixture, path)
+            path, File.ReadAllBytes fullPath, File.GetLastWriteTimeUtc fullPath)
+
+    run [ "rev-parse"; "HEAD" ],
+    run [ "show-ref"; "--tags" ],
+    run [ "status"; "--porcelain" ],
+    File.ReadAllBytes(Path.Combine(fixture, ".git", "index")),
+    files
+
+let expectDowngradeRejected version latest =
+    let before = snapshot ()
+
+    let error =
+        try
+            Versioning.setVersion fixture version
+            ""
+        with ex ->
+            ex.Message
+
+    check (error.Contains $"must be greater than the latest release {latest}") $"Wrong rejection for {version}: {error}"
+    check (snapshot () = before) "Rejected version changed files, index, timestamps, HEAD or tags"
 
 let rootVersion path =
     use json = JsonDocument.Parse(read path)
@@ -133,7 +159,12 @@ try
     check (run [ "rev-parse"; "HEAD" ] = run [ "rev-parse"; "v1.2.3" ]) "Tag points at wrong commit"
     check (run [ "status"; "--porcelain" ] = "") "Release left tracked changes"
     check (Versioning.displayVersion fixture = "1.2.3") "Exact release description is wrong"
+    let beforeDuplicate = snapshot ()
     expectFailure (fun () -> Versioning.setVersion fixture "1.2.3") "Existing tag accepted"
+    check (snapshot () = beforeDuplicate) "Duplicate release changed repository state"
+
+    for lower in [ "1.2.2"; "1.1.99"; "0.99.99" ] do
+        expectDowngradeRejected lower "1.2.3"
 
     let timestamp = File.GetLastWriteTimeUtc(Path.Combine(fixture, "package.json"))
     Versioning.sync fixture |> ignore
@@ -141,6 +172,9 @@ try
     write "notes.txt" "dirty at tag"
     let dirtyAtTag = Versioning.manifestVersion fixture
     check (Regex.IsMatch(dirtyAtTag, @"^1\.2\.3\+0\.g[0-9a-f]+\.dirty$")) "Dirty exact tag must include hash"
+    let beforeVersionRead = snapshot ()
+    check (Versioning.displayVersion fixture = "1.2.3+") "Current version must expose tracked changes"
+    check (snapshot () = beforeVersionRead) "Reading the current version must not synchronize files or alter Git"
     Versioning.sync fixture |> ignore
     checkVersions dirtyAtTag
     write "notes.txt" "original"
@@ -298,6 +332,28 @@ try
     check
         (not ((Versioning.displayVersion fixture).EndsWith("+")))
         "Generated display version should describe the current clean checkout"
+
+    // A legacy higher release remains the floor even after an accidental lower
+    // tag on a newer commit. Numeric comparison must handle two-digit components.
+    run [ "tag"; "2.10.0" ] |> ignore
+    write "notes.txt" "accidental downgrade"
+    commit ()
+    run [ "tag"; "v2.2.0" ] |> ignore
+    check (Versioning.gitVersion fixture = "2.2.0") "Fixture must have a lower nearest release"
+    expectDowngradeRejected "2.9.99" "2.10.0"
+    expectDowngradeRejected "2.2.1" "2.10.0"
+    // Non-release tags do not constrain releases.
+    run [ "tag"; "v99.0.0-beta" ] |> ignore
+    Versioning.setVersion fixture "2.10.1"
+    checkVersions "2.10.1"
+    Versioning.setVersion fixture "10.0.0"
+    checkVersions "10.0.0"
+
+    let otherHistory =
+        run [ "commit-tree"; "HEAD^{tree}"; "-m"; "Release on another history" ]
+
+    run [ "tag"; "v11.0.0"; otherHistory ] |> ignore
+    expectDowngradeRejected "10.0.1" "11.0.0"
 
     printfn "Versioning regression checks passed."
 finally
