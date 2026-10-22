@@ -420,6 +420,10 @@ What these do:
 - `set-version X.Y.Z` updates project versions, creates a `Release vX.Y.Z` commit,
   and creates the local Git tag `vX.Y.Z`. It does not push.
 
+Git server build commands use explicit stdin/stdout/stderr pipes, including WSL.
+Output is forwarded to the current terminal; failures also report the hexadecimal
+exit code and preserve diagnostics from commands whose stdout is captured.
+
 Both `publish` and `build --release` produce this extraction layout, with no extra
 top-level directory:
 
@@ -543,6 +547,7 @@ Run the build helper's regression checks with:
 ```powershell
 dotnet fsi --exec build/scripts/SelfBuild.Tests.fsx
 dotnet fsi --exec build/scripts/Versioning.Tests.fsx
+dotnet fsi --exec build/scripts/GitServerProcess.Tests.fsx
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/test-clean.ps1
 ```
 

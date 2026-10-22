@@ -1,7 +1,6 @@
 module GitServer
 
 open System
-open System.Diagnostics
 open System.IO
 
 let private projectRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, ".."))
@@ -32,26 +31,7 @@ let parseOptions (arguments: string list) =
 
 let private run captureOutput command (arguments: string list) =
     Print.printlnBlue (String.concat " " (command :: arguments))
-    let info = ProcessStartInfo(command, arguments)
-    info.WorkingDirectory <- projectRoot
-    info.UseShellExecute <- false
-    info.CreateNoWindow <- true
-    info.RedirectStandardOutput <- captureOutput
-    use proc = new Process(StartInfo = info)
-    proc.Start() |> ignore
-
-    let output =
-        if captureOutput then
-            proc.StandardOutput.ReadToEnd()
-        else
-            ""
-
-    proc.WaitForExit()
-
-    if proc.ExitCode <> 0 then
-        failwith $"{command} exited with code {proc.ExitCode}"
-
-    output
+    GitServerProcess.run projectRoot captureOutput command arguments
 
 let private targetTriple () =
     match
