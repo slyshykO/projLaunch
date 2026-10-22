@@ -3,7 +3,7 @@ members = ["git-protocol", "git-server", "git-client", "git-discovery"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.1+1.gc0cd24e.dirty"
+version = "0.5.1+1.gc0cd24e"
 edition = "2024"
 
 [workspace.dependencies]
