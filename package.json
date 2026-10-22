@@ -1,7 +1,7 @@
 {
   "name": "projlaunch",
   "private": true,
-  "version": "0.4.5",
+  "version": "0.5.1",
   "type": "module",
   "scripts": {
     "gen:version": "dotnet fsi --exec scripts/version/version.fsx src/bin",
