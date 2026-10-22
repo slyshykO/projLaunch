@@ -29,6 +29,7 @@ fn rpc_error(error: anyhow::Error) -> Error {
 
 pub fn git_api(session: Arc<Session>) -> JsonRpc {
     let hello = session.clone();
+    let discover = session.clone();
     let open = session.clone();
     let status = session.clone();
     let branches = session.clone();
@@ -50,9 +51,11 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                     .await
                     .map_err(rpc_error)?;
                 Ok(Hello {
+                    server_version: env!("CARGO_PKG_VERSION").into(),
                     protocol_version: PROTOCOL_VERSION,
                     git_version: git::line(&bytes).map_err(rpc_error)?.into(),
                     capabilities: [
+                        "project.discover",
                         "repo.open",
                         "git.status",
                         "git.branches",
@@ -65,6 +68,18 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                     .map(Into::into)
                     .collect(),
                 })
+            }
+        })
+        .add("project.discover", move |params: OpenParams| {
+            let session = discover.clone();
+            async move {
+                let operation = session.operation(&params.operation_id).map_err(rpc_error)?;
+                tokio::select! {
+                    _ = operation.cancel.cancelled() => Err(rpc_error(anyhow::anyhow!("Operation cancelled"))),
+                    result = tokio::task::spawn_blocking(move || git_discovery::discover(&params.path)) => {
+                        result.map_err(|error| rpc_error(error.into()))?.map_err(rpc_error)
+                    }
+                }
             }
         })
         .add("repo.open", move |params: OpenParams| {

@@ -28,7 +28,7 @@ let private ProjectGitIndicators (check: ProjectGitCheck option) (dispatch: Msg 
                 match check.result, check.error with
                 | _, Some error -> note "Git unavailable" error
                 | Some result, _ when result.unsupported ->
-                    note "Remote Git unavailable" "Git connections through SSH/WSL are not configured yet"
+                    note "Remote Git unavailable" "Git connections through SSH are not configured yet"
                 | Some result, _ ->
                     if result.repositories.Length = 0 && result.warnings.Length = 0 then
                         note "No Git repository" "No repository found for this project"
@@ -42,6 +42,7 @@ let private ProjectGitIndicators (check: ProjectGitCheck option) (dispatch: Msg 
 
                         let details =
                             [
+                                Some(GitProtocol.endpointLabel repo.endpoint)
                                 Some repo.root
                                 repo.branch |> Option.map (fun branch -> $"Branch: {branch}")
                                 repo.error

@@ -1,6 +1,6 @@
 [package]
 name = "projlaunch"
-version = "0.5.0+4.gf8e6f27"
+version = "0.5.0+6.g812e9fb.dirty"
 description = "Project launcher"
 authors = ["Oleksiy Slyshyk <alexslyshyk@gmail.com>"]
 edition = "2024"
@@ -23,8 +23,8 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-jsonc-parser = { version = "0.34", features = ["serde"] }
-quick-xml = "0.42"
+git-discovery = { path = "../crates/git-discovery" }
+sha2 = "0.11"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 tokio = { version = "1", features = ["sync"] }
 git-protocol = { path = "../crates/git-protocol" }
@@ -35,7 +35,9 @@ tracing-appender = "0.2"
 
 fs-err = "3.0"
 time = { version = "0.3", features = ["serde"] }
-sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
+sysinfo = { version = "0.39.6", default-features = false, features = [
+    "system",
+] }
 
 [dev-dependencies]
 tempfile = "3"

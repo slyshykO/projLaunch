@@ -1,11 +1,13 @@
 use crate::{
-    project::ProjectData,
+    endpoint::Endpoint,
+    project::{ProjectData, Remote},
     project_git::{self, ProjectGitStatus, RepositoryStatus},
     storage::Storage,
 };
 use git_client::Client;
 use git_protocol::*;
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{
         Arc,
@@ -14,8 +16,10 @@ use std::{
 };
 use tokio::sync::{Mutex, Semaphore};
 
+type ConnectionSlot = Arc<Mutex<Option<Arc<Client>>>>;
+
 pub struct GitHost {
-    connection: Mutex<Option<Arc<Client>>>,
+    connections: Mutex<HashMap<Endpoint, ConnectionSlot>>,
     project_checks: Semaphore,
     next_check: AtomicU64,
 }
@@ -23,7 +27,7 @@ pub struct GitHost {
 impl Default for GitHost {
     fn default() -> Self {
         Self {
-            connection: Mutex::new(None),
+            connections: Mutex::new(HashMap::new()),
             project_checks: Semaphore::new(4),
             next_check: AtomicU64::new(1),
         }
@@ -31,8 +35,16 @@ impl Default for GitHost {
 }
 
 impl GitHost {
-    async fn client(&self) -> Result<Arc<Client>, String> {
-        let mut connection = self.connection.lock().await;
+    async fn client(&self, endpoint: &Endpoint) -> Result<Arc<Client>, String> {
+        endpoint.validate().map_err(|e| e.to_string())?;
+        let slot = self
+            .connections
+            .lock()
+            .await
+            .entry(endpoint.clone())
+            .or_default()
+            .clone();
+        let mut connection = slot.lock().await;
         if let Some(client) = connection.as_ref().filter(|c| !c.is_closed()) {
             return Ok(client.clone());
         }
@@ -40,41 +52,69 @@ impl GitHost {
         if let Some(old) = connection.take() {
             old.shutdown().await;
         }
-        let executable = server_path()?;
-        tracing::info!("Starting local Git server");
         let client = Arc::new(
-            Client::connect(&executable)
-                .await
-                .map_err(|e| format!("{e:#}"))?,
+            match endpoint {
+                Endpoint::Local => Client::connect(&server_path()?).await,
+                Endpoint::Wsl { distribution } => crate::wsl::connect(distribution).await,
+            }
+            .map_err(|e| format!("{e:#}"))?,
         );
         *connection = Some(client.clone());
-        tracing::info!("Local Git server connected");
+        tracing::info!(?endpoint, "Git server connected");
         Ok(client)
     }
 
     pub async fn shutdown(&self) {
-        if let Some(client) = self.connection.lock().await.take() {
-            tracing::debug!("Stopping local Git server");
-            client.shutdown().await;
+        let connections = std::mem::take(&mut *self.connections.lock().await);
+        for slot in connections.into_values() {
+            if let Some(client) = slot.lock().await.take() {
+                client.shutdown().await;
+            }
         }
     }
 
     async fn project_status(&self, project: ProjectData) -> Result<ProjectGitStatus, String> {
-        if project.remote.is_some() {
-            return Ok(ProjectGitStatus {
-                unsupported: true,
-                ..Default::default()
-            });
-        }
+        let endpoint = match &project.remote {
+            None => Endpoint::Local,
+            Some(Remote::Wsl(distribution)) => Endpoint::Wsl {
+                distribution: distribution.clone(),
+            },
+            Some(Remote::Ssh { .. }) => {
+                return Ok(ProjectGitStatus {
+                    unsupported: true,
+                    ..Default::default()
+                });
+            }
+        };
+        endpoint.validate().map_err(|e| e.to_string())?;
         let _permit = self
             .project_checks
             .acquire()
             .await
             .map_err(|e| e.to_string())?;
-        let discovery = tokio::task::spawn_blocking(move || project_git::discover(&project.path))
-            .await
-            .map_err(|e| e.to_string())?
-            .map_err(|e| format!("{e:#}"))?;
+        let discovery = match &endpoint {
+            Endpoint::Local => {
+                tokio::task::spawn_blocking(move || project_git::discover(&project.path))
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .map_err(|e| format!("{e:#}"))?
+            }
+            Endpoint::Wsl { .. } => self
+                .client(&endpoint)
+                .await?
+                .call::<_, git_discovery::Discovery>(
+                    "project.discover",
+                    &OpenParams {
+                        path: project.path,
+                        operation_id: format!(
+                            "discover-{}",
+                            self.next_check.fetch_add(1, Ordering::Relaxed)
+                        ),
+                    },
+                )
+                .await
+                .map_err(|e| format!("{e:#}"))?,
+        };
         let mut result = ProjectGitStatus {
             warnings: discovery.warnings,
             ..Default::default()
@@ -83,9 +123,14 @@ impl GitHost {
             return Ok(result);
         }
         // Keep open + status on the same connection; refresh reopens after a restart.
-        let client = self.client().await;
+        let client = self.client(&endpoint).await;
         for root in discovery.roots {
             let mut entry = RepositoryStatus {
+                endpoint: if endpoint == Endpoint::Local {
+                    None
+                } else {
+                    Some(endpoint.clone())
+                },
                 name: root
                     .file_name()
                     .unwrap_or(root.as_os_str())
@@ -192,8 +237,9 @@ macro_rules! command {
         pub async fn $name(
             host: tauri::State<'_, GitHost>,
             params: $params,
+            endpoint: Option<Endpoint>,
         ) -> Result<$result, String> {
-            host.client()
+            host.client(&endpoint.unwrap_or_default())
                 .await?
                 .call($method, &params)
                 .await
@@ -203,8 +249,11 @@ macro_rules! command {
 }
 
 #[tauri::command]
-pub async fn git_hello(host: tauri::State<'_, GitHost>) -> Result<Hello, String> {
-    host.client()
+pub async fn git_hello(
+    host: tauri::State<'_, GitHost>,
+    endpoint: Option<Endpoint>,
+) -> Result<Hello, String> {
+    host.client(&endpoint.unwrap_or_default())
         .await?
         .call("server.hello", &serde_json::json!({}))
         .await
@@ -427,7 +476,10 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let host = GitHost::default();
         let mut remote = project(temp.path());
-        remote.remote = Some(crate::project::Remote::Wsl("Ubuntu".into()));
+        remote.remote = Some(crate::project::Remote::Ssh {
+            host: "example".into(),
+            username: "user".into(),
+        });
         assert!(host.project_status(remote).await.unwrap().unsupported);
         assert!(
             host.project_status(project(temp.path()))
@@ -436,7 +488,7 @@ mod tests {
                 .repositories
                 .is_empty()
         );
-        assert!(host.connection.lock().await.is_none());
+        assert!(host.connections.lock().await.is_empty());
         fs::create_dir(temp.path().join(".git")).unwrap();
         let status = host.project_status(project(temp.path())).await.unwrap();
         assert_eq!(status.repositories[0].dirty, None);

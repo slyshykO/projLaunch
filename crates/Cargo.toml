@@ -1,9 +1,9 @@
 [workspace]
-members = ["git-protocol", "git-server", "git-client"]
+members = ["git-protocol", "git-server", "git-client", "git-discovery"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0+4.gf8e6f27"
+version = "0.5.0+6.g812e9fb.dirty"
 edition = "2024"
 
 [workspace.dependencies]

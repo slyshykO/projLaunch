@@ -3,11 +3,21 @@ use serde::{Deserialize, Serialize};
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAX_FRAME: usize = 1024 * 1024;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerInfo {
+    pub server_version: String,
+    pub protocol_version: u32,
+    pub target: String,
+}
+
 pub const MAX_PATCH: usize = 128 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Hello {
+    #[serde(default)]
+    pub server_version: String,
     pub protocol_version: u32,
     pub git_version: String,
     pub capabilities: Vec<String>,

@@ -1,6 +1,10 @@
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     match std::env::args().nth(1).as_deref() {
+        Some("--version-json") => {
+            println!("{}", serde_json::to_string(&git_server::server_info())?);
+            Ok(())
+        }
         Some("stdio") => {
             git_server::transport::stdio(
                 tokio::io::stdin(),

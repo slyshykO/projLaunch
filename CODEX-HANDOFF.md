@@ -8,6 +8,33 @@
 Актуальные инструкции по сборке: [README.md](README.md).
 Контракт Git API: [crates/git-server/README.md](crates/git-server/README.md).
 
+## Git в WSL (22 октября 2026)
+
+Реализован Endpoint Local/WSL: существующий `ProjectData.remote` задаёт среду,
+`path` остаётся путём внутри неё. Отдельная таблица endpoints пока не нужна.
+GitHost держит отдельный stdio-клиент на дистрибутив; все Git IPC-запросы получают
+endpoint рядом с params. Вкладки различаются по endpoint + root и показывают WSL.
+Workspace JSON v2 сохраняет endpoint вкладок и активной вкладки; v1 читается как
+локальное состояние. Версия SQLite не менялась.
+
+`src-tauri/src/wsl.rs` и `wsl/bootstrap.sh` доставляют bundled Linux sidecar через
+stdin в `~/.local/share/projlaunch/git-server/<sha256>/`. Проверяются SHA-256,
+`--version-json`, target и protocolVersion. Неизменённый бинарник не копируется;
+повреждённый восстанавливается атомарно. Разные сборки имеют отдельные каталоги.
+Сервер запускается `wsl.exe --distribution <name> --cd ~ --exec <server> stdio`;
+TCP-порт и установка Rust не нужны, Git требуется в PATH дистрибутива.
+На выходе закрывается stdin, сервер завершает дочерние процессы; WSL не выключается.
+
+Обнаружение workspace/solution вынесено в `crates/git-discovery`; новый RPC
+`project.discover` выполняет его внутри Linux. SSH Git пока не реализован.
+Регрессии: `scripts/tests/test-wsl-endpoints.mjs`, native workspace tests и opt-in
+`wsl_install_reuse_repair_rpc_and_shutdown` (переменная `PROJLAUNCH_TEST_WSL_DISTRO`).
+Последний проверяет реальный WSL в изолированном `/tmp`, включая обновление,
+восстановление файла, quoted/Unicode paths, RPC, reconnect и завершение процесса.
+Проверены Fable/Vite, 16 frontend-скриптов, 38 native-тестов и отдельный WSL-тест,
+25 тестов Git workspace, Clippy обеих Rust-частей с `-D warnings`. Linux release
+собран ubuntu22-скриптом; реальная проверка выполнена в установленном Ubuntu WSL.
+
 ## С чего начать на другом ПК
 
 1. Получить актуальную ветку репозитория, открыть её корень как рабочую папку.
@@ -384,7 +411,7 @@ JSONC поддерживает комментарии и завершающие 
 Лимиты: 2 MiB на определение, 512 путей, 64 репозитория, 4 проверки карточек
 одновременно. Относительный путь карточки требует замены на абсолютный;
 относительные пути внутри workspace/solution считаются от файла определения.
-SSH/WSL показываются как недоступные для локальной проверки. В БД связи не создаются.
+SSH показывается как недоступный; WSL проверяется в своём дистрибутиве. В БД связи не создаются.
 
 Git-сервер запускается автоматически, когда проверка карточки впервые находит
 локальный репозиторий. Tauri управляет одним stdio-процессом и завершает его при
@@ -411,7 +438,7 @@ Git-сервер запускается автоматически, когда �
 - Целевая последовательность: локальный stdio → status/log/diff → UI с графом →
   WSL/SSH stdio → bootstrap и защищённый HTTPS/WSS с настраиваемым портом.
   SSH сможет копировать/запускать сервер; SSH stdio также остаётся транспортом.
-  Удалённые этапы пока не реализованы.
+  WSL stdio и bootstrap реализованы; следующие этапы — SSH и защищённая сеть.
 
 ## Карта исходников
 
@@ -425,7 +452,8 @@ Git-сервер запускается автоматически, когда �
 | `src-tauri/src/lib.rs` | Команды launcher, регистрация GitHost и выход приложения |
 | `src-tauri/src/git_host.rs` | Ленивый запуск sidecar, IPC-команды и shutdown |
 | `src-tauri/src/logging.rs`, `src/src/interop/FrontendLog.fs`, `_Logging.js` | Общий файловый лог Rust/frontend и доставка через IPC |
-| `src-tauri/src/project_git.rs` | Обнаружение репозиториев workspace/solution и DTO индикаторов |
+| `src-tauri/src/project_git.rs`, `crates/git-discovery/` | DTO индикаторов и общее обнаружение workspace/solution |
+| `src-tauri/src/endpoint.rs`, `src-tauri/src/wsl.rs` | Среда выполнения и доставка/запуск WSL sidecar |
 | `src-tauri/src/project.rs` | Rust DTO, совместимость старого JSON |
 | `src-tauri/src/storage/` | SQLite worker, запросы, миграции, legacy import и тесты |
 | `src-tauri/migrations/` | Версионированная SQL-схема |
@@ -439,8 +467,8 @@ Git-сервер запускается автоматически, когда �
 | `build/GitServer.fs`, `build/Program.fs` | Команда F# helper `build-git-server` |
 
 `crates/Cargo.toml` — отдельный workspace; у Tauri сохраняется собственный
-`src-tauri/Cargo.lock`. Проверять обе части. Native launcher Remote пока означает
-`code --remote`; это ещё не подключение к Git-серверу WSL/SSH.
+`src-tauri/Cargo.lock`. Проверять обе части. Native launcher Remote используется для
+`code --remote`; вариант WSL также выбирает endpoint Git-сервера. SSH Git ещё нет.
 
 ## SQLite: текущее поведение
 

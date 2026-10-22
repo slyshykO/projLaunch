@@ -1,4 +1,4 @@
-# Local Git server
+# Git server (local and WSL)
 
 The launcher runs `project-launch-git-server stdio` as a separate process on demand. It is based
 on the `jsonrpc-axum-probe` transport and `json-rpc-rs` dispatcher; the synthetic
@@ -71,7 +71,7 @@ Debug and release builds replace the same destination, just like the native buil
 their Cargo outputs remain separate. Generated binaries are ignored and removed
 by the existing clean command. Shell scripts are checked out with LF.
 The native Tauri sidecar remains separate. The Linux output is included in the
-portable release ZIP, but is not yet deployed remotely. An Ubuntu build failure returns a nonzero
+portable release ZIP and deployed automatically to WSL endpoints. An Ubuntu build failure returns a nonzero
 exit status and never copies the failed output over the last verified binary.
 
 Build helper regression checks (after `dotnet build build/build.fsproj -f net11.0`):
@@ -88,6 +88,45 @@ Connection failure rejects pending calls. The next connection gets new repo IDs;
 callers must reopen repositories and discard old history cursors. Reads are not
 silently retried. Server stderr is diagnostic output; stdout is exclusively RPC.
 
+## WSL lifecycle and endpoint routing
+
+The existing project `Remote::Wsl(distribution)` maps to an endpoint
+`{"kind":"wsl","distribution":"Ubuntu"}`. Tauri Git calls accept an optional
+`endpoint` alongside `params`; omitted/null or `{"kind":"local"}` means local.
+An endpoint is an execution environment, not a filesystem path. Each has a
+separate client/process and session-scoped repository IDs. Workspace JSON v2
+persists the tab endpoint and active endpoint; old v1 local snapshots still load.
+The SQLite schema and project remote encoding are unchanged.
+
+`src-tauri/src/wsl.rs` looks for the Linux binary in packaged `binaries/`, then
+in the checkout. The bootstrap script checks its SHA-256 and runs
+`--version-json`, which reports `serverVersion`, `protocolVersion`, and `target`
+without requiring Git. The installation key is the complete binary hash, so
+same-version development builds also update. Copying uses stdin and a temporary
+file followed by atomic rename under the WSL user's
+`~/.local/share/projlaunch/git-server/<sha256>/`. Existing versions are retained
+for other app instances; no global daemon is installed. A bootstrap invocation
+has a 60-second deadline. The supplied Linux build targets x86_64 glibc.
+
+RPC runs directly over the spawned WSL process's stdin/stdout. Git must be on
+PATH inside that distribution. Shutdown closes stdin and reaps the transport;
+EOF makes the server cancel its Git children and exit. WSL itself is not stopped.
+`project.discover` uses `git-discovery`, shared with local card discovery, to
+resolve directories and workspace/solution files inside the server environment.
+
+Opt-in real WSL regression (after building the Linux sidecar):
+
+```powershell
+$env:PROJLAUNCH_TEST_WSL_DISTRO = 'Ubuntu'
+cargo test --manifest-path src-tauri/Cargo.toml --lib wsl_install_reuse_repair_rpc_and_shutdown --locked -- --ignored
+```
+
+It uses a disposable `/tmp` directory, checks install/reuse/repair, version
+selection and protocol rejection, Unicode/quoted paths, discovery, status,
+history, diff, reconnect and process exit. It does not read the app database.
+Frontend routing/persistence regression: `node scripts/tests/test-wsl-endpoints.mjs`
+after compiling Fable.
+
 ## Protocol v1
 
 Each request/response is one UTF-8 JSON object followed by LF (NDJSON). Requests
@@ -96,7 +135,8 @@ have no side effects. Batch requests return `-32005`.
 
 | Method | Parameters | Result |
 | --- | --- | --- |
-| `server.hello` | `{}` | `protocolVersion`, `gitVersion`, `capabilities` |
+| `server.hello` | `{}` | `serverVersion`, `protocolVersion`, `gitVersion`, `capabilities` |
+| `project.discover` | `path`, `operationId` | `roots`, `warnings` (paths resolved in the server environment) |
 | `repo.open` | `path`, `operationId` | `repoId`, `root`, `gitDir`, `commonDir` |
 | `git.status` | `repoId`, `operationId` | HEAD/branch/upstream, ahead/behind, entries |
 | `git.branches` | `repoId`, `operationId` | all local/remote branch tips, current branch and HEAD |
@@ -180,8 +220,8 @@ Each connection holds up to 128 repositories and 128 cursors. History is limited
 to 256 distinct starting OIDs to fit Windows command-line limits. These are
 explicit errors/refresh conditions, never silent partial results.
 
-No Git mutation methods, watchers, graph UI, SSH/WSL bootstrap, remote connection
-settings, TLS or authentication are added in this stage. The prototype HTTP/WS
+No Git mutation methods, watchers, SSH bootstrap, TLS or authentication are
+implemented. The prototype HTTP/WS
 adapter remains behind the optional `network` feature for development on loopback;
 it is not enabled in the sidecar build and is not a production remote endpoint.
 

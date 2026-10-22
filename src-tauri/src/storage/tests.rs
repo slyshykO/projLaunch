@@ -110,7 +110,7 @@ fn invalid_workspace_never_overwrites_the_last_saved_session() {
     for invalid in [
         {
             let mut v = saved.clone();
-            v.version = 2;
+            v.version = 999;
             v
         },
         {

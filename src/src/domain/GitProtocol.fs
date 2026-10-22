@@ -1,8 +1,31 @@
 module GitProtocol
 
+/// Missing endpoint means local execution, including workspace snapshots saved before WSL support.
+type Endpoint =
+    {
+        kind: string
+        distribution: string option
+    }
+
+let endpointKey (endpoint: Endpoint option) =
+    match endpoint with
+    | Some value when value.kind = "wsl" -> "wsl:" + (value.distribution |> Option.defaultValue "")
+    | _ -> "local"
+
+let endpointLabel (endpoint: Endpoint option) =
+    match endpoint with
+    | Some value when value.kind = "wsl" -> "WSL: " + (value.distribution |> Option.defaultValue "")
+    | _ -> "Local"
+
+let repositoryLabel endpoint name =
+    match endpoint with
+    | Some value when value.kind = "wsl" -> name + " [" + endpointLabel endpoint + "]"
+    | _ -> name
+
 type RepositoryStatus =
     {
         root: string
+        endpoint: Endpoint option
         name: string
         branch: string option
         dirty: bool option
@@ -18,6 +41,7 @@ type ProjectStatus =
 
 type Hello =
     {
+        serverVersion: string
         protocolVersion: int
         gitVersion: string
         capabilities: string array

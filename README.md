@@ -20,7 +20,7 @@ The app currently lets you:
 - view saved projects in a grid sorted by `lastOpened`
 - add a project from the UI with name, description, IDE, and solution/workspace path
 - edit a project using the pencil button at the top right of its card, including SSH/WSL and environment variables
-- see a Git icon and clean/uncommitted status for each associated local repository at the bottom of a card
+- see a Git icon and clean/uncommitted status for each associated local or WSL repository at the bottom of a card
 - open projects in:
   - VS Code
   - Visual Studio 2022
@@ -31,14 +31,14 @@ The app currently lets you:
   - WSL
 - persist window state between launches
 - work in desktop tabs: a permanent Projects tab and closable repository tabs
-- open a repository tab by clicking its Git indicator; shared roots reuse the same tab
+- open a repository tab by clicking its Git indicator; shared roots in the same endpoint reuse the same tab
 - inspect app/runtime details in the `Help → About ProjLaunch` dialog
 
 The native menu contains File (Add project, Close repository tab, Exit), View
 (Projects, Refresh Git status), and Help (About). Add project also supports
 Ctrl/Cmd+N. About closes with Close or Escape. Tab navigation supports the arrow,
 Home and End keys. Switching tabs retains each panel's scroll position.
-Repository tabs load commit history from the local Git server: subject, author,
+Repository tabs load commit history from the Git server in the selected local/WSL endpoint: subject, author,
 commit date, short hash and branch/tag labels. History loads in pages of 100;
 `Load more` appends the next page. `Refresh`, the View menu refresh action and
 window focus reload the active repository from a fresh snapshot. Failed reads
@@ -136,13 +136,40 @@ also checked, with duplicate worktree roots shown once. Child directories are no
 scanned. Hover over an indicator for its full path, branch or error details.
 Paths in workspace/solution files resolve relative to those files; the card's own
 path must be absolute. Untracked, staged and unstaged files count as changes.
-Remote SSH/WSL checks and failed checks are shown as unavailable, never as clean.
+SSH checks and failed checks are shown as unavailable, never as clean.
+
+## Git in WSL
+
+Edit the project, select **Remote / WSL**, enter the installed distribution name
+(for example `Ubuntu`) and an absolute path inside it (`/home/user/project` or a
+Linux `.code-workspace`/solution path). The Git indicator opens the same history,
+branches, working-tree and diff views as a local repository. Tabs display the WSL
+distribution and restore it after restart. A repository is identified by both its
+endpoint and its path; equal paths in different distributions are separate tabs.
+The existing project remote setting supplies the endpoint; no new database table
+or manually configured server address is needed.
+
+The distribution must have Git on its normal executable search path and support
+the bundled x86_64 glibc Linux binary (Ubuntu 22.04 or compatible). The portable
+ZIP includes it. For development, build it once using
+`build.bat build-git-server ubuntu22 --release`; debug GUI builds reuse this file.
+
+On first Git use, the launcher checks the installed binary's SHA-256, version and
+protocol. If missing or different, it transfers its bundled binary into
+`~/.local/share/projlaunch/git-server/<sha256>/project-launch-git-server`, validates
+it and installs it atomically. Unchanged binaries are reused; corrupted or
+interrupted installations are repaired. Each binary has its own directory, so
+updating does not overwrite a server used by another running app version.
+The launcher starts the server through `wsl.exe --distribution ... --exec` and
+uses stdin/stdout for RPC. No listening port, sudo or Rust installation is needed.
+Each endpoint has its own connection; disconnect/app exit closes its server.
+Missing distributions, Git or incompatible binaries are reported as Git errors.
 
 ## Current Limitations
 
 - Deleting projects from the UI is not implemented yet.
 - Remote launch options are only wired up for VS Code.
-- Git indicators currently support local repositories; SSH/WSL Git connections are not implemented.
+- Git supports local and WSL repositories; SSH Git connections are not implemented.
 - Visual Studio launch paths are currently hard-coded for Windows installs.
 - The test project exists, but it only contains a placeholder test right now.
 
@@ -368,8 +395,8 @@ binaries/
 
 The GUI first looks for its platform's server in `binaries/` next to itself.
 Legacy adjacent-server and source-checkout paths remain fallback locations.
-The Linux server is included for future WSL/SSH deployment; Windows uses the
-Windows server. This is a Windows GUI distribution, not a Linux GUI build.
+The Linux server is deployed automatically for WSL endpoints; local Windows
+repositories use the Windows server. This is a Windows GUI distribution, not a Linux GUI build.
 The destination Windows system still needs WebView2 Runtime and Git on PATH.
 The archive contains only the GUI and two servers, without symbols or user data.
 It replaces the previous archive of the same version only after both builds and
@@ -497,6 +524,7 @@ node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-working-tree.mjs
 node scripts/tests/test-workspace-state.mjs
+node scripts/tests/test-wsl-endpoints.mjs
 node scripts/tests/test-parent-navigation.mjs
 node scripts/tests/test-branches.mjs
 node scripts/tests/test-storage-access.mjs

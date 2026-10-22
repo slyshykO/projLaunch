@@ -66,8 +66,8 @@ module Git =
     let projectStatus (id: string) : JS.Promise<GitProtocol.ProjectStatus> =
         Core.invoke "git_project_status" (Some(createObj [ "id" ==> id ]))
 
-    let private invoke<'T> command fields : JS.Promise<'T> =
-        Core.invoke command (Some(createObj [ "params" ==> createObj fields ]))
+    let private invoke<'T> endpoint command fields : JS.Promise<'T> =
+        Core.invoke command (Some(createObj [ "params" ==> createObj fields; "endpoint" ==> endpoint ]))
 
     let private target =
         function
@@ -76,24 +76,39 @@ module Git =
         | GitProtocol.Untracked -> createObj [ "kind" ==> "untracked" ]
         | GitProtocol.Commit(oid, parent) -> createObj [ "kind" ==> "commit"; "oid" ==> oid; "parent" ==> parent ]
 
-    let hello () : JS.Promise<GitProtocol.Hello> = Core.invoke "git_hello" None
+    let hello (endpoint: GitProtocol.Endpoint option) : JS.Promise<GitProtocol.Hello> =
+        Core.invoke "git_hello" (Some(createObj [ "endpoint" ==> endpoint ]))
 
-    let openRepository (path: string) (operationId: string) : JS.Promise<GitProtocol.Repository> =
-        invoke "git_open" [ "path" ==> path; "operationId" ==> operationId ]
+    let openRepository
+        (endpoint: GitProtocol.Endpoint option)
+        (path: string)
+        (operationId: string)
+        : JS.Promise<GitProtocol.Repository> =
+        invoke endpoint "git_open" [ "path" ==> path; "operationId" ==> operationId ]
 
-    let status (repoId: string) (operationId: string) : JS.Promise<GitProtocol.Status> =
-        invoke "git_status" [ "repoId" ==> repoId; "operationId" ==> operationId ]
+    let status
+        (endpoint: GitProtocol.Endpoint option)
+        (repoId: string)
+        (operationId: string)
+        : JS.Promise<GitProtocol.Status> =
+        invoke endpoint "git_status" [ "repoId" ==> repoId; "operationId" ==> operationId ]
 
-    let branches (repoId: string) (operationId: string) : JS.Promise<GitProtocol.BranchList> =
-        invoke "git_branches" [ "repoId" ==> repoId; "operationId" ==> operationId ]
+    let branches
+        (endpoint: GitProtocol.Endpoint option)
+        (repoId: string)
+        (operationId: string)
+        : JS.Promise<GitProtocol.BranchList> =
+        invoke endpoint "git_branches" [ "repoId" ==> repoId; "operationId" ==> operationId ]
 
     let log
+        (endpoint: GitProtocol.Endpoint option)
         (repoId: string)
         (operationId: string)
         (cursor: string option)
         (limit: int)
         : JS.Promise<GitProtocol.LogPage> =
         invoke
+            endpoint
             "git_log"
             [
                 "repoId" ==> repoId
@@ -102,8 +117,14 @@ module Git =
                 "limit" ==> limit
             ]
 
-    let diffFiles (repoId: string) (operationId: string) diffTarget : JS.Promise<GitProtocol.DiffFile array> =
+    let diffFiles
+        (endpoint: GitProtocol.Endpoint option)
+        (repoId: string)
+        (operationId: string)
+        diffTarget
+        : JS.Promise<GitProtocol.DiffFile array> =
         invoke
+            endpoint
             "git_diff_files"
             [
                 "repoId" ==> repoId
@@ -111,8 +132,15 @@ module Git =
                 "target" ==> target diffTarget
             ]
 
-    let diff (repoId: string) (operationId: string) diffTarget (path: string) : JS.Promise<GitProtocol.Patch> =
+    let diff
+        (endpoint: GitProtocol.Endpoint option)
+        (repoId: string)
+        (operationId: string)
+        diffTarget
+        (path: string)
+        : JS.Promise<GitProtocol.Patch> =
         invoke
+            endpoint
             "git_diff"
             [
                 "repoId" ==> repoId
@@ -121,8 +149,8 @@ module Git =
                 "path" ==> path
             ]
 
-    let cancel (operationId: string) : JS.Promise<bool> =
-        invoke "git_cancel" [ "operationId" ==> operationId ]
+    let cancel (endpoint: GitProtocol.Endpoint option) (operationId: string) : JS.Promise<bool> =
+        invoke endpoint "git_cancel" [ "operationId" ==> operationId ]
 
     /// Invalidates all repoIds and history cursors belonging to this connection.
     let disconnect () : JS.Promise<unit> = Core.invoke "git_disconnect" None

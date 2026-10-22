@@ -12,7 +12,11 @@ let private revealRow (element: Browser.Types.Element) : unit = jsNative
 let TabBar (tabs: RepositoryTab list) (active: string option) (dispatch: Msg -> unit) =
     let items =
         (None, "Projects", "projects")
-        :: (tabs |> List.map (fun tab -> Some tab.id, tab.name, tab.root))
+        :: (tabs
+            |> List.map (fun tab ->
+                Some tab.id,
+                GitProtocol.repositoryLabel tab.endpoint tab.name,
+                GitProtocol.endpointLabel tab.endpoint + " · " + tab.root))
 
     let buttonId id =
         "tab-" + (id |> Option.defaultValue "projects")
@@ -260,7 +264,12 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                             prop.children
                                                 [
                                                     Html.h1
-                                                        [ prop.className "font-semibold text-lg"; prop.text tab.name ]
+                                                        [
+                                                            prop.className "font-semibold text-lg"
+                                                            prop.text (
+                                                                GitProtocol.repositoryLabel tab.endpoint tab.name
+                                                            )
+                                                        ]
                                                     Html.p
                                                         [
                                                             prop.className "text-sm text-base-content/60 break-all mt-1"

@@ -43,8 +43,13 @@ impl Drop for Client {
 impl Client {
     pub async fn connect(executable: &Path) -> Result<Self> {
         let mut command = Command::new(executable);
+        command.arg("stdio");
+        Self::connect_command(command).await
+    }
+
+    /// Connect through a transport process such as wsl.exe, retaining ownership of its lifetime.
+    pub async fn connect_command(mut command: Command) -> Result<Self> {
         command
-            .arg("stdio")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -53,7 +58,7 @@ impl Client {
         command.creation_flags(0x08000000);
         let mut child = command
             .spawn()
-            .with_context(|| format!("Cannot start Git server {}", executable.display()))?;
+            .context("Cannot start Git server transport")?;
         let mut output = FramedWrite::new(
             child.stdin.take().unwrap(),
             LinesCodec::new_with_max_length(MAX_FRAME),

@@ -50,6 +50,7 @@ type CommitFiles =
 
 type RepositoryTab =
     {
+        endpoint: GitProtocol.Endpoint option
         id: string
         root: string
         name: string
@@ -240,8 +241,9 @@ let init () =
 
     state, Cmd.ofMsg Start
 
-let private newRepositoryTab root name =
+let private newRepositoryTab endpoint root name =
     {
+        endpoint = endpoint
         id = Guid.NewGuid().ToString()
         root = root
         name = name
@@ -269,7 +271,11 @@ let private newRepositoryTab root name =
 
 let workspaceSnapshot (state: State) : Workspace.Snapshot =
     {
-        version = 1
+        version = 2
+        activeEndpoint =
+            state.repositoryTabs
+            |> List.tryFind (fun tab -> Some tab.id = state.activeRepositoryTab)
+            |> Option.bind (fun tab -> tab.endpoint)
         activeRoot =
             state.repositoryTabs
             |> List.tryFind (fun tab -> Some tab.id = state.activeRepositoryTab)
@@ -279,6 +285,7 @@ let workspaceSnapshot (state: State) : Workspace.Snapshot =
             |> List.map (fun tab ->
                 ({
                     Workspace.Tab.root = tab.root
+                    endpoint = tab.endpoint
                     name = tab.name
                     filesWidth = tab.filesWidth
                     filesHeight = tab.filesHeight
@@ -304,7 +311,7 @@ let workspaceSnapshot (state: State) : Workspace.Snapshot =
     }
 
 let private restoreTab (saved: Workspace.Tab) =
-    { newRepositoryTab saved.root saved.name with
+    { newRepositoryTab saved.endpoint saved.root saved.name with
         filesWidth = Workspace.panelSize saved.filesWidth
         filesHeight = Workspace.panelSize saved.filesHeight
         restoreFile = saved.selection |> Option.bind (fun selection -> selection.file)
@@ -427,7 +434,11 @@ let rec private updateCore msg state =
                         state.repositoryTabs
                         @ (restored
                            |> List.filter (fun tab ->
-                               state.repositoryTabs |> List.forall (fun existing -> existing.root <> tab.root)))
+                               state.repositoryTabs
+                               |> List.forall (fun existing ->
+                                   existing.root <> tab.root
+                                   || GitProtocol.endpointKey existing.endpoint
+                                      <> GitProtocol.endpointKey tab.endpoint)))
                     else
                         restored
 
@@ -436,8 +447,11 @@ let rec private updateCore msg state =
                         state.activeRepositoryTab
                     else
                         snapshot
-                        |> Option.bind (fun saved -> saved.activeRoot)
-                        |> Option.bind (fun root -> tabs |> List.tryFind (fun tab -> tab.root = root))
+                        |> Option.bind (fun saved ->
+                            tabs
+                            |> List.tryFind (fun tab ->
+                                Some tab.root = saved.activeRoot
+                                && GitProtocol.endpointKey tab.endpoint = GitProtocol.endpointKey saved.activeEndpoint))
                         |> Option.map (fun tab -> tab.id)
 
                 { state with
@@ -531,7 +545,12 @@ let rec private updateCore msg state =
         },
         Cmd.none
     | OpenRepositoryTab repository ->
-        match state.repositoryTabs |> List.tryFind (fun tab -> tab.root = repository.root) with
+        match
+            state.repositoryTabs
+            |> List.tryFind (fun tab ->
+                tab.root = repository.root
+                && GitProtocol.endpointKey tab.endpoint = GitProtocol.endpointKey repository.endpoint)
+        with
         | Some tab ->
             { state with
                 activeRepositoryTab = Some tab.id
@@ -541,7 +560,7 @@ let rec private updateCore msg state =
             else
                 Cmd.none
         | None ->
-            let tab = newRepositoryTab repository.root repository.name
+            let tab = newRepositoryTab repository.endpoint repository.root repository.name
 
             { state with
                 repositoryTabs = state.repositoryTabs @ [ tab ]
@@ -855,7 +874,8 @@ let rec private updateCore msg state =
                 let read () =
                     promise {
                         // Reopen by root so retry also recovers from a restarted server.
-                        let! repository = AppTauri.Git.openRepository tab.root $"files-{requestId}-open"
+                        let! repository =
+                            AppTauri.Git.openRepository tab.endpoint tab.root $"files-{requestId}-open"
 
                         let targets =
                             match selection.commit with
@@ -866,7 +886,11 @@ let rec private updateCore msg state =
 
                         for index, target in targets |> Array.indexed do
                             let! files =
-                                AppTauri.Git.diffFiles repository.repoId $"files-{requestId}-{index}" target
+                                AppTauri.Git.diffFiles
+                                    tab.endpoint
+                                    repository.repoId
+                                    $"files-{requestId}-{index}"
+                                    target
 
                             groups.Add(target, files)
 
@@ -1004,9 +1028,16 @@ let rec private updateCore msg state =
 
                     let read () =
                         promise {
-                            let! repository = AppTauri.Git.openRepository tab.root $"diff-{requestId}-open"
+                            let! repository =
+                                AppTauri.Git.openRepository tab.endpoint tab.root $"diff-{requestId}-open"
 
-                            return! AppTauri.Git.diff repository.repoId $"diff-{requestId}-patch" target file.path
+                            return!
+                                AppTauri.Git.diff
+                                    tab.endpoint
+                                    repository.repoId
+                                    $"diff-{requestId}-patch"
+                                    target
+                                    file.path
                         }
 
                     { state with
@@ -1102,7 +1133,9 @@ let rec private updateCore msg state =
                         | true, Some repoId -> promise { return repoId }
                         | _ ->
                             promise {
-                                let! repository = AppTauri.Git.openRepository tab.root $"history-{requestId}-open"
+                                let! repository =
+                                    AppTauri.Git.openRepository tab.endpoint tab.root $"history-{requestId}-open"
+
                                 return repository.repoId
                             }
 
@@ -1111,6 +1144,7 @@ let rec private updateCore msg state =
                             try
                                 let! page =
                                     AppTauri.Git.log
+                                        tab.endpoint
                                         repoId
                                         $"history-{requestId}-log"
                                         (if append then tab.history.nextCursor else None)
@@ -1127,7 +1161,7 @@ let rec private updateCore msg state =
                         let! status =
                             promise {
                                 try
-                                    let! status = AppTauri.Git.status repoId $"history-{requestId}-status"
+                                    let! status = AppTauri.Git.status tab.endpoint repoId $"history-{requestId}-status"
                                     return Ok status
                                 with error ->
                                     return Error(string error)
@@ -1136,7 +1170,9 @@ let rec private updateCore msg state =
                         let! branches =
                             promise {
                                 try
-                                    let! branches = AppTauri.Git.branches repoId $"history-{requestId}-branches"
+                                    let! branches =
+                                        AppTauri.Git.branches tab.endpoint repoId $"history-{requestId}-branches"
+
                                     return Ok branches
                                 with error ->
                                     return Error(string error)

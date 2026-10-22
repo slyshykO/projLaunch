@@ -13,6 +13,7 @@ type Selection =
 
 type Tab =
     {
+        endpoint: GitProtocol.Endpoint option
         root: string
         name: string
         filesWidth: float
@@ -25,6 +26,7 @@ type Snapshot =
         version: int
         tabs: Tab array
         activeRoot: string option
+        activeEndpoint: GitProtocol.Endpoint option
     }
 
 let targetName =
