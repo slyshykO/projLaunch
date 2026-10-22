@@ -16,6 +16,7 @@ module Args =
         | BuildGitServer = 6
         | Run = 7
         | SetVersion = 8
+        | Publish = 9
 
     let extractSubCommandStr (args: string array) =
         if args.Length = 0 then
@@ -27,6 +28,7 @@ module Args =
         match extractSubCommandStr args with
         | "build" -> Some SubCommand.Build
         | "run" -> Some SubCommand.Run
+        | "publish" -> Some SubCommand.Publish
         | "set-version" -> Some SubCommand.SetVersion
         | "clean" -> Some SubCommand.Clean
         | "test" -> Some SubCommand.Test
@@ -45,14 +47,18 @@ module Help =
         Print.println "Available subcommands:"
         Print.println "  self-build    Rebuild the build helper (via build.bat)"
         Print.println "  build         Build the app in debug mode (default)"
-        Print.println "                --release builds the app in release mode"
+        Print.println "                --release also builds both Git servers and creates the release ZIP"
         Print.println "  run           Build and run the app (--release for release mode)"
+        Print.println "  publish       Build a Windows release ZIP with Windows/Linux Git servers"
+        Print.println "                --wsl-distro NAME selects the Linux build distribution"
         Print.println "  set-version X.Y.Z  Update versions, commit and tag vX.Y.Z"
         Print.println "  clean         Clean all projects/configurations, including the helper (via build.bat)"
         Print.println "  test          Reserved for test workflow"
         Print.println "  update        Update dependencies"
         Print.println "  build-daisyui Build local Feliz.DaisyUI"
-        Print.println "  build-git-server Build the Git sidecar (--release for optimized output)"
+        Print.println "  build-git-server [native|ubuntu22] [--release]"
+        Print.println "                ubuntu22 uses Zig/glibc 2.35; on Windows runs in WSL"
+        Print.println "                --wsl-distro NAME selects the WSL distribution (default: WSL default)"
         Print.println "  help          Show this help"
 
 module Config =
@@ -206,7 +212,7 @@ module Build =
             Print.printlnRed $"Error while syncing Feliz.DaisyUI sources: {ex.Message}"
             AppResult.Failure
 
-    let build isRelease =
+    let private buildApplication isRelease =
         try
             Versioning.sync Versioning.projectRoot |> ignore
             Print.printlnBlue "Restoring frontend dependencies from package-lock.json..."
@@ -230,6 +236,12 @@ module Build =
         with ex ->
             Print.printlnRed $"Error during build: {ex.Message}"
             AppResult.Failure
+
+    let publish distribution =
+        Publish.run (fun () -> buildApplication true) distribution
+
+    let build isRelease =
+        if isRelease then publish None else buildApplication false
 
     let run isRelease =
         let buildResult = build isRelease
@@ -359,6 +371,8 @@ module Main =
                     match Args.subCommand argv with
                     | Some Args.SubCommand.Build -> Build.build (Args.isRelease argv)
                     | Some Args.SubCommand.Run -> Build.run (Args.isRelease argv)
+                    | Some Args.SubCommand.Publish ->
+                        Build.publish (Publish.parseOptions (argv |> Array.skip 1 |> Array.toList))
                     | Some Args.SubCommand.SetVersion ->
                         if argv.Length <> 2 then
                             failwith "Usage: build set-version X.Y.Z"
@@ -368,7 +382,11 @@ module Main =
                     | Some Args.SubCommand.Update -> Build.update ()
                     | Some Args.SubCommand.Clean -> Build.clean ()
                     | Some Args.SubCommand.BuildDaisyUI -> Build.buildDaisyUI ()
-                    | Some Args.SubCommand.BuildGitServer -> GitServer.build (Args.isRelease argv)
+                    | Some Args.SubCommand.BuildGitServer ->
+                        let isRelease, target =
+                            GitServer.parseOptions (argv |> Array.skip 1 |> Array.toList)
+
+                        GitServer.build isRelease target
                     | Some Args.SubCommand.Help ->
                         Help.print ()
                         AppResult.Success

@@ -41,6 +41,51 @@ SQLite-каталог проектов и пользовательские на�
 
 ## Что уже готово
 
+Добавлена субкоманда `build.bat publish [--wsl-distro NAME]`; `build.bat build --release`
+использует тот же путь публикации. Сначала собирается Linux Git server в WSL,
+затем release GUI/native sidecar через существующий Tauri build. ZIP:
+`build/dist/projLaunch-<version>-windows-x64.zip`. В корне `projLaunch.exe`,
+в `binaries/` два сервера с target triple в имени, без дополнительной корневой папки.
+`Publish.fs` включён в build.fsproj. Пакуется явный список трёх файлов;
+проверяется наличие/ненулевой размер, временный ZIP заменяет предыдущий только
+после успешного завершения. Обычная debug-сборка остаётся без WSL/архива.
+Публикация поддерживает Windows x64, стандартные Cargo output paths и WSL.
+GUI сначала ищет свой сервер в `binaries` рядом с executable, затем adjacent
+legacy sidecar, затем checkout. Linux-бинарник включён для будущей доставки,
+Windows GUI пока его не запускает. Tests проверяют ZIP layout/extraction,
+непопадание лишних файлов, сохранение предыдущего ZIP при ошибке, а также запуск
+настоящего сервера из portable layout при недоступном checkout.
+Проверены обе команды целиком: `publish --wsl-distro Ubuntu` и `build --release`.
+После одиночного сбоя rustc на зависимости symlink повтор выполнен с
+`CARGO_BUILD_JOBS=2` успешно. ZIP распакован: ровно три файла, SHA256 совпадают
+с release-артефактами; извлечённый Windows server прошёл hello/EOF shutdown.
+Прошли 4 теста git_host, Publish.Tests.fsx и GitServer.Tests.fsx, сборка helper,
+Fable/Vite в составе release build, Fantomas, cargo fmt и diff check.
+GUI из архива не запускался, пользовательская БД не затрагивалась.
+
+Добавлена отдельная сборка Git-сервера для Ubuntu 22.04:
+`build.bat build-git-server ubuntu22 --release [--wsl-distro NAME]`.
+`GitServerUbuntu22.fs` включён в `build.fsproj`; Windows запускает скрипт через
+WSL выбранного дистрибутива (по умолчанию default), Linux запускает Bash напрямую.
+Скрипты находятся в `build/scripts/build/`, используют Zig как linker/C compiler
+с `x86_64-linux-gnu.2.35` по образцу vmssrv-mock. Проверяется максимальная версия
+GLIBC symbols; результат новее 2.35 не копируется. Cargo cache изолирован в
+`crates/target/ubuntu22`, итог — `src-tauri/binaries/project-launch-git-server-x86_64-unknown-linux-gnu`.
+Все бинарники лежат непосредственно в `binaries` с target triple в имени;
+debug/release заменяют один итоговый файл, как у native-сборки.
+Обычная native-сборка не требует WSL. Артефакт входит в portable ZIP;
+установка через installer и удалённая доставка ещё не реализованы.
+Shell scripts закреплены с LF. Инструменты нужны внутри Linux: Rust/rustup,
+Zig (PATH, ZIG_BIN или ~/bin/zig*), readelf. Build helper проверяет аргументы,
+пути передаются отдельными аргументами, без shell interpolation.
+Проверена настоящая release-сборка Windows → WSL Ubuntu 24.04, Zig 0.15.2;
+ELF требует максимум GLIBC_2.34. RPC smoke на временном репозитории в WSL прошёл:
+hello/open/status/branches/EOF shutdown. Запуск непосредственно на Ubuntu 22.04
+пока не проверен; совместимость glibc не означает поддержку Alpine/musl или ARM64.
+Проверены команда build.bat целиком с пересборкой helper, сборка build.fsproj,
+`GitServer.Tests.fsx` (аргументы/пути с пробелами/неверные параметры), Fantomas,
+Bash syntax и diff check. Существующий version hook синхронизировал manifests.
+
 Ошибки файловых операций содержат проблемный путь и исходную причину: поиск
 проектов и `.git`, чтение diff/preview, создание логов, блокировка и операции SQLite,
 поиск/запуск Git sidecar и запуск IDE. Путь базы добавляется также на границе

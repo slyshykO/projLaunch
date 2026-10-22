@@ -14,8 +14,14 @@
     <Compile Include="SelfBuild.fs" />
     <Compile Include="Print.fs" />
     <Compile Include="../scripts/version/Versioning.fs" />
+    <Compile Include="GitServerUbuntu22.fs" />
     <Compile Include="GitServer.fs" />
+    <Compile Include="Publish.fs" />
     <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="scripts/build/git-server-ubuntu22.sh" />
+    <None Include="scripts/build/zigcc-x86_64-gnu.sh" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Gapotchenko.FX.Console" Version="2026.8.3" />

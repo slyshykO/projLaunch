@@ -31,7 +31,55 @@ the binary in `src-tauri/binaries/project-launch-git-server-<target>[.exe]`. The
 script rebuilds the F# helper when needed. Tauri's
 `bundle.externalBin` copies it next to the app. Generated binaries are ignored.
 Direct Cargo builds of the Tauri host require `npm run build:git-server` first.
-Keep `project-launch-git-server.exe` alongside `projlaunch.exe` when copying a Windows build.
+The portable ZIP made by `build.bat publish` (also `build.bat build --release`)
+contains `projLaunch.exe` at its root and both target-suffixed Git servers under
+`binaries/`. Runtime lookup prefers `binaries/project-launch-git-server-<target>[.exe]`
+next to the GUI, then tries the legacy adjacent `project-launch-git-server[.exe]`,
+then the source checkout. Missing-server errors report all attempted paths.
+
+### Ubuntu 22.04 binary from Windows/WSL
+
+```powershell
+.\build.bat build-git-server ubuntu22 --release
+# Optional: choose an installed WSL distribution instead of its default.
+.\build.bat build-git-server ubuntu22 --release --wsl-distro Ubuntu
+# The npm wrapper also forwards these options.
+npm run build:git-server -- ubuntu22 --release
+```
+
+The build helper runs `build/scripts/build/git-server-ubuntu22.sh` through
+`wsl.exe --exec bash` on Windows, or directly with Bash on Linux. The selected
+Linux environment needs Rust/Cargo/rustup, the `x86_64-unknown-linux-gnu` standard
+library (added by rustup if missing), Zig, and `readelf` from binutils. Cargo may
+download locked dependencies. Rustup's `~/.cargo/env` is loaded automatically.
+Zig is found using Linux `ZIG_BIN`, `PATH`, `~/bin/zig`, or `~/bin/zig*/zig`.
+For example, configure `ZIG_BIN` in the WSL environment if several Zig versions
+are installed; Windows executable paths are not suitable.
+
+Following the vmssrv-mock Ubuntu build, the wrapper selects
+`zig cc -target x86_64-linux-gnu.2.35` for both Rust linking and C dependencies.
+It does not require an Ubuntu 22.04 build distribution. The build checks the
+result's GLIBC symbol requirements and rejects anything newer than 2.35.
+This targets x86_64 Linux with glibc 2.35 or later; it is not an Alpine/musl or
+ARM64 binary, and symbol inspection does not replace testing on each supported OS.
+The target version is fixed rather than inherited from the build host.
+
+Cargo output is isolated in `crates/target/ubuntu22/`. The verified binary is
+copied to `src-tauri/binaries/project-launch-git-server-x86_64-unknown-linux-gnu`,
+alongside the native sidecar using the same target-suffixed naming convention.
+Debug and release builds replace the same destination, just like the native build;
+their Cargo outputs remain separate. Generated binaries are ignored and removed
+by the existing clean command. Shell scripts are checked out with LF.
+The native Tauri sidecar remains separate. The Linux output is included in the
+portable release ZIP, but is not yet deployed remotely. An Ubuntu build failure returns a nonzero
+exit status and never copies the failed output over the last verified binary.
+
+Build helper regression checks (after `dotnet build build/build.fsproj -f net11.0`):
+
+```powershell
+dotnet fsi --reference:build/bin/Debug/net11.0/build.dll build/scripts/GitServer.Tests.fsx
+dotnet fsi --reference:build/bin/Debug/net11.0/build.dll build/scripts/Publish.Tests.fsx
+```
 
 Tauri starts the server lazily and checks the protocol version. No server runs
 until a Git command is invoked. `git_disconnect` and application exit close stdin,

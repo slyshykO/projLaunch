@@ -146,21 +146,31 @@ async fn repository_status(
 fn server_path() -> Result<PathBuf, String> {
     let executable = std::env::current_exe()
         .map_err(|e| format!("Cannot determine the launcher executable path: {e}"))?;
+    find_server_path(
+        &executable,
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")),
+    )
+}
+
+fn find_server_path(
+    executable: &std::path::Path,
+    development_root: &std::path::Path,
+) -> Result<PathBuf, String> {
+    let filename = concat!(
+        "project-launch-git-server-",
+        env!("PROJLAUNCH_TARGET"),
+        env!("PROJLAUNCH_EXE_SUFFIX")
+    );
+    let packaged = executable.with_file_name("binaries").join(filename);
     let adjacent = executable.with_file_name(if cfg!(windows) {
         "project-launch-git-server.exe"
     } else {
         "project-launch-git-server"
     });
     // Tauri's beforeDevCommand/beforeBuildCommand prepares this target-specific sidecar.
-    let development = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("binaries")
-        .join(concat!(
-            "project-launch-git-server-",
-            env!("PROJLAUNCH_TARGET"),
-            env!("PROJLAUNCH_EXE_SUFFIX")
-        ));
+    let development = development_root.join("binaries").join(filename);
     let mut errors = Vec::new();
-    for path in [adjacent, development] {
+    for path in [packaged, adjacent, development] {
         match path.metadata() {
             Ok(metadata) if metadata.is_file() => return Ok(path),
             Ok(_) => errors.push(format!(
@@ -227,6 +237,78 @@ pub async fn git_disconnect(host: tauri::State<'_, GitHost>) -> Result<(), Strin
 mod tests {
     use super::*;
     use std::{fs, path::Path, process::Command};
+
+    #[tokio::test]
+    async fn portable_layout_finds_and_starts_packaged_server_without_checkout() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("Extracted With Spaces");
+        let binaries = root.join("binaries");
+        fs::create_dir_all(&binaries).unwrap();
+        let filename = concat!(
+            "project-launch-git-server-",
+            env!("PROJLAUNCH_TARGET"),
+            env!("PROJLAUNCH_EXE_SUFFIX")
+        );
+        let packaged = binaries.join(filename);
+        fs::copy(server_path().unwrap(), &packaged).unwrap();
+        let executable = root.join("projLaunch.exe");
+        // An unrelated/old adjacent sidecar must not override the packaged one.
+        fs::write(
+            root.join(if cfg!(windows) {
+                "project-launch-git-server.exe"
+            } else {
+                "project-launch-git-server"
+            }),
+            "stale",
+        )
+        .unwrap();
+        let found =
+            find_server_path(&executable, &directory.path().join("missing checkout")).unwrap();
+        assert_eq!(found, packaged);
+        let client = Client::connect(&found).await.unwrap();
+        let hello: Hello = client
+            .call("server.hello", &serde_json::json!({}))
+            .await
+            .unwrap();
+        assert_eq!(hello.protocol_version, PROTOCOL_VERSION);
+        client.shutdown().await;
+    }
+
+    #[test]
+    fn server_lookup_preserves_legacy_and_development_paths_and_reports_failures() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        let executable = root.join("projLaunch.exe");
+        let development = root.join("checkout");
+        let filename = concat!(
+            "project-launch-git-server-",
+            env!("PROJLAUNCH_TARGET"),
+            env!("PROJLAUNCH_EXE_SUFFIX")
+        );
+        let compiled = development.join("binaries").join(filename);
+        fs::create_dir_all(compiled.parent().unwrap()).unwrap();
+        fs::write(&compiled, "development").unwrap();
+        assert_eq!(
+            find_server_path(&executable, &development).unwrap(),
+            compiled
+        );
+        let adjacent = root.join(if cfg!(windows) {
+            "project-launch-git-server.exe"
+        } else {
+            "project-launch-git-server"
+        });
+        fs::write(&adjacent, "legacy").unwrap();
+        assert_eq!(
+            find_server_path(&executable, &development).unwrap(),
+            adjacent
+        );
+        fs::remove_file(&adjacent).unwrap();
+        fs::remove_file(&compiled).unwrap();
+        let error = find_server_path(&executable, &development).unwrap_err();
+        assert!(error.contains(&root.join("binaries").join(filename).display().to_string()));
+        assert!(error.contains(&adjacent.display().to_string()));
+        assert!(error.contains(&compiled.display().to_string()));
+    }
 
     fn git(root: &Path, args: &[&str]) {
         let mut command = Command::new("git");

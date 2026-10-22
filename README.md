@@ -317,12 +317,16 @@ The repo also includes a custom Windows helper:
 .\build.bat self-build
 .\build.bat build
 .\build.bat build --release
+.\build.bat publish
+.\build.bat publish --wsl-distro Ubuntu
 .\build.bat run
 .\build.bat run --release
 .\build.bat clean
 .\build.bat update
 .\build.bat build-daisyui
 .\build.bat build-git-server
+.\build.bat build-git-server ubuntu22 --release
+.\build.bat build-git-server ubuntu22 --release --wsl-distro Ubuntu
 .\build.bat set-version 0.4.2
 .\build.bat help
 ```
@@ -331,14 +335,46 @@ What these do:
 
 - `self-build` publishes the build helper as a native Windows x64 executable and exits
 - `build` restores npm dependencies from `package-lock.json` with `npm ci --include=dev`, syncs Feliz.DaisyUI source references in `src/index.css`, and then runs `npm run tauri build -- --debug` (debug mode by default)
-- `build --release` performs the same preparation and runs `npm run tauri build` (release mode)
+- `build --release` builds the Windows GUI, native Git server and Ubuntu 22 Git server,
+  then creates the same portable ZIP as `publish`. Requires Windows x64 and WSL
+  with the Linux build prerequisites below.
+- `publish` builds that release ZIP; `--wsl-distro NAME` selects the Linux build
+  distribution (otherwise the WSL default). Output:
+  `build/dist/projLaunch-<version>-windows-x64.zip`.
 - `run` performs the same build as `build`, then launches the debug app; `run --release` builds and launches the release app. It waits until the app exits and does not launch it if the build fails.
 - `clean` removes generated artifacts across all projects and build variants, including the build helper itself
 - `update` runs npm/cargo update checks
 - `build-daisyui` builds a local `Feliz.DaisyUI` checkout if present
 - `build-git-server` builds and copies the Git sidecar; add `--release` for optimized output
+- `build-git-server ubuntu22` builds a separate Linux x86_64 server with Zig targeting
+  glibc 2.35 (Ubuntu 22.04). On Windows it runs through WSL; `--wsl-distro NAME`
+  selects a distribution, otherwise the WSL default is used. The build distribution
+  may be newer than Ubuntu 22.04. On Linux the same script runs directly.
+  Add `--release` for optimized output. See the [Git server guide](crates/git-server/README.md)
+  for prerequisites and output paths. This is an explicit build target; ordinary
+  app/native sidecar builds do not require WSL.
 - `set-version X.Y.Z` updates project versions, creates a `Release vX.Y.Z` commit,
   and creates the local Git tag `vX.Y.Z`. It does not push.
+
+Both `publish` and `build --release` produce this extraction layout, with no extra
+top-level directory:
+
+```text
+projLaunch.exe
+binaries/
+  project-launch-git-server-x86_64-pc-windows-msvc.exe
+  project-launch-git-server-x86_64-unknown-linux-gnu
+```
+
+The GUI first looks for its platform's server in `binaries/` next to itself.
+Legacy adjacent-server and source-checkout paths remain fallback locations.
+The Linux server is included for future WSL/SSH deployment; Windows uses the
+Windows server. This is a Windows GUI distribution, not a Linux GUI build.
+The destination Windows system still needs WebView2 Runtime and Git on PATH.
+The archive contains only the GUI and two servers, without symbols or user data.
+It replaces the previous archive of the same version only after both builds and
+ZIP creation succeed. Publish currently uses standard Cargo output paths; unset
+`CARGO_TARGET_DIR` and `CARGO_BUILD_TARGET` overrides before invoking it.
 
 Versions come from the nearest reachable release tag (`vX.Y.Z` or `X.Y.Z`),
 using `git describe --tags`. The version is synchronized into every tracked
