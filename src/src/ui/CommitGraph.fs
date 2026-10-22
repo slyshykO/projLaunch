@@ -66,42 +66,46 @@ let private BranchHint (row: CommitGraph.Row) =
             ]
 
 let References (row: CommitGraph.Row) (references: string array) =
+    let referenceLabels =
+        [
+            for reference in references do
+                Reference row reference
+            if references.Length = 0 then
+                BranchHint row
+        ]
+
+    let connector =
+        Html.span
+            [
+                prop.className "commit-ref-connector"
+                prop.style [ style.custom ("--commit-graph-node-x", $"{x row.lane}px") ]
+                prop.ariaHidden true
+            ]
+
+    let referenceContent =
+        Html.div
+            [
+                prop.className (
+                    "commit-refs-content"
+                    + if references.Length = 0 then
+                          " commit-branch-context"
+                      else
+                          ""
+                )
+                prop.children
+                    [
+                        Html.div [ prop.className "commit-ref-labels"; prop.children referenceLabels ]
+                        connector
+                    ]
+            ]
+
     Html.td
         [
             prop.className "commit-refs-cell"
             prop.children
                 [
                     if references.Length > 0 || row.branch.IsSome then
-                        Html.div
-                            [
-                                prop.className (
-                                    "commit-refs-content"
-                                    + if references.Length = 0 then
-                                          " commit-branch-context"
-                                      else
-                                          ""
-                                )
-                                prop.children
-                                    [
-                                        Html.div
-                                            [
-                                                prop.className "commit-ref-labels"
-                                                prop.children
-                                                    [
-                                                        for reference in references do
-                                                            Reference row reference
-                                                        if references.Length = 0 then
-                                                            BranchHint row
-                                                    ]
-                                            ]
-                                        Html.span
-                                            [
-                                                prop.className "commit-ref-connector"
-                                                prop.style [ style.custom ("--commit-graph-node-x", $"{x row.lane}px") ]
-                                                prop.ariaHidden true
-                                            ]
-                                    ]
-                            ]
+                        referenceContent
                 ]
         ]
 
@@ -152,6 +156,76 @@ let Cell laneCount (row: CommitGraph.Row) selected activeLine =
         | false, 1 -> "Commit"
         | false, count -> $"Merge commit ({count} parents)"
 
+    let nodeCircles =
+        [
+            if selected then
+                Svg.circle
+                    [
+                        svg.cx 11
+                        svg.cy 11
+                        svg.r 9
+                        svg.fill "none"
+                        svg.stroke "currentColor"
+                        svg.strokeWidth 1.5
+                    ]
+            Svg.circle
+                [
+                    svg.cx 11
+                    svg.cy 11
+                    svg.r (if row.parents.Length > 1 then 6 else 4)
+                    svg.fill (
+                        if row.uncommitted || row.parents.Length > 1 then
+                            "var(--color-base-100)"
+                        else
+                            color row.color
+                    )
+                    svg.stroke (color row.color)
+                    if row.uncommitted then
+                        svg.strokeDasharray [| 2; 2 |]
+                    svg.strokeWidth 2
+                ]
+            if row.parents.Length > 1 then
+                Svg.circle [ svg.cx 11; svg.cy 11; svg.r 2; svg.fill (color row.color) ]
+        ]
+
+    let nodeIcon =
+        Svg.svg
+            [
+                svg.width 22
+                svg.height 22
+                svg.viewBox (0, 0, 22, 22)
+                svg.custom ("opacity", if selected then 1.0 else opacity activeLine row.color)
+                svg.custom ("focusable", false)
+                svg.children nodeCircles
+            ]
+
+    let node =
+        Html.div
+            [
+                prop.className "commit-graph-node"
+                prop.style [ style.left (x row.lane) ]
+                prop.ariaHidden true
+                prop.children [ nodeIcon ]
+            ]
+
+    let edges =
+        lines
+            laneCount
+            [
+                for edge in row.passing do
+                    edgePath row.dashedBelow activeLine edge true
+                if row.incoming then
+                    path row.dashedAbove activeLine row.color $"M {x row.lane} 0 L {x row.lane} 50"
+                for edge in row.joining do
+                    path
+                        row.dashedAbove
+                        activeLine
+                        edge.color
+                        $"M {x edge.fromLane} 0 C {x edge.fromLane} 25 {x edge.toLane} 25 {x edge.toLane} 50"
+                for edge in row.parents do
+                    edgePath row.dashedBelow activeLine edge false
+            ]
+
     Html.td
         [
             prop.className "commit-graph-cell"
@@ -161,113 +235,33 @@ let Cell laneCount (row: CommitGraph.Row) selected activeLine =
                 |> Option.map (fun branch -> description + " — " + branchDescription branch)
                 |> Option.defaultValue description
             )
-            prop.children
-                [
-                    Html.span [ prop.className "sr-only"; prop.text description ]
-                    lines
-                        laneCount
-                        [
-                            for edge in row.passing do
-                                edgePath row.dashedBelow activeLine edge true
-                            if row.incoming then
-                                path row.dashedAbove activeLine row.color $"M {x row.lane} 0 L {x row.lane} 50"
-                            for edge in row.joining do
-                                path
-                                    row.dashedAbove
-                                    activeLine
-                                    edge.color
-                                    $"M {x edge.fromLane} 0 C {x edge.fromLane} 25 {x edge.toLane} 25 {x edge.toLane} 50"
-                            for edge in row.parents do
-                                edgePath row.dashedBelow activeLine edge false
-                        ]
-                    Html.div
-                        [
-                            prop.className "commit-graph-node"
-                            prop.style [ style.left (x row.lane) ]
-                            prop.ariaHidden true
-                            prop.children
-                                [
-                                    Svg.svg
-                                        [
-                                            svg.width 22
-                                            svg.height 22
-                                            svg.viewBox (0, 0, 22, 22)
-                                            svg.custom (
-                                                "opacity",
-                                                if selected then 1.0 else opacity activeLine row.color
-                                            )
-                                            svg.custom ("focusable", false)
-                                            svg.children
-                                                [
-                                                    if selected then
-                                                        Svg.circle
-                                                            [
-                                                                svg.cx 11
-                                                                svg.cy 11
-                                                                svg.r 9
-                                                                svg.fill "none"
-                                                                svg.stroke "currentColor"
-                                                                svg.strokeWidth 1.5
-                                                            ]
-                                                    Svg.circle
-                                                        [
-                                                            svg.cx 11
-                                                            svg.cy 11
-                                                            svg.r (if row.parents.Length > 1 then 6 else 4)
-                                                            svg.fill (
-                                                                if row.uncommitted || row.parents.Length > 1 then
-                                                                    "var(--color-base-100)"
-                                                                else
-                                                                    color row.color
-                                                            )
-                                                            svg.stroke (color row.color)
-                                                            if row.uncommitted then
-                                                                svg.strokeDasharray [| 2; 2 |]
-                                                            svg.strokeWidth 2
-                                                        ]
-                                                    if row.parents.Length > 1 then
-                                                        Svg.circle
-                                                            [
-                                                                svg.cx 11
-                                                                svg.cy 11
-                                                                svg.r 2
-                                                                svg.fill (color row.color)
-                                                            ]
-                                                ]
-                                        ]
-                                ]
-                        ]
-                ]
+            prop.children [ Html.span [ prop.className "sr-only"; prop.text description ]; edges; node ]
         ]
 
 let Continuation (graph: CommitGraph.Layout) hasMore activeLine =
+    let continuationLines =
+        lines
+            graph.laneCount
+            [
+                for index, lane in graph.continuations |> Array.indexed do
+                    Svg.path
+                        [
+                            svg.d $"M {x index} 0 L {x index} 80"
+                            svg.stroke (color lane.color)
+                            svg.custom ("opacity", opacity activeLine lane.color)
+                            svg.strokeWidth 2
+                            svg.strokeDasharray [| 3; 3 |]
+                            svg.custom ("vectorEffect", "non-scaling-stroke")
+                        ]
+            ]
+
     Html.tr
         [
             prop.className "commit-graph-continuation"
             prop.children
                 [
                     Html.td [ prop.className "commit-refs-cell" ]
-                    Html.td
-                        [
-                            prop.className "commit-graph-cell"
-                            prop.children
-                                [
-                                    lines
-                                        graph.laneCount
-                                        [
-                                            for index, lane in graph.continuations |> Array.indexed do
-                                                Svg.path
-                                                    [
-                                                        svg.d $"M {x index} 0 L {x index} 80"
-                                                        svg.stroke (color lane.color)
-                                                        svg.custom ("opacity", opacity activeLine lane.color)
-                                                        svg.strokeWidth 2
-                                                        svg.strokeDasharray [| 3; 3 |]
-                                                        svg.custom ("vectorEffect", "non-scaling-stroke")
-                                                    ]
-                                        ]
-                                ]
-                        ]
+                    Html.td [ prop.className "commit-graph-cell"; prop.children [ continuationLines ] ]
                     Html.td
                         [
                             prop.colSpan 4

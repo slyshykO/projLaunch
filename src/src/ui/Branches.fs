@@ -125,33 +125,33 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                 let key = section + "/" + prefix
                 let expanded = filtering || not (Set.contains key collapsed)
 
+                let folderLabel =
+                    [
+                        Html.span [ prop.ariaHidden true; prop.text (if expanded then "▾" else "▸") ]
+                        Html.span [ prop.className "branch-name"; prop.text name ]
+                        if children |> Array.exists (fun branch -> branch.isCurrent) then
+                            Html.span [ prop.className "branch-dot"; prop.title "Contains current branch" ]
+                        Html.span [ prop.className "branch-count"; prop.text children.Length ]
+                    ]
+
+                let folderButton =
+                    Html.button
+                        [
+                            prop.type' "button"
+                            prop.className "branch-folder"
+                            prop.style [ style.paddingLeft (12 + depth * 14) ]
+                            prop.ariaExpanded expanded
+                            prop.title (folderTitle section prefix)
+                            prop.onClick (fun _ -> toggle key)
+                            prop.children folderLabel
+                        ]
+
                 Html.div
                     [
                         prop.key key
                         prop.children
                             [
-                                Html.button
-                                    [
-                                        prop.type' "button"
-                                        prop.className "branch-folder"
-                                        prop.style [ style.paddingLeft (12 + depth * 14) ]
-                                        prop.ariaExpanded expanded
-                                        prop.title (folderTitle section prefix)
-                                        prop.onClick (fun _ -> toggle key)
-                                        prop.children
-                                            [
-                                                Html.span
-                                                    [ prop.ariaHidden true; prop.text (if expanded then "▾" else "▸") ]
-                                                Html.span [ prop.className "branch-name"; prop.text name ]
-                                                if children |> Array.exists (fun branch -> branch.isCurrent) then
-                                                    Html.span
-                                                        [
-                                                            prop.className "branch-dot"
-                                                            prop.title "Contains current branch"
-                                                        ]
-                                                Html.span [ prop.className "branch-count"; prop.text children.Length ]
-                                            ]
-                                    ]
+                                folderButton
                                 if expanded then
                                     yield! rows section (prefix + "/") (depth + 1) nested
                             ]
@@ -162,45 +162,166 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
         let visible = matched |> Array.filter (fun branch -> branch.isRemote = remote)
         let expanded = filtering || not (Set.contains title collapsed)
 
-        Html.section
+        let sectionHeading =
+            Html.button
+                [
+                    prop.type' "button"
+                    prop.className "branch-section-heading"
+                    prop.ariaExpanded expanded
+                    prop.onClick (fun _ -> toggle title)
+                    prop.children
+                        [
+                            Html.span [ prop.ariaHidden true; prop.text (if expanded then "▾" else "▸") ]
+                            Html.span [ prop.text title ]
+                            Html.span [ prop.className "branch-count"; prop.text all.Length ]
+                        ]
+                ]
+
+        let sectionContent =
             [
-                prop.ariaLabel title
+                sectionHeading
+                if expanded then
+                    if visible.Length = 0 then
+                        Html.p
+                            [
+                                prop.className "branch-empty"
+                                prop.text (
+                                    if filtering then
+                                        "No matching branches."
+                                    else
+                                        "No branches yet."
+                                )
+                            ]
+                    elif tree then
+                        yield! rows title "" 0 visible
+                    else
+                        for branch in
+                            visible
+                            |> Array.sortBy (fun branch ->
+                                not branch.isCurrent, branch.name.ToLowerInvariant(), branch.name) do
+                            row branch branch.name 0
+            ]
+
+        Html.section [ prop.ariaLabel title; prop.children sectionContent ]
+
+    let panelHeading =
+        Html.div
+            [
+                prop.className "branch-panel-heading"
                 prop.children
                     [
+                        if not hidden then
+                            svgIcons.git 16
+                            Html.h2 [ prop.text "Branches" ]
                         Html.button
                             [
                                 prop.type' "button"
-                                prop.className "branch-section-heading"
-                                prop.ariaExpanded expanded
-                                prop.onClick (fun _ -> toggle title)
-                                prop.children
-                                    [
-                                        Html.span [ prop.ariaHidden true; prop.text (if expanded then "▾" else "▸") ]
-                                        Html.span [ prop.text title ]
-                                        Html.span [ prop.className "branch-count"; prop.text all.Length ]
-                                    ]
+                                prop.className "branch-icon-button"
+                                prop.ariaLabel (
+                                    if hidden then
+                                        "Show branches panel"
+                                    else
+                                        "Hide branches panel"
+                                )
+                                prop.title (if hidden then "Show branches" else "Hide branches")
+                                prop.ariaExpanded (not hidden)
+                                prop.onClick (fun _ -> setHidden (not hidden))
+                                prop.text (if hidden then "›" else "‹")
                             ]
-                        if expanded then
-                            if visible.Length = 0 then
-                                Html.p
-                                    [
-                                        prop.className "branch-empty"
-                                        prop.text (
-                                            if filtering then
-                                                "No matching branches."
-                                            else
-                                                "No branches yet."
-                                        )
-                                    ]
-                            elif tree then
-                                yield! rows title "" 0 visible
-                            else
-                                for branch in
-                                    visible
-                                    |> Array.sortBy (fun branch ->
-                                        not branch.isCurrent, branch.name.ToLowerInvariant(), branch.name) do
-                                    row branch branch.name 0
                     ]
+            ]
+
+    let filterControls () =
+        Html.div
+            [
+                prop.className "branch-filter"
+                prop.children
+                    [
+                        Html.input
+                            [
+                                prop.type' "search"
+                                prop.ariaLabel "Filter branches"
+                                prop.placeholder "Filter branches…"
+                                prop.value filter
+                                prop.onChange setFilter
+                                prop.onKeyDown (fun event ->
+                                    if event.key = "Escape" then
+                                        setFilter "")
+                            ]
+                        Html.button
+                            [
+                                prop.type' "button"
+                                prop.className "branch-icon-button"
+                                prop.ariaLabel (
+                                    if tree then
+                                        "Switch to list view"
+                                    else
+                                        "Switch to tree view"
+                                )
+                                prop.title (
+                                    if tree then
+                                        "Switch to list view"
+                                    else
+                                        "Switch to tree view"
+                                )
+                                prop.onClick (fun _ -> setTree (not tree))
+                                prop.text (if tree then "List" else "Tree")
+                            ]
+                    ]
+            ]
+
+    let branchList () =
+        let branchContent =
+            [
+                match tab.branchesError with
+                | Some error ->
+                    Html.div
+                        [
+                            prop.role "alert"
+                            prop.className "branch-error"
+                            prop.children
+                                [
+                                    Html.p [ prop.text "Could not load branches." ]
+                                    Html.p [ prop.className "break-words"; prop.text error ]
+                                    if tab.branches.IsSome then
+                                        Html.p [ prop.text "Previously loaded branches are shown." ]
+                                    Html.button
+                                        [
+                                            prop.type' "button"
+                                            prop.className "btn btn-xs mt-2"
+                                            prop.disabled loading
+                                            prop.text "Retry"
+                                            prop.onClick (fun _ -> dispatch (RefreshRepositoryHistory tab.id))
+                                        ]
+                                ]
+                        ]
+                | None -> ()
+                if tab.branches.IsNone && tab.branchesError.IsNone then
+                    Html.p
+                        [
+                            prop.role "status"
+                            prop.className "branch-empty"
+                            prop.text "Loading branches…"
+                        ]
+                match tab.branches with
+                | Some data ->
+                    match data.currentBranch, data.head with
+                    | None, Some oid ->
+                        Html.p [ prop.className "branch-head"; prop.text $"Detached HEAD · {shortOid oid}" ]
+                    | Some branch, None ->
+                        Html.p [ prop.className "branch-head"; prop.text $"{branch} · No commits yet" ]
+                    | _ -> ()
+
+                    section false "Local"
+                    section true "Remotes"
+                | None -> ()
+            ]
+
+        Html.div
+            [
+                prop.className "branch-scroll"
+                prop.ariaBusy loading
+                prop.children branchContent
             ]
 
     Html.aside
@@ -224,133 +345,11 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                 prop.ariaValueMax 400
                                 prop.ariaValueNow width
                             ]
-                    Html.div
-                        [
-                            prop.className "branch-panel-heading"
-                            prop.children
-                                [
-                                    if not hidden then
-                                        svgIcons.git 16
-                                        Html.h2 [ prop.text "Branches" ]
-                                    Html.button
-                                        [
-                                            prop.type' "button"
-                                            prop.className "branch-icon-button"
-                                            prop.ariaLabel (
-                                                if hidden then
-                                                    "Show branches panel"
-                                                else
-                                                    "Hide branches panel"
-                                            )
-                                            prop.title (if hidden then "Show branches" else "Hide branches")
-                                            prop.ariaExpanded (not hidden)
-                                            prop.onClick (fun _ -> setHidden (not hidden))
-                                            prop.text (if hidden then "›" else "‹")
-                                        ]
-                                ]
-                        ]
+                    panelHeading
                     if not hidden then
-                        Html.div
-                            [
-                                prop.className "branch-filter"
-                                prop.children
-                                    [
-                                        Html.input
-                                            [
-                                                prop.type' "search"
-                                                prop.ariaLabel "Filter branches"
-                                                prop.placeholder "Filter branches…"
-                                                prop.value filter
-                                                prop.onChange setFilter
-                                                prop.onKeyDown (fun event ->
-                                                    if event.key = "Escape" then
-                                                        setFilter "")
-                                            ]
-                                        Html.button
-                                            [
-                                                prop.type' "button"
-                                                prop.className "branch-icon-button"
-                                                prop.ariaLabel (
-                                                    if tree then
-                                                        "Switch to list view"
-                                                    else
-                                                        "Switch to tree view"
-                                                )
-                                                prop.title (
-                                                    if tree then
-                                                        "Switch to list view"
-                                                    else
-                                                        "Switch to tree view"
-                                                )
-                                                prop.onClick (fun _ -> setTree (not tree))
-                                                prop.text (if tree then "List" else "Tree")
-                                            ]
-                                    ]
-                            ]
+                        filterControls ()
 
-                        Html.div
-                            [
-                                prop.className "branch-scroll"
-                                prop.ariaBusy loading
-                                prop.children
-                                    [
-                                        match tab.branchesError with
-                                        | Some error ->
-                                            Html.div
-                                                [
-                                                    prop.role "alert"
-                                                    prop.className "branch-error"
-                                                    prop.children
-                                                        [
-                                                            Html.p [ prop.text "Could not load branches." ]
-                                                            Html.p [ prop.className "break-words"; prop.text error ]
-                                                            if tab.branches.IsSome then
-                                                                Html.p
-                                                                    [
-                                                                        prop.text
-                                                                            "Previously loaded branches are shown."
-                                                                    ]
-                                                            Html.button
-                                                                [
-                                                                    prop.type' "button"
-                                                                    prop.className "btn btn-xs mt-2"
-                                                                    prop.disabled loading
-                                                                    prop.text "Retry"
-                                                                    prop.onClick (fun _ ->
-                                                                        dispatch (RefreshRepositoryHistory tab.id))
-                                                                ]
-                                                        ]
-                                                ]
-                                        | None -> ()
-                                        if tab.branches.IsNone && tab.branchesError.IsNone then
-                                            Html.p
-                                                [
-                                                    prop.role "status"
-                                                    prop.className "branch-empty"
-                                                    prop.text "Loading branches…"
-                                                ]
-                                        match tab.branches with
-                                        | Some data ->
-                                            match data.currentBranch, data.head with
-                                            | None, Some oid ->
-                                                Html.p
-                                                    [
-                                                        prop.className "branch-head"
-                                                        prop.text $"Detached HEAD · {shortOid oid}"
-                                                    ]
-                                            | Some branch, None ->
-                                                Html.p
-                                                    [
-                                                        prop.className "branch-head"
-                                                        prop.text $"{branch} · No commits yet"
-                                                    ]
-                                            | _ -> ()
-
-                                            section false "Local"
-                                            section true "Remotes"
-                                        | None -> ()
-                                    ]
-                            ]
+                        branchList ()
 
                         Html.p
                             [
