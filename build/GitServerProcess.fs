@@ -54,7 +54,7 @@ let run workingDirectory captureOutput command (arguments: string list) =
         if captureOutput && not (String.IsNullOrWhiteSpace output) then
             Console.Error.Write output
 
-        let code = sprintf "%d (0x%08X)" proc.ExitCode (uint32 proc.ExitCode)
+        let code = $"{proc.ExitCode} (0x{(uint32 proc.ExitCode):X8})"
         failwith $"{command} exited with code {code}"
 
     output
