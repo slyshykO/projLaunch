@@ -88,8 +88,17 @@ pub struct Branch {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Remote {
+    pub name: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BranchList {
     pub branches: Vec<Branch>,
+    #[serde(default)]
+    pub remotes: Vec<Remote>,
     pub head: Option<String>,
     pub current_branch: Option<String>,
 }

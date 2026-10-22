@@ -74,6 +74,7 @@ async fn empty_repository_and_unborn_staged_diff() {
     assert!(status["head"].is_null());
     let branches = request(&client, "git.branches", json!({"repoId":repo})).await;
     assert_eq!(branches["branches"], json!([]));
+    assert_eq!(branches["remotes"], json!([]));
     assert_eq!(branches["currentBranch"], "main");
     assert!(branches["head"].is_null());
     let log = request(&client, "git.log", json!({"repoId":repo})).await;
@@ -118,6 +119,10 @@ async fn branches_include_unloaded_tips_tracking_unicode_and_detached_head() {
     assert_eq!(page["commits"].as_array().unwrap().len(), 1);
     assert_eq!(page["commits"][0]["oid"], tip);
     let list = request(&client, "git.branches", json!({"repoId":repo})).await;
+    assert_eq!(
+        list["remotes"],
+        json!([{"name":"origin", "url":"https://example.invalid/repo.git"}])
+    );
     assert_eq!(list["currentBranch"], "main");
     assert_eq!(list["head"], tip);
     let branches = list["branches"].as_array().unwrap();

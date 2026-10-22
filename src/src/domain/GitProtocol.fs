@@ -96,9 +96,12 @@ type Branch =
         tracking: string option
     }
 
+type Remote = { name: string; url: string }
+
 type BranchList =
     {
         branches: Branch array
+        remotes: Remote array option
         head: string option
         currentBranch: string option
     }

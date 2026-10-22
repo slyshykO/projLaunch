@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "git-client"
-version = "0.5.0+8.g51cf1e7.dirty"
+version = "0.5.0+9.gfe26e87.dirty"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -1359,7 +1359,7 @@ dependencies = [
 
 [[package]]
 name = "git-discovery"
-version = "0.5.0+8.g51cf1e7.dirty"
+version = "0.5.0+9.gfe26e87.dirty"
 dependencies = [
  "anyhow",
  "jsonc-parser",
@@ -1371,7 +1371,7 @@ dependencies = [
 
 [[package]]
 name = "git-protocol"
-version = "0.5.0+8.g51cf1e7.dirty"
+version = "0.5.0+9.gfe26e87.dirty"
 dependencies = [
  "serde",
 ]
@@ -2831,7 +2831,7 @@ dependencies = [
 
 [[package]]
 name = "projlaunch"
-version = "0.5.0+8.g51cf1e7.dirty"
+version = "0.5.0+9.gfe26e87.dirty"
 dependencies = [
  "anyhow",
  "fs-err",

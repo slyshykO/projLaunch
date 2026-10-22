@@ -218,7 +218,9 @@ non-UTF-8 paths are rejected explicitly in protocol v1.
 `git.branches` reads all `refs/heads` and `refs/remotes` independently of log
 pagination. Each entry includes `name`, full `refName`, `oid`, `isRemote`,
 `isCurrent`, optional `upstream` and Git's `tracking` text (ahead/behind or gone).
-Symbolic aliases such as `origin/HEAD` are omitted. The result also includes
+Symbolic aliases such as `origin/HEAD` are omitted. `remotes` contains each remote's
+`name` and first configured fetch `url`, used in remote folder tooltips.
+The result also includes
 `head` and `currentBranch`: detached HEAD has no current branch, while an unborn
 branch has a name and no HEAD OID. The list reflects current refs and follows the
 usual cancellation, output and response-frame limits. It performs no checkout.

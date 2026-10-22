@@ -13,7 +13,7 @@ const remoteTip = commit('c');
 const branch = (name, oid, remote = false, isCurrent = false) => ({ name, oid, refName: `refs/${remote ? 'remotes' : 'heads'}/${name}`,
     isRemote: remote, isCurrent, upstream: isCurrent ? 'origin/main' : null, tracking: isCurrent ? 'ahead 1' : null });
 let list = { branches: [branch('main', current.oid, false, true), branch('feature/старе<&>', old.oid), branch('origin/main', remoteTip.oid, true)],
-    head: current.oid, currentBranch: 'main' };
+    head: current.oid, currentBranch: 'main', remotes: [{ name: 'origin', url: 'git@example.invalid:team/repo.git' }] };
 let branchError;
 const logs = [], calls = [];
 globalThis.isTauri = true;
@@ -50,6 +50,7 @@ let html = render();
 assert.match(html, /aria-label="Repository branches"/);
 assert.match(html, /aria-label="Local"/);
 assert.match(html, /aria-label="Remotes"/);
+assert.ok(html.includes('title="origin\ngit@example.invalid:team/repo.git"'));
 assert.match(html, /aria-current="true"/);
 assert.match(html, /старе&lt;&amp;&gt;/);
 assert.ok(html.indexOf('repository-branches') < html.indexOf('repository-content'), 'Branches occupy the leftmost panel');

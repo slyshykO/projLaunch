@@ -48,7 +48,8 @@ or a restarted server.
 A left sidebar lists all local and remote-tracking branches, independently of
 loaded history pages. Filter names, switch between a flat list and a tree grouped
 by `/`, or collapse individual groups. The current branch is marked; full refs,
-upstream and tracking information are available in tooltips. Detached HEAD and
+upstream and tracking information are available in tooltips. Remote folder tooltips
+also show the configured fetch URL. Detached HEAD and
 branches without a first commit have explicit messages; symbolic remote HEAD
 aliases are omitted. Selecting a branch reveals its tip in the graph, loading
 history pages as needed, and opens its changed files. Cancel stops further reads;

@@ -31,6 +31,20 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
         branches
         |> Array.filter (fun branch -> branch.name.ToLowerInvariant().Contains query)
 
+    let remotes =
+        tab.branches
+        |> Option.bind (fun data -> data.remotes)
+        |> Option.defaultValue [||]
+
+    let folderTitle section prefix =
+        if section = "Remotes" then
+            remotes
+            |> Array.tryFind (fun remote -> remote.name = prefix)
+            |> Option.map (fun remote -> prefix + "\n" + remote.url)
+            |> Option.defaultValue prefix
+        else
+            prefix
+
     let selectedOid =
         tab.selection
         |> Option.bind (fun selection -> selection.commit)
@@ -122,7 +136,7 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                         prop.className "branch-folder"
                                         prop.style [ style.paddingLeft (12 + depth * 14) ]
                                         prop.ariaExpanded expanded
-                                        prop.title prefix
+                                        prop.title (folderTitle section prefix)
                                         prop.onClick (fun _ -> toggle key)
                                         prop.children
                                             [
