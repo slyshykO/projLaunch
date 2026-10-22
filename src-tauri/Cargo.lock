@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "git-client"
-version = "0.5.0+4.gf8e6f27.dirty"
+version = "0.5.0+4.gf8e6f27"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -1315,7 +1315,7 @@ dependencies = [
 
 [[package]]
 name = "git-protocol"
-version = "0.5.0+4.gf8e6f27.dirty"
+version = "0.5.0+4.gf8e6f27"
 dependencies = [
  "serde",
 ]
@@ -2766,7 +2766,7 @@ dependencies = [
 
 [[package]]
 name = "projlaunch"
-version = "0.5.0+4.gf8e6f27.dirty"
+version = "0.5.0+4.gf8e6f27"
 dependencies = [
  "anyhow",
  "fs-err",
