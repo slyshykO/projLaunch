@@ -63,20 +63,26 @@ impl Discovery {
 fn find_root(path: &Path) -> Result<Option<PathBuf>> {
     let path = path
         .canonicalize()
-        .context("Project location is unavailable")?;
-    let directory = if path.is_dir() {
+        .with_context(|| format!("Project location is unavailable: '{}'", path.display()))?;
+    let metadata = fs::metadata(&path)
+        .with_context(|| format!("Cannot inspect project location '{}'", path.display()))?;
+    let directory = if metadata.is_dir() {
         path.as_path()
     } else {
         path.parent().context("Missing parent directory")?
     };
     for ancestor in directory.ancestors() {
-        match fs::metadata(ancestor.join(".git")) {
+        let git_path = ancestor.join(".git");
+        match fs::metadata(&git_path) {
             Ok(metadata) if metadata.is_dir() || metadata.is_file() => {
                 return Ok(Some(ancestor.to_owned()));
             }
-            Ok(_) => bail!("Invalid .git entry"),
+            Ok(_) => bail!("Invalid .git entry: '{}'", git_path.display()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error).context("Cannot inspect .git"),
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("Cannot inspect '{}'", git_path.display()));
+            }
         }
     }
     Ok(None)
@@ -84,9 +90,11 @@ fn find_root(path: &Path) -> Result<Option<PathBuf>> {
 
 fn read_definition(path: &Path) -> Result<String> {
     let mut bytes = Vec::new();
-    fs::File::open(path)?
+    fs::File::open(path)
+        .with_context(|| format!("Cannot open project definition '{}'", path.display()))?
         .take(MAX_DEFINITION_BYTES + 1)
-        .read_to_end(&mut bytes)?;
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("Cannot read project definition '{}'", path.display()))?;
     ensure!(
         bytes.len() as u64 <= MAX_DEFINITION_BYTES,
         "Project definition exceeds 2 MiB"
@@ -232,9 +240,11 @@ pub fn discover(project_path: &str) -> Result<Discovery> {
     let path = Path::new(project_path);
     ensure!(
         path.is_absolute(),
-        "Set an absolute local project path to check Git"
+        "Set an absolute local project path to check Git: '{}'",
+        path.display()
     );
-    let metadata = fs::metadata(path).context("Project path is unavailable")?;
+    let metadata = fs::metadata(path)
+        .with_context(|| format!("Project path is unavailable: '{}'", path.display()))?;
     let mut result = Discovery::default();
     result.add_location(path);
     if metadata.is_file()
@@ -380,7 +390,13 @@ mod tests {
             assert!(!found.warnings.is_empty());
         }
         assert!(discover("relative/path").is_err());
-        assert!(discover(temp.path().join("missing").to_str().unwrap()).is_err());
+        let missing = temp.path().join("missing проект");
+        let error = discover(missing.to_str().unwrap()).unwrap_err();
+        assert!(format!("{error:#}").contains(missing.to_str().unwrap()));
+        assert_eq!(
+            error.downcast_ref::<std::io::Error>().unwrap().kind(),
+            std::io::ErrorKind::NotFound
+        );
         let found = discover(temp.path().to_str().unwrap()).unwrap();
         assert!(found.roots.is_empty() && found.warnings.is_empty());
     }

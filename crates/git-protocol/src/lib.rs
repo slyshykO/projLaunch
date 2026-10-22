@@ -65,6 +65,26 @@ pub struct Status {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Branch {
+    pub name: String,
+    pub ref_name: String,
+    pub oid: String,
+    pub is_remote: bool,
+    pub is_current: bool,
+    pub upstream: Option<String>,
+    pub tracking: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchList {
+    pub branches: Vec<Branch>,
+    pub head: Option<String>,
+    pub current_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LogParams {
     pub repo_id: String,

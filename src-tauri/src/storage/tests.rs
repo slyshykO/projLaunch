@@ -157,14 +157,17 @@ fn invalid_workspace_never_overwrites_the_last_saved_session() {
 #[test]
 fn corrupt_workspace_is_reported_without_blocking_project_storage() {
     let dir = TempDir::new().unwrap();
-    let mut db = Database::open(dir.path()).unwrap();
+    let db = Database::open(dir.path()).unwrap();
     db.connection
         .execute(
             "INSERT INTO workspace_state(id, content) VALUES (1, 'invalid json')",
             [],
         )
         .unwrap();
-    assert!(db.load_workspace().is_err());
+    let mut database = Ok(db);
+    let error = super::run(&mut database, |db| db.load_workspace()).unwrap_err();
+    assert!(error.contains(dir.path().join("projlaunch.db").to_str().unwrap()));
+    let mut db = database.unwrap();
     db.save("one", &project("one").to_string()).unwrap();
     assert_eq!(db.list().unwrap().len(), 1);
     assert_eq!(
@@ -539,7 +542,8 @@ async fn worker_reports_initialization_error_and_blocks_writes() {
     fs::write(dir.path().join("projects/broken"), "broken").unwrap();
     let storage = Storage::start(Ok(dir.path().to_owned()));
     let error = storage.list().await.unwrap_err();
-    assert!(error.contains("broken"));
+    assert!(error.contains(dir.path().join("projects").join("broken").to_str().unwrap()));
+    assert!(error.contains(dir.path().join("projlaunch.db").to_str().unwrap()));
     assert!(error.contains("restart ProjLaunch"));
     assert_eq!(
         storage

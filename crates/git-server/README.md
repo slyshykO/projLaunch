@@ -51,6 +51,7 @@ have no side effects. Batch requests return `-32005`.
 | `server.hello` | `{}` | `protocolVersion`, `gitVersion`, `capabilities` |
 | `repo.open` | `path`, `operationId` | `repoId`, `root`, `gitDir`, `commonDir` |
 | `git.status` | `repoId`, `operationId` | HEAD/branch/upstream, ahead/behind, entries |
+| `git.branches` | `repoId`, `operationId` | all local/remote branch tips, current branch and HEAD |
 | `git.log` | `repoId`, `operationId`, optional `cursor`, `limit` | commits and optional `nextCursor` |
 | `git.diffFiles` | `repoId`, `operationId`, `target` | paths, rename source and status |
 | `git.diff` | `repoId`, `operationId`, `target`, `path` | text, binary/truncated/untracked flags |
@@ -81,6 +82,14 @@ Status uses porcelain v2 with NUL framing. Each entry has independent `index` an
 `untracked`), `submodule`, `path` and optional `originalPath`. Paths containing
 spaces, tabs and newlines are not split or unquoted. Unicode is preserved;
 non-UTF-8 paths are rejected explicitly in protocol v1.
+
+`git.branches` reads all `refs/heads` and `refs/remotes` independently of log
+pagination. Each entry includes `name`, full `refName`, `oid`, `isRemote`,
+`isCurrent`, optional `upstream` and Git's `tracking` text (ahead/behind or gone).
+Symbolic aliases such as `origin/HEAD` are omitted. The result also includes
+`head` and `currentBranch`: detached HEAD has no current branch, while an unborn
+branch has a name and no HEAD OID. The list reflects current refs and follows the
+usual cancellation, output and response-frame limits. It performs no checkout.
 
 History is topological across local branches, remote branches, commit tags and
 HEAD, with OID, parent OIDs, author name/email, ISO dates, subject and refs. A new

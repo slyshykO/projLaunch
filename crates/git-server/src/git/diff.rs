@@ -115,6 +115,27 @@ impl Repo {
         path: &str,
         cancel: &CancellationToken,
     ) -> Result<Patch> {
+        self.patch_file(target, path, cancel)
+            .await
+            .map_err(|error| {
+                // Cancellation is a protocol sentinel, not a file access failure.
+                if error.to_string() == "Operation cancelled" {
+                    error
+                } else {
+                    error.context(format!(
+                        "Cannot read diff for '{}'",
+                        self.root.join(path).display()
+                    ))
+                }
+            })
+    }
+
+    async fn patch_file(
+        &self,
+        target: &DiffTarget,
+        path: &str,
+        cancel: &CancellationToken,
+    ) -> Result<Patch> {
         validate_path(path)?;
         // Resolve rename source from Git, never trust a client-supplied second path.
         let files = self.diff_files(target, cancel).await?;
@@ -156,12 +177,15 @@ impl Repo {
 
     async fn preview(&self, path: &str, cancel: &CancellationToken) -> Result<Patch> {
         let full = self.root.join(path);
-        let metadata = tokio::fs::symlink_metadata(&full).await?;
+        let metadata = tokio::fs::symlink_metadata(&full)
+            .await
+            .with_context(|| format!("Cannot inspect '{}'", full.display()))?;
         let (bytes, truncated) = if metadata.file_type().is_symlink() {
             // Display the link target, do not follow it outside the worktree.
             (
                 tokio::fs::read_link(&full)
-                    .await?
+                    .await
+                    .with_context(|| format!("Cannot read symbolic link '{}'", full.display()))?
                     .to_string_lossy()
                     .as_bytes()
                     .to_vec(),
@@ -172,8 +196,12 @@ impl Repo {
                 metadata.is_file(),
                 "Only regular files and symbolic links can be previewed"
             );
-            let resolved = tokio::fs::canonicalize(&full).await?;
-            let root = tokio::fs::canonicalize(&self.root).await?;
+            let resolved = tokio::fs::canonicalize(&full)
+                .await
+                .with_context(|| format!("Cannot resolve preview path '{}'", full.display()))?;
+            let root = tokio::fs::canonicalize(&self.root).await.with_context(|| {
+                format!("Cannot resolve working tree '{}'", self.root.display())
+            })?;
             ensure!(
                 resolved.starts_with(&root),
                 "Preview path escapes the working tree"
@@ -182,8 +210,14 @@ impl Repo {
             tokio::select! {
                 _ = cancel.cancelled() => anyhow::bail!("Operation cancelled"),
                 result = tokio::time::timeout(self.runner.timeout, async {
-                    tokio::fs::File::open(&resolved).await?.take((MAX_PATCH + 1) as u64).read_to_end(&mut bytes).await
-                }) => { result.context("Preview timed out")??; },
+                    tokio::fs::File::open(&resolved)
+                        .await
+                        .with_context(|| format!("Cannot open preview file '{}'", resolved.display()))?
+                        .take((MAX_PATCH + 1) as u64)
+                        .read_to_end(&mut bytes)
+                        .await
+                        .with_context(|| format!("Cannot read preview file '{}'", resolved.display()))
+                }) => { result.with_context(|| format!("Preview timed out for '{}'", resolved.display()))??; },
             }
             let truncated = bytes.len() > MAX_PATCH;
             bytes.truncate(MAX_PATCH);

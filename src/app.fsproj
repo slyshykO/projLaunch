@@ -30,6 +30,7 @@
     <Compile Include="src/ui/CommitDiff.fs" />
     <Compile Include="src/ui/CommitGraph.fs" />
     <Compile Include="src/ui/RepositorySplitter.fs" />
+    <Compile Include="src/ui/Branches.fs" />
     <Compile Include="src/ui/DesktopTabs.fs" />
     <Compile Include="src/ui/ProjectEditor.fs" />
     <Compile Include="src/ui/View.fs" />

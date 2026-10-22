@@ -221,7 +221,7 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
 
                 if not (isNull row) then
                     revealRow row)),
-        [| box selectedOid |]
+        [| box selectedOid; box tab.revealRevision |]
     )
 
     React.useEffect (
@@ -414,7 +414,7 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
         ]
 
 [<ReactMemoComponent>]
-let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
+let private RepositoryContent (tab: RepositoryTab) (dispatch: Msg -> unit) =
     let diff = tab.selection |> Option.bind (fun selection -> selection.diff)
 
     Html.div
@@ -458,6 +458,22 @@ let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                             prop.id $"files-panel-{tab.id}"
                             prop.className "repository-files-panel min-w-0 min-h-0"
                             prop.children [ CommitFilesView.Panel tab dispatch ]
+                        ]
+                ]
+        ]
+
+[<ReactMemoComponent>]
+let RepositoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
+    Html.div
+        [
+            prop.className "repository-layout h-full min-h-0"
+            prop.children
+                [
+                    BranchesView.Panel tab dispatch
+                    Html.div
+                        [
+                            prop.className "repository-content min-w-0 min-h-0"
+                            prop.children [ RepositoryContent tab dispatch ]
                         ]
                 ]
         ]

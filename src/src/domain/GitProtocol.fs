@@ -51,6 +51,24 @@ type Status =
         entries: StatusEntry array
     }
 
+type Branch =
+    {
+        name: string
+        refName: string
+        oid: string
+        isRemote: bool
+        isCurrent: bool
+        upstream: string option
+        tracking: string option
+    }
+
+type BranchList =
+    {
+        branches: Branch array
+        head: string option
+        currentBranch: string option
+    }
+
 type Commit =
     {
         oid: string

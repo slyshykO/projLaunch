@@ -10,6 +10,7 @@ const logs = [], targets = [];
 globalThis.isTauri = true;
 globalThis.window = { __TAURI_INTERNALS__: {
     invoke(command, args) {
+        if (command === 'git_branches') return Promise.resolve({ branches: [], head: null, currentBranch: null });
         const params = args?.params;
         if (command === 'git_open') return Promise.resolve({ repoId: params.path });
         if (command === 'git_status') return Promise.resolve({ entries: [] });
@@ -80,7 +81,7 @@ await tick();
 assert.equal(tab().selection.commit.oid, parent.oid);
 assert.equal(tab().selection.parent, 1);
 assert.equal(tab().selection.diff, undefined);
-assert.equal(tab().parentNavigation, undefined);
+assert.equal(tab().commitNavigation, undefined);
 assert.equal(logs.length, 0);
 assert.equal(workspaceSnapshot(state).tabs[0].selection.commit.oid, parent.oid);
 send('NavigateToParent', first, root.oid);
@@ -101,7 +102,7 @@ await tick();
 await page([parent, root]);
 assert.equal(tab().selection.commit.oid, parent.oid);
 assert.deepEqual(tab().history.commits.map(c => c.oid), [merge, unrelated, parent, root].map(c => c.oid));
-assert.equal(tab().parentNavigation, undefined);
+assert.equal(tab().commitNavigation, undefined);
 assert.equal(logs.length, 0);
 
 // A new parent click while loading wins, including a second merge parent.
@@ -116,7 +117,7 @@ await page([root]);
 assert.equal(tab().selection.commit.oid, root.oid);
 
 // Cancel and explicit row selection prevent a late page from changing selection.
-for (const cancel of ['CancelParentNavigation', 'SelectRepositoryCommit']) {
+for (const cancel of ['CancelCommitNavigation', 'SelectRepositoryCommit']) {
     const id = await open();
     send('NavigateToParent', id, parent.oid);
     const pending = await nextLog();
@@ -124,7 +125,7 @@ for (const cancel of ['CancelParentNavigation', 'SelectRepositoryCommit']) {
     pending.resolve({ commits: [parent], nextCursor: 'page-3' });
     await tick();
     assert.equal(tab().selection.commit.oid, merge.oid);
-    assert.equal(tab().parentNavigation, undefined);
+    assert.equal(tab().commitNavigation, undefined);
     assert.equal(logs.length, 0);
 }
 
@@ -132,7 +133,7 @@ for (const cancel of ['CancelParentNavigation', 'SelectRepositoryCommit']) {
 const missing = await open();
 send('NavigateToParent', missing, parent.oid);
 await page([unrelated]);
-assert.match(tab().parentNavigationError, /not available/);
+assert.match(tab().commitNavigationError, /not available/);
 assert.equal(tab().selection.commit.oid, merge.oid);
 send('NavigateToParent', missing, parent.oid);
 const retry = await nextLog();
@@ -140,14 +141,14 @@ assert.equal(retry.params.cursor, undefined);
 retry.resolve({ commits: [merge, parent] });
 await tick();
 assert.equal(tab().selection.commit.oid, parent.oid);
-assert.equal(tab().parentNavigationError, undefined);
+assert.equal(tab().commitNavigationError, undefined);
 
 // Expired cursors stop the search, preserve selection and allow retry.
 const failed = await open();
 send('NavigateToParent', failed, parent.oid);
 (await nextLog()).reject('Cursor expired');
 await tick();
-assert.match(tab().parentNavigationError, /Cursor expired/);
+assert.match(tab().commitNavigationError, /Cursor expired/);
 assert.equal(tab().selection.commit.oid, merge.oid);
 assert.equal(logs.length, 0);
 send('NavigateToParent', failed, parent.oid);

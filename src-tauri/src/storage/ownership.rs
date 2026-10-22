@@ -43,17 +43,19 @@ fn inspect(pid: u32) -> Option<Identity> {
 /// The OS releases the handle's lock even after kill/abort. PID reuse or an
 /// inaccessible process therefore cannot leave the database permanently locked.
 pub(super) fn try_lock(directory: &Path) -> Result<Option<File>> {
+    let path = directory.join("projlaunch.writer.lock");
     let file = OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(directory.join("projlaunch.writer.lock"))
-        .context("Cannot open database ownership lock")?;
+        .open(&path)
+        .with_context(|| format!("Cannot open database ownership lock '{}'", path.display()))?;
     match file.try_lock() {
         Ok(()) => Ok(Some(file)),
         Err(TryLockError::WouldBlock) => Ok(None),
-        Err(TryLockError::Error(error)) => Err(error).context("Cannot lock database ownership"),
+        Err(TryLockError::Error(error)) => Err(error)
+            .with_context(|| format!("Cannot lock database ownership file '{}'", path.display())),
     }
 }
 

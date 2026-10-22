@@ -201,7 +201,7 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                             ]
                                 ]
                         ]
-                    match tab.parentNavigation with
+                    match tab.commitNavigation with
                     | Some oid ->
                         Html.div
                             [
@@ -211,19 +211,20 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                         Html.span
                                             [
                                                 prop.role "status"
-                                                prop.text $"Finding parent {oid.Substring(0, min 8 oid.Length)}…"
+                                                prop.text
+                                                    $"Finding {tab.navigationLabel} · {oid.Substring(0, min 8 oid.Length)}…"
                                             ]
                                         Html.button
                                             [
                                                 prop.type' "button"
                                                 prop.className "btn btn-xs ml-2"
                                                 prop.text "Cancel"
-                                                prop.onClick (fun _ -> dispatch (CancelParentNavigation tab.id))
+                                                prop.onClick (fun _ -> dispatch (CancelCommitNavigation tab.id))
                                             ]
                                     ]
                             ]
                     | None -> Html.none
-                    match tab.parentNavigationError with
+                    match tab.commitNavigationError with
                     | Some error ->
                         Html.p
                             [

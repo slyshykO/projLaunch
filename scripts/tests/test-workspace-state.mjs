@@ -11,6 +11,7 @@ globalThis.isTauri = true;
 globalThis.window = Object.assign(new EventTarget(), { __TAURI_INTERNALS__: {
     metadata: { currentWindow: { label: 'main' } },
     invoke(command, args) {
+        if (command === 'git_branches') return Promise.resolve({ branches: [], head: null, currentBranch: null });
         if (command === 'get_storage_access') return Promise.resolve({ canWrite: true });
         if (command === 'save_workspace') {
             assert.equal(writing, false, 'Workspace writes must be serialized');

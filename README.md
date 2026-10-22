@@ -45,6 +45,20 @@ window focus reload the active repository from a fresh snapshot. Failed reads
 keep previously loaded rows visible; Refresh also recovers from expired cursors
 or a restarted server.
 
+A left sidebar lists all local and remote-tracking branches, independently of
+loaded history pages. Filter names, switch between a flat list and a tree grouped
+by `/`, or collapse individual groups. The current branch is marked; full refs,
+upstream and tracking information are available in tooltips. Detached HEAD and
+branches without a first commit have explicit messages; symbolic remote HEAD
+aliases are omitted. Selecting a branch reveals its tip in the graph, loading
+history pages as needed, and opens its changed files. Cancel stops further reads;
+errors preserve the current selection and allow retry. Selection never checks out
+a branch. Refresh and window focus reload the list; failures keep prior branches
+visible with an error. The sidebar can be hidden or resized by dragging its right
+edge, using arrow keys (Shift for larger steps), Home/End, or double-click to reset.
+Sidebar width, visibility, filter and tree expansion remain local to the mounted
+tab; they are not saved across restarts. File panels adapt to the remaining width.
+
 Select a commit row (or focus its subject and press Enter/Space) to load changed
 files through the Git server. The file panel shows change types and old/new paths
 for renames. Parents are shown as `parent: abc123,def456`. Merge commits initially
@@ -210,6 +224,9 @@ remaining messages; logging does not wait for shutdown.
 
 `FrontendLog.info`, `FrontendLog.debug` and `FrontendLog.error` are available to
 F# code. IPC failures log the command name and error, never the argument object.
+Filesystem errors include the affected file or directory and retain the original
+cause. This covers project discovery, file previews, Git/IDE launch, log creation,
+and SQLite initialization, reads, writes and ownership locks.
 State diagnostics go directly to the log; About does not display an error history.
 Actionable project-loading and editor errors remain visible in their respective UI.
 Avoid logging project records, environment values or credentials. Browser-only
@@ -445,6 +462,7 @@ node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-working-tree.mjs
 node scripts/tests/test-workspace-state.mjs
 node scripts/tests/test-parent-navigation.mjs
+node scripts/tests/test-branches.mjs
 node scripts/tests/test-storage-access.mjs
 node scripts/tests/test-logging.mjs
 ```

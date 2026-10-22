@@ -23,7 +23,12 @@ fn file_writer(directory: &Path) -> Result<(NonBlocking, WorkerGuard)> {
         .filename_suffix("log")
         .max_log_files(7)
         .build(directory)
-        .context("Cannot create the application log")?;
+        .with_context(|| {
+            format!(
+                "Cannot create the application log in '{}'",
+                directory.display()
+            )
+        })?;
     Ok(NonBlockingBuilder::default()
         .buffered_lines_limit(4096)
         .finish(file))
@@ -241,6 +246,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("not-a-directory");
         std::fs::write(&file, "fixture").unwrap();
-        assert!(file_writer(&file).is_err());
+        let error = file_writer(&file).err().unwrap();
+        assert!(format!("{error:#}").contains(file.to_str().unwrap()));
     }
 }

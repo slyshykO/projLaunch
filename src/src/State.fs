@@ -56,8 +56,12 @@ type RepositoryTab =
         filesWidth: float
         filesHeight: float
         restoreFile: Workspace.File option
-        parentNavigation: string option
-        parentNavigationError: string option
+        commitNavigation: string option
+        commitNavigationError: string option
+        navigationLabel: string
+        revealRevision: int
+        branches: GitProtocol.BranchList option
+        branchesError: string option
         history: RepositoryHistory
         workingTree: Result<GitProtocol.Status, string> option
         selection: CommitFiles option
@@ -89,13 +93,16 @@ type Msg =
         string *
         string *
         Result<string * GitProtocol.LogPage, exn> *
-        Result<GitProtocol.Status, string>
+        Result<GitProtocol.Status, string> *
+        Result<GitProtocol.BranchList, string>
     | SelectWorkingTree of string
     | SelectWorkingTreeFile of string * GitProtocol.DiffTarget * string
     | SelectRepositoryCommit of tabId: string * oid: string
     | NavigateToParent of tabId: string * oid: string
-    | ContinueParentNavigation of tabId: string * oid: string
-    | CancelParentNavigation of tabId: string
+    | NavigateToBranch of tabId: string * refName: string
+    | BeginCommitNavigation of tabId: string * oid: string * label: string * fresh: bool
+    | ContinueCommitNavigation of tabId: string * oid: string
+    | CancelCommitNavigation of tabId: string
     | SelectCommitParent of tabId: string * parent: int
     | RefreshCommitFiles of tabId: string
     | OnCommitFiles of
@@ -241,8 +248,12 @@ let private newRepositoryTab root name =
         filesWidth = 40.0
         filesHeight = 40.0
         restoreFile = None
-        parentNavigation = None
-        parentNavigationError = None
+        commitNavigation = None
+        commitNavigationError = None
+        navigationLabel = "parent"
+        revealRevision = 0
+        branches = None
+        branchesError = None
         selection = None
         workingTree = None
         history =
@@ -619,6 +630,23 @@ let rec private updateCore msg state =
             |> Option.bind (fun selection -> selection.commit)
             |> Option.exists (fun commit -> Array.contains oid commit.parents)
             ->
+            updateCore (BeginCommitNavigation(id, oid, "parent", false)) state
+        | _ -> state, Cmd.none
+
+    | NavigateToBranch(id, refName) ->
+        let branch =
+            state.repositoryTabs
+            |> List.tryFind (fun tab -> tab.id = id)
+            |> Option.bind (fun tab -> tab.branches)
+            |> Option.bind (fun data -> data.branches |> Array.tryFind (fun branch -> branch.refName = refName))
+
+        match branch with
+        | Some branch -> updateCore (BeginCommitNavigation(id, branch.oid, $"branch {branch.name}", true)) state
+        | None -> state, Cmd.none
+
+    | BeginCommitNavigation(id, oid, label, fresh) ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab ->
             let next =
                 { state with
                     repositoryTabs =
@@ -626,50 +654,68 @@ let rec private updateCore msg state =
                         |> List.map (fun item ->
                             if item.id = id then
                                 { item with
-                                    parentNavigation = Some oid
-                                    parentNavigationError = None
+                                    commitNavigation = Some oid
+                                    commitNavigationError = None
+                                    navigationLabel = label
                                 }
                             else
                                 item)
                 }
 
             if tab.history.commits |> Array.exists (fun commit -> commit.oid = oid) then
-                updateCore (ContinueParentNavigation(id, oid)) next
+                updateCore (ContinueCommitNavigation(id, oid)) next
             elif tab.history.requestId.IsSome then
                 next, Cmd.none
             elif
-                tab.history.error.IsSome
+                fresh
+                || tab.history.error.IsSome
                 || not tab.history.hasLoaded
                 || tab.history.nextCursor.IsNone
             then
                 next, Cmd.ofMsg (RefreshRepositoryHistory id)
             else
-                next, Cmd.ofMsg (ContinueParentNavigation(id, oid))
+                next, Cmd.ofMsg (ContinueCommitNavigation(id, oid))
         | _ -> state, Cmd.none
 
-    | CancelParentNavigation id ->
+    | CancelCommitNavigation id ->
         { state with
             repositoryTabs =
                 state.repositoryTabs
                 |> List.map (fun tab ->
                     if tab.id = id then
                         { tab with
-                            parentNavigation = None
-                            parentNavigationError = None
+                            commitNavigation = None
+                            commitNavigationError = None
                         }
                     else
                         tab)
         },
         Cmd.none
 
-    | ContinueParentNavigation(id, oid) ->
+    | ContinueCommitNavigation(id, oid) ->
         match
             state.repositoryTabs
-            |> List.tryFind (fun tab -> tab.id = id && tab.parentNavigation = Some oid)
+            |> List.tryFind (fun tab -> tab.id = id && tab.commitNavigation = Some oid)
         with
         | Some tab ->
             if tab.history.commits |> Array.exists (fun commit -> commit.oid = oid) then
-                updateCore (SelectRepositoryCommit(id, oid)) state
+                let revealed =
+                    { state with
+                        repositoryTabs =
+                            state.repositoryTabs
+                            |> List.map (fun item ->
+                                if item.id = id then
+                                    { item with
+                                        revealRevision = item.revealRevision + 1
+                                        selection =
+                                            item.selection
+                                            |> Option.map (fun selection -> { selection with diff = None })
+                                    }
+                                else
+                                    item)
+                    }
+
+                updateCore (SelectRepositoryCommit(id, oid)) revealed
             elif tab.history.requestId.IsSome then
                 state, Cmd.none
             elif tab.history.error.IsNone && tab.history.nextCursor.IsSome then
@@ -677,9 +723,9 @@ let rec private updateCore msg state =
             else
                 let error =
                     match tab.history.error with
-                    | Some error -> $"Could not open parent {oid}. Click its hash to retry. {error}"
+                    | Some error -> $"Could not open {tab.navigationLabel}. Select it again to retry. {error}"
                     | None ->
-                        $"Parent {oid} is not available in this repository's history. It may be missing from a shallow clone or no longer reachable."
+                        $"The commit for {tab.navigationLabel} ({oid}) is not available in this repository's history. It may be missing from a shallow clone or no longer reachable."
 
                 { state with
                     repositoryTabs =
@@ -687,8 +733,8 @@ let rec private updateCore msg state =
                         |> List.map (fun item ->
                             if item.id = id then
                                 { item with
-                                    parentNavigation = None
-                                    parentNavigationError = Some error
+                                    commitNavigation = None
+                                    commitNavigationError = Some error
                                 }
                             else
                                 item)
@@ -702,7 +748,19 @@ let rec private updateCore msg state =
             tab.selection
             |> Option.exists (fun selection -> selection.commit |> Option.exists (fun commit -> commit.oid = oid))
             ->
-            state, Cmd.none
+            { state with
+                repositoryTabs =
+                    state.repositoryTabs
+                    |> List.map (fun item ->
+                        if item.id = id then
+                            { item with
+                                commitNavigation = None
+                                commitNavigationError = None
+                            }
+                        else
+                            item)
+            },
+            Cmd.none
         | Some tab ->
             match tab.history.commits |> Array.tryFind (fun commit -> commit.oid = oid) with
             | Some commit ->
@@ -726,8 +784,8 @@ let rec private updateCore msg state =
                                 { item with
                                     selection = Some selection
                                     restoreFile = None
-                                    parentNavigation = None
-                                    parentNavigationError = None
+                                    commitNavigation = None
+                                    commitNavigationError = None
                                 }
                             else
                                 item)
@@ -1075,7 +1133,16 @@ let rec private updateCore msg state =
                                     return Error(string error)
                             }
 
-                        return OnRepositoryRefresh(id, requestId, result, status)
+                        let! branches =
+                            promise {
+                                try
+                                    let! branches = AppTauri.Git.branches repoId $"history-{requestId}-branches"
+                                    return Ok branches
+                                with error ->
+                                    return Error(string error)
+                            }
+
+                        return OnRepositoryRefresh(id, requestId, result, status, branches)
                 }
 
             { state with
@@ -1085,6 +1152,7 @@ let rec private updateCore msg state =
                         if item.id = id then
                             { item with
                                 history = history
+                                branchesError = if append then item.branchesError else None
                                 selection =
                                     item.selection
                                     |> Option.map (fun selection ->
@@ -1107,10 +1175,10 @@ let rec private updateCore msg state =
                 if append then
                     OnRepositoryHistory(tab.id, requestId, true, Error error)
                 else
-                    OnRepositoryRefresh(tab.id, requestId, Error error, Error(string error)))
+                    OnRepositoryRefresh(tab.id, requestId, Error error, Error(string error), Error(string error)))
         | _ -> state, Cmd.none
 
-    | OnRepositoryRefresh(id, requestId, result, status) ->
+    | OnRepositoryRefresh(id, requestId, result, status, branches) ->
         match
             state.repositoryTabs
             |> List.tryFind (fun tab -> tab.id = id && tab.history.requestId = Some requestId)
@@ -1124,7 +1192,17 @@ let rec private updateCore msg state =
                 updated.repositoryTabs
                 |> List.map (fun tab ->
                     if tab.id = id then
-                        { tab with workingTree = Some status }
+                        { tab with
+                            workingTree = Some status
+                            branches =
+                                match branches with
+                                | Ok data -> Some data
+                                | Error _ -> tab.branches
+                            branchesError =
+                                match branches with
+                                | Ok _ -> None
+                                | Error error -> Some error
+                        }
                     else
                         tab)
 
@@ -1181,8 +1259,8 @@ let rec private updateCore msg state =
         let navigation =
             state.repositoryTabs
             |> List.tryFind (fun tab -> tab.id = id && tab.history.requestId = Some requestId)
-            |> Option.bind (fun tab -> tab.parentNavigation)
-            |> Option.map (fun oid -> Cmd.ofMsg (ContinueParentNavigation(id, oid)))
+            |> Option.bind (fun tab -> tab.commitNavigation)
+            |> Option.map (fun oid -> Cmd.ofMsg (ContinueCommitNavigation(id, oid)))
             |> Option.defaultValue Cmd.none
 
         { state with repositoryTabs = tabs }, navigation
@@ -1622,8 +1700,8 @@ let update msg state =
                     |> List.map (fun tab ->
                         if tab.id = id then
                             { tab with
-                                parentNavigation = None
-                                parentNavigationError = None
+                                commitNavigation = None
+                                commitNavigationError = None
                             }
                         else
                             tab)

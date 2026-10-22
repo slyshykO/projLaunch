@@ -97,9 +97,17 @@ impl GitRunner {
         truncate: bool,
         allow_failure: bool,
     ) -> Result<Output> {
-        let mut child = command
-            .spawn()
-            .context("Cannot start Git; install Git and make it available on PATH")?;
+        let directory = command
+            .as_std()
+            .get_current_dir()
+            .unwrap_or(Path::new("."))
+            .display()
+            .to_string();
+        let mut child = command.spawn().with_context(|| {
+            format!(
+                "Cannot start Git in '{directory}'; check Git on PATH and the working directory"
+            )
+        })?;
         let mut stdout = child.stdout.take().unwrap();
         let mut stderr = child.stderr.take().unwrap();
         let mut bytes = Vec::new();
@@ -162,8 +170,9 @@ impl GitRunner {
         };
         if !status.success() && !truncated && !allow_failure {
             bail!(
-                "Git failed ({}): {}",
+                "Git failed ({}) in '{}': {}",
                 status,
+                directory,
                 String::from_utf8_lossy(&errors).trim()
             );
         }

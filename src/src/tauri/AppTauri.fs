@@ -84,6 +84,9 @@ module Git =
     let status (repoId: string) (operationId: string) : JS.Promise<GitProtocol.Status> =
         invoke "git_status" [ "repoId" ==> repoId; "operationId" ==> operationId ]
 
+    let branches (repoId: string) (operationId: string) : JS.Promise<GitProtocol.BranchList> =
+        invoke "git_branches" [ "repoId" ==> repoId; "operationId" ==> operationId ]
+
     let log
         (repoId: string)
         (operationId: string)

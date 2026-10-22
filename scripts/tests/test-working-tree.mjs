@@ -11,6 +11,7 @@ const requests = [];
 globalThis.isTauri = true;
 globalThis.window = { __TAURI_INTERNALS__: {
     invoke(command, args) {
+        if (command === 'git_branches') return Promise.resolve({ branches: [], head: null, currentBranch: null });
         return new Promise((resolve, reject) => requests.push({ command, params: args.params, resolve, reject }));
     },
 } };

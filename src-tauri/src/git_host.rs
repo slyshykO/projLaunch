@@ -144,15 +144,13 @@ async fn repository_status(
 }
 
 fn server_path() -> Result<PathBuf, String> {
-    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+    let executable = std::env::current_exe()
+        .map_err(|e| format!("Cannot determine the launcher executable path: {e}"))?;
     let adjacent = executable.with_file_name(if cfg!(windows) {
         "project-launch-git-server.exe"
     } else {
         "project-launch-git-server"
     });
-    if adjacent.is_file() {
-        return Ok(adjacent);
-    }
     // Tauri's beforeDevCommand/beforeBuildCommand prepares this target-specific sidecar.
     let development = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("binaries")
@@ -161,10 +159,21 @@ fn server_path() -> Result<PathBuf, String> {
             env!("PROJLAUNCH_TARGET"),
             env!("PROJLAUNCH_EXE_SUFFIX")
         ));
-    if development.is_file() {
-        return Ok(development);
+    let mut errors = Vec::new();
+    for path in [adjacent, development] {
+        match path.metadata() {
+            Ok(metadata) if metadata.is_file() => return Ok(path),
+            Ok(_) => errors.push(format!(
+                "Git server path is not a file: '{}'",
+                path.display()
+            )),
+            Err(error) => errors.push(format!("Cannot inspect '{}': {error}", path.display())),
+        }
     }
-    Err("Git server is missing. Build it with npm run build:git-server.".into())
+    Err(format!(
+        "Git server is unavailable. {}. Build it with npm run build:git-server.",
+        errors.join("; ")
+    ))
 }
 
 macro_rules! command {
@@ -203,6 +212,7 @@ pub async fn git_project_status(
     host.project_status(storage.get(id).await?).await
 }
 command!(git_log, LogParams, LogPage, "git.log");
+command!(git_branches, RepoParams, BranchList, "git.branches");
 command!(git_diff_files, DiffParams, Vec<DiffFile>, "git.diffFiles");
 command!(git_diff, PatchParams, Patch, "git.diff");
 command!(git_cancel, CancelParams, bool, "git.cancel");

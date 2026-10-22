@@ -31,6 +31,7 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
     let hello = session.clone();
     let open = session.clone();
     let status = session.clone();
+    let branches = session.clone();
     let log = session.clone();
     let files = session.clone();
     let patch = session.clone();
@@ -54,6 +55,7 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                     capabilities: [
                         "repo.open",
                         "git.status",
+                        "git.branches",
                         "git.log",
                         "git.diffFiles",
                         "git.diff",
@@ -99,6 +101,20 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                     session
                         .repo(&params.repo_id)?
                         .status(&operation.cancel)
+                        .await
+                }
+                .await
+                .map_err(rpc_error)
+            }
+        })
+        .add("git.branches", move |params: RepoParams| {
+            let session = branches.clone();
+            async move {
+                async {
+                    let operation = session.operation(&params.operation_id)?;
+                    session
+                        .repo(&params.repo_id)?
+                        .branches(&operation.cancel)
                         .await
                 }
                 .await

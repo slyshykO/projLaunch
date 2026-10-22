@@ -160,6 +160,7 @@ fn run<T>(
 ) -> Result<T, String> {
     match database {
         Ok(database) => operation(database).map_err(|error| {
+            let error = error.context(format!("Project database '{}'", database.path.display()));
             tracing::error!(error = %format!("{error:#}"), "Project storage operation failed");
             format!("{error:#}")
         }),

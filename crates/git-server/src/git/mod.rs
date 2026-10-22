@@ -1,3 +1,4 @@
+mod branches;
 mod diff;
 mod history;
 pub mod runner;
@@ -22,7 +23,11 @@ pub struct Repo {
 
 pub async fn open(path: &str, runner: GitRunner, cancel: &CancellationToken) -> Result<Arc<Repo>> {
     let directory = Path::new(path);
-    ensure!(directory.is_absolute(), "Repository path must be absolute");
+    ensure!(
+        directory.is_absolute(),
+        "Repository path must be absolute: '{}'",
+        directory.display()
+    );
     let inside = runner
         .run(
             directory,
@@ -32,7 +37,8 @@ pub async fn open(path: &str, runner: GitRunner, cancel: &CancellationToken) -> 
         .await?;
     ensure!(
         line(&inside)? == "true",
-        "A working tree is required (bare repositories are not supported)"
+        "A working tree is required (bare repositories are not supported): '{}'",
+        directory.display()
     );
     let root = runner
         .run(

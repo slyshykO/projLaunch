@@ -120,7 +120,7 @@ async fn open_project(storage: tauri::State<'_, Storage>, id: String) -> Result<
         }
     }
     cmd.spawn()
-        .map_err(|e| format!("can't run {}. {}", app, e))?;
+        .map_err(|e| format!("Cannot run IDE '{app}' for project '{path}': {e}"))?;
     Ok(())
 }
 
@@ -220,6 +220,7 @@ pub fn run() {
             git_host::git_status,
             git_host::git_project_status,
             git_host::git_log,
+            git_host::git_branches,
             git_host::git_diff_files,
             git_host::git_diff,
             git_host::git_cancel,

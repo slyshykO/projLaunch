@@ -71,3 +71,57 @@ export function attachSplitter(handle, onResize) {
         drag = undefined;
     };
 }
+
+// The left rail keeps its width locally while the repository tab stays mounted.
+export function attachBranchSplitter(handle, onResize) {
+    const panel = handle.parentElement;
+    const clamp = size => Math.max(180, Math.min(400, size));
+    const value = () => parseFloat(panel.style.getPropertyValue('--branches-width')) || 240;
+    let drag;
+    const show = size => {
+        panel.style.setProperty('--branches-width', `${size}px`);
+        handle.setAttribute('aria-valuenow', String(Math.round(size)));
+    };
+    const finish = event => {
+        if (!drag || event.pointerId !== drag.id) return;
+        const { id, size } = drag;
+        drag = undefined;
+        if (handle.hasPointerCapture(id)) handle.releasePointerCapture(id);
+        onResize(size);
+    };
+    const events = {
+        pointerdown(event) {
+            if (event.button !== 0 || drag) return;
+            event.preventDefault();
+            handle.focus();
+            drag = { id: event.pointerId, size: value() };
+            handle.setPointerCapture(event.pointerId);
+        },
+        pointermove(event) {
+            if (!drag || event.pointerId !== drag.id) return;
+            drag.size = clamp(event.clientX - panel.getBoundingClientRect().left);
+            show(drag.size);
+        },
+        pointerup: finish, pointercancel: finish, lostpointercapture: finish,
+        keydown(event) {
+            const step = event.shiftKey ? 32 : 8;
+            let size = value();
+            if (event.key === 'ArrowRight') size += step;
+            else if (event.key === 'ArrowLeft') size -= step;
+            else if (event.key === 'Home') size = 180;
+            else if (event.key === 'End') size = 400;
+            else return;
+            event.preventDefault();
+            size = clamp(size);
+            show(size);
+            onResize(size);
+        },
+        dblclick() { show(240); onResize(240); },
+    };
+    for (const [name, listener] of Object.entries(events)) handle.addEventListener(name, listener);
+    show(value());
+    return () => {
+        for (const [name, listener] of Object.entries(events)) handle.removeEventListener(name, listener);
+        if (drag && handle.hasPointerCapture(drag.id)) handle.releasePointerCapture(drag.id);
+    };
+}

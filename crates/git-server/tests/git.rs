@@ -72,6 +72,10 @@ async fn empty_repository_and_unborn_staged_diff() {
     let status = request(&client, "git.status", json!({"repoId":repo})).await;
     assert_eq!(status["branch"], "main");
     assert!(status["head"].is_null());
+    let branches = request(&client, "git.branches", json!({"repoId":repo})).await;
+    assert_eq!(branches["branches"], json!([]));
+    assert_eq!(branches["currentBranch"], "main");
+    assert!(branches["head"].is_null());
     let log = request(&client, "git.log", json!({"repoId":repo})).await;
     assert_eq!(log["commits"], json!([]));
     fixture.write("first.txt", "first\n");
@@ -83,6 +87,76 @@ async fn empty_repository_and_unborn_staged_diff() {
     )
     .await;
     assert!(patch["text"].as_str().unwrap().contains("+first"));
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn branches_include_unloaded_tips_tracking_unicode_and_detached_head() {
+    let fixture = Fixture::new();
+    fixture.write("file.txt", "root\n");
+    let root = fixture.commit("root");
+    fixture.git(&["branch", "feature/старе"]);
+    fixture.git(&["update-ref", "refs/remotes/origin/main", &root]);
+    fixture.git(&[
+        "symbolic-ref",
+        "refs/remotes/origin/HEAD",
+        "refs/remotes/origin/main",
+    ]);
+    fixture.git(&[
+        "remote",
+        "add",
+        "origin",
+        "https://example.invalid/repo.git",
+    ]);
+    fixture.git(&["config", "branch.main.remote", "origin"]);
+    fixture.git(&["config", "branch.main.merge", "refs/heads/main"]);
+    fixture.git(&["tag", "not-a-branch"]);
+    fixture.write("file.txt", "tip\n");
+    let tip = fixture.commit("tip");
+    let (client, repo) = fixture.connect().await;
+    let page = request(&client, "git.log", json!({"repoId":repo, "limit":1})).await;
+    assert_eq!(page["commits"].as_array().unwrap().len(), 1);
+    assert_eq!(page["commits"][0]["oid"], tip);
+    let list = request(&client, "git.branches", json!({"repoId":repo})).await;
+    assert_eq!(list["currentBranch"], "main");
+    assert_eq!(list["head"], tip);
+    let branches = list["branches"].as_array().unwrap();
+    assert_eq!(
+        branches.len(),
+        3,
+        "Tags and symbolic remote HEAD are excluded"
+    );
+    let old = branches
+        .iter()
+        .find(|b| b["name"] == "feature/старе")
+        .unwrap();
+    assert_eq!(old["oid"], root);
+    assert_eq!(old["refName"], "refs/heads/feature/старе");
+    assert_eq!(old["isRemote"], false);
+    let main = branches.iter().find(|b| b["name"] == "main").unwrap();
+    assert_eq!(main["isCurrent"], true);
+    assert_eq!(main["upstream"], "origin/main");
+    assert_eq!(main["tracking"], "ahead 1");
+    let remote = branches
+        .iter()
+        .find(|b| b["name"] == "origin/main")
+        .unwrap();
+    assert_eq!(remote["isRemote"], true);
+    assert_eq!(remote["isCurrent"], false);
+    fixture.git(&["checkout", "--detach", &root]);
+    let detached = request(&client, "git.branches", json!({"repoId":repo})).await;
+    assert!(detached["currentBranch"].is_null());
+    assert_eq!(detached["head"], root);
+    assert!(
+        detached["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|b| b["isCurrent"] == false)
+    );
+    fixture.git(&["branch", "-D", "feature/старе"]);
+    let refreshed = request(&client, "git.branches", json!({"repoId":repo})).await;
+    assert_eq!(refreshed["branches"].as_array().unwrap().len(), 2);
     client.shutdown().await;
 }
 
@@ -320,8 +394,40 @@ async fn binary_preview_limits_and_literal_paths() {
     .await;
     assert_eq!(preview["text"], "preview\n");
     assert_eq!(preview["untracked"], true);
+    // A file can disappear between listing and opening its diff. The RPC error
+    // must identify it even after crossing the sidecar/client boundary.
+    let info = request(&client, "repo.open", json!({"path":fixture.path()})).await;
+    fs::remove_file(fixture.path().join("--literal [x].txt")).unwrap();
+    let error = client.call::<_, Value>("git.diff", &json!({"repoId":repo,"operationId":"missing-file","target":{"kind":"untracked"},"path":"--literal [x].txt"})).await.unwrap_err().to_string();
+    let missing = Path::new(info["root"].as_str().unwrap()).join("--literal [x].txt");
+    assert!(error.contains(missing.to_str().unwrap()), "{error}");
+    assert!(error.contains("not in the selected diff"), "{error}");
     let error = client.call::<_, Value>("git.diff", &json!({"repoId":repo,"operationId":"traversal","target":{"kind":"untracked"},"path":"../outside"})).await.unwrap_err();
     assert!(error.to_string().contains("relative"));
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn repository_errors_identify_the_directory_across_rpc() {
+    let directory = TempDir::new().unwrap();
+    let missing = directory.path().join("missing репозиторий");
+    let client = Client::connect(Path::new(env!("CARGO_BIN_EXE_project-launch-git-server")))
+        .await
+        .unwrap();
+    // Cover both failure to spawn in a missing directory and Git rejecting an
+    // existing directory that is not a repository.
+    for path in [&missing, directory.path()] {
+        let error = client
+            .call::<_, Value>(
+                "repo.open",
+                &json!({"path":path,"operationId":"unavailable-repository"}),
+            )
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(path.to_str().unwrap()), "{error}");
+        assert!(error.contains("Git RPC -32000"), "{error}");
+    }
     client.shutdown().await;
 }
 

@@ -12,6 +12,7 @@ globalThis.isTauri = true;
 globalThis.window = Object.assign(new EventTarget(), { __TAURI_INTERNALS__: {
     metadata: { currentWindow: { label: 'main' } },
     invoke(command, args) {
+        if (command === 'git_branches') return Promise.resolve({ branches: [], head: null, currentBranch: null });
         calls.push(command);
         if (command === 'get_storage_access') return accessError ? Promise.reject(accessError) : Promise.resolve(access);
         if (command === 'load_workspace') return Promise.resolve({ version: 1, tabs: [], activeRoot: undefined });

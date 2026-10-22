@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -21,6 +21,7 @@ const INSERT: &str = "INSERT INTO projects
 
 pub(super) struct Database {
     pub(super) connection: Connection,
+    pub(super) path: PathBuf,
     access: Access,
     owner_token: Option<String>,
     // Keep the lock until after the SQLite connection is closed.
@@ -56,9 +57,14 @@ impl Database {
     }
 
     pub(super) fn open(app_data_dir: &Path) -> Result<Self> {
+        let path = app_data_dir.join("projlaunch.db");
+        Self::open_at(app_data_dir, &path)
+            .with_context(|| format!("Cannot initialize project database '{}'", path.display()))
+    }
+
+    fn open_at(app_data_dir: &Path, path: &Path) -> Result<Self> {
         std::fs::create_dir_all(app_data_dir)
             .with_context(|| format!("Cannot create {}", app_data_dir.display()))?;
-        let path = app_data_dir.join("projlaunch.db");
         let mut writer_lock = ownership::try_lock(app_data_dir)?;
         let deadline = Instant::now() + Duration::from_secs(5);
         while writer_lock.is_none() {
@@ -66,7 +72,7 @@ impl Database {
             // Open strictly read-only; never migrate or import in a reader.
             let read = (|| -> Result<Self> {
                 let connection =
-                    Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+                    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
                 connection.busy_timeout(Duration::from_secs(5))?;
                 let version: i64 =
                     connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -81,6 +87,7 @@ impl Database {
                 );
                 Ok(Self {
                     connection,
+                    path: path.to_owned(),
                     access: Access {
                         can_write: false,
                         owner_pid,
@@ -101,7 +108,7 @@ impl Database {
             }
         }
         let mut connection =
-            Connection::open(&path).with_context(|| format!("Cannot open {}", path.display()))?;
+            Connection::open(path).with_context(|| format!("Cannot open {}", path.display()))?;
         connection.busy_timeout(Duration::from_secs(5))?;
         connection.pragma_update(None, "foreign_keys", true)?;
         super::migrations::apply(&mut connection)?;
@@ -109,6 +116,7 @@ impl Database {
         let token = ownership::claim(&mut connection)?;
         Ok(Self {
             connection,
+            path: path.to_owned(),
             access: Access {
                 can_write: true,
                 owner_pid: Some(std::process::id()),
@@ -193,7 +201,7 @@ impl Database {
 impl Drop for Database {
     fn drop(&mut self) {
         if let Err(error) = self.release() {
-            tracing::error!(%error, "Could not clear database ownership; next writer will recover the record");
+            tracing::error!(path = %self.path.display(), error = %format!("{error:#}"), "Could not clear database ownership; next writer will recover the record");
         }
     }
 }
