@@ -21,6 +21,7 @@ tokio-util.workspace = true
 futures-util.workspace = true
 json-rpc-rs = { git = "https://github.com/slyshykO/json-rpc-rs", rev = "226e48afcc9557adf9b2ce04c72a27a37858be15" }
 uuid = { version = "1", features = ["v4"] }
+notify = "8.2"
 axum = { version = "0.8", features = ["ws"], optional = true }
 
 [dev-dependencies]

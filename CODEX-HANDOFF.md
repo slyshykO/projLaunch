@@ -8,6 +8,44 @@
 Актуальные инструкции по сборке: [README.md](README.md).
 Контракт Git API: [crates/git-server/README.md](crates/git-server/README.md).
 
+## Автоматическое наблюдение за Git (25 октября 2026)
+
+Git-сервер поддерживает `repo.subscribe` / `repo.unsubscribe` и notification
+`repo.changed` поверх stdio/WS; это добавление capability к протоколу v1.
+`notify` наблюдает worktree, gitDir и commonDir, включая linked worktrees.
+События объединяются за 300 мс; index/worktree инвалидируют статус и изменяемые
+diff, HEAD/refs/config — также историю и ветки. Чтение Git не вызывает цикл
+обновлений: access events, служебные lock/objects/logs и timestamp каталогов
+внутри Git отфильтрованы. Память очередей ограничена; переполнение требует resync.
+
+`git-client` отделяет notifications от RPC-ответов; Tauri добавляет endpoint и
+передаёт их frontend. `GitWatch.fs` и `_GitWatch.js` держат одну подписку на
+endpoint/root для карточек и вкладок, закрывают её после исчезновения последнего
+потребителя и переподключаются с задержкой 1–30 секунд. Ошибки видны в UI;
+после подписки выполняется обновление для покрытия пропущенных событий.
+
+Активная вкладка обновляется автоматически; фоновые ждут выбора. События во время
+read сохраняются для следующего прохода. История заменяется после загрузки прежнего
+количества страниц, с сохранением scroll anchor и выбора; при ошибке старые строки
+остаются. Открытый изменяемый diff перечитывается, пока файл есть в своей группе.
+Ручной Refresh и обновление по фокусу сохраняют прежнее поведение.
+Workspace JSON и SQLite не менялись.
+
+Регрессии: реальные файловые события, index/refs/packed refs, linked worktree,
+изоляция сессий и unsubscribe в Rust; `test-git-watching.mjs`,
+`test-git-watch-lifecycle.mjs` и дополненный `test-project-git.mjs` на frontend.
+Проверены 21 frontend-скрипт, 29 тестов Git workspace, 42 native-теста и отдельный
+opt-in WSL-тест в Ubuntu с реальными notifications; Clippy обоих Rust workspace,
+Fable/Vite, Fantomas и cargo fmt. Собран Linux sidecar для Ubuntu 22.04.
+Финальная Windows debug-сборка и native-проверки используют
+`build/obj/watch-native` как Cargo target-dir, потому что обычный debug sidecar
+занят работающим приложением. Пользовательская БД в тестах не использовалась;
+SSH-путь использует тот же notification transport, отдельный SSH-host не запускался.
+Наблюдение зависит от filesystem notifications: сетевые/shared mounts могут не
+сообщать внешние изменения. Игнорируемые build outputs могут вызывать проверки
+статуса, но не перезагрузку истории. Создание нового репозитория там, где discovery
+ещё не нашёл root, обнаруживается прежним Refresh/фокусом.
+
 ## Восстановление истории и прокрутки (25 октября 2026)
 
 Workspace JSON v3 сохраняет для каждой вкладки количество загруженных коммитов,
@@ -611,8 +649,9 @@ caller-generated `operationId` для операций. Batch отключён, 
 - HTTP/WS сохранён под feature `network`, не включён в обычную сборку sidecar.
   Это development loopback-адаптер, а не готовый удалённый endpoint.
 
-Синтетические fetchDemo/watch/unwatch из прототипа не перенесены. Нет Git-записей,
-watchers, standalone TLS/auth или постоянных repository bindings в БД.
+Синтетические fetchDemo/watch/unwatch из прототипа не перенесены; реальные
+subscriptions добавлены отдельно. Нет Git-записей, standalone TLS/auth или
+постоянных repository bindings в БД.
 WSL/SSH deployment реализован, SSH использует аутентификацию OpenSSH.
 
 ## Сборка Git sidecar
@@ -700,9 +739,6 @@ whitespace использовался `git -c core.whitespace=cr-at-eol diff --c
 - Удаление проекта из launcher: нет UI-действия и команды storage/IPC.
   Удаление должно затрагивать запись каталога и её связи, сохраняя файлы проекта
   и репозитории на диске.
-- Watchers/subscriptions для автоматического обновления Git при изменениях.
-  Сейчас работают ручной Refresh, обновление по фокусу и проверки после
-  загрузки/сохранения проектов; наблюдения за файлами и refs нет.
 - Подключение отмены выполняющегося Git-запроса к UI. `git.cancel` уже реализован
   в сервере, Tauri и `AppTauri.Git`, но frontend его не вызывает.
   `CancelCommitNavigation` прекращает дальнейшую загрузку страниц; текущий read

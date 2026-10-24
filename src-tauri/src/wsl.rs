@@ -234,7 +234,7 @@ mod tests {
             .call(
                 "git.diff",
                 &PatchParams {
-                    repo_id: repo.repo_id,
+                    repo_id: repo.repo_id.clone(),
                     operation_id: "diff".into(),
                     target: DiffTarget::Unstaged,
                     path: "hello світ.txt".into(),
@@ -247,6 +247,51 @@ mod tests {
                 .as_deref()
                 .is_some_and(|text| text.contains("+after")),
             "Wrong WSL diff"
+        );
+        let mut events = client.events();
+        let _: bool = client
+            .call(
+                "repo.subscribe",
+                &SubscribeParams {
+                    repo_id: repo.repo_id.clone(),
+                    subscription_id: "wsl-watch".into(),
+                },
+            )
+            .await?;
+        shell(
+            distro,
+            "printf 'another edit\\n' > \"$1/hello світ.txt\"",
+            &[&root],
+        )
+        .await?;
+        let event =
+            tokio::time::timeout(std::time::Duration::from_secs(8), events.recv()).await??;
+        ensure!(
+            matches!(event, git_client::Event::Changed(ref change) if change.subscription_id == "wsl-watch" && change.working_tree && !change.history && change.error.is_none()),
+            "Wrong WSL file notification: {event:?}"
+        );
+        shell(distro, "git -C \"$1\" tag watch-test", &[&root]).await?;
+        tokio::time::timeout(std::time::Duration::from_secs(8), async {
+            loop {
+                if let git_client::Event::Changed(change) = events.recv().await? {
+                    ensure!(change.error.is_none(), "WSL watch failed: {change:?}");
+                    if change.history {
+                        return anyhow::Ok(());
+                    }
+                }
+            }
+        })
+        .await??;
+        ensure!(
+            client
+                .call::<_, bool>(
+                    "repo.unsubscribe",
+                    &UnsubscribeParams {
+                        subscription_id: "wsl-watch".into()
+                    }
+                )
+                .await?,
+            "WSL subscription was not released"
         );
         client.shutdown().await;
         shell(

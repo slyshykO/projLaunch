@@ -87,6 +87,7 @@ let timer onTick =
 
 let subscriptions model : Sub<Msg> =
     [
+        yield! GitWatch.subscriptions model
         [ "frontend-logging" ], (fun _ -> FrontendLog.start ())
         [ "timer" ], timer Tick
         if AppTauri.Core.isAvailable () then

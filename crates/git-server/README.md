@@ -123,7 +123,7 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib wsl_install_reuse_repair_r
 
 It uses a disposable `/tmp` directory, checks install/reuse/repair, version
 selection and protocol rejection, Unicode/quoted paths, discovery, status,
-history, diff, reconnect and process exit. It does not read the app database.
+history, diff, filesystem/ref subscriptions, reconnect and process exit. It does not read the app database.
 Frontend routing/persistence regression: `node scripts/tests/test-wsl-endpoints.mjs`
 after compiling Fable.
 
@@ -174,14 +174,16 @@ checks frontend routing, host/user/alias isolation and workspace restoration.
 ## Protocol v1
 
 Each request/response is one UTF-8 JSON object followed by LF (NDJSON). Requests
-use named object parameters. All operations require an ID; valid notifications
-have no side effects. Batch requests return `-32005`.
+use named object parameters. All client operations require an ID; client
+notifications have no side effects. Batch requests return `-32005`.
 
 | Method | Parameters | Result |
 | --- | --- | --- |
 | `server.hello` | `{}` | `serverVersion`, `protocolVersion`, `gitVersion`, `capabilities` |
 | `project.discover` | `path`, `operationId` | `roots`, `warnings` (paths resolved in the server environment) |
 | `repo.open` | `path`, `operationId` | `repoId`, `root`, `gitDir`, `commonDir` |
+| `repo.subscribe` | `repoId`, `subscriptionId` | `true` after filesystem observation is installed |
+| `repo.unsubscribe` | `subscriptionId` | whether a subscription was released |
 | `git.status` | `repoId`, `operationId` | HEAD/branch/upstream, ahead/behind, entries |
 | `git.branches` | `repoId`, `operationId` | all local/remote branch tips, current branch and HEAD |
 | `git.log` | `repoId`, `operationId`, optional `cursor`, `limit` | commits and optional `nextCursor` |
@@ -250,12 +252,42 @@ link target. Working-tree/index reads reflect live files; refresh if they change
 between listing and selection. Conflict paths use Git's combined conflict patch;
 the separate conflict status remains available in `git.status`.
 
+## Repository subscriptions
+
+`repo.subscribe` is an additive protocol v1 capability, available over stdio and
+WebSocket. HTTP rejects it because it has no notification stream. The caller
+chooses a unique `subscriptionId` (1–128 bytes) and starts receiving
+`{"jsonrpc":"2.0","method":"repo.changed","params":{"subscriptionId":"...","repoId":"...","history":true,"workingTree":true,"error":null}}`.
+Notifications may precede the subscribe response; register a receiver first.
+Subscribe success must also trigger a fresh read to cover the registration gap.
+Flags invalidate data; they do not contain snapshots or change cursor semantics.
+
+Native watchers observe the worktree, gitDir and commonDir, avoiding overlapping
+registrations. Changes are coalesced in fixed 300 ms windows with bounded memory.
+Index/worktree events set `workingTree`; HEAD, refs, packed refs, config, shallow
+and reftable changes also set `history`. Git object/reflog writes, temporary locks,
+access events and directory timestamp changes inside Git metadata are filtered.
+Errors and notification overflow require resynchronization; a watcher error
+requires a new subscription. Native notification support depends on the filesystem;
+network/shared mounts can miss external edits. Ignored worktree files are not
+filtered, so build outputs may trigger coalesced status reads.
+
+Subscriptions are connection-scoped (maximum 128), rejected on duplicate IDs,
+and released on unsubscribe or disconnect. Unsubscribe waits for its notification
+task to stop; already queued events can still arrive and must be ignored by a
+disposed consumer. The client forwards notifications separately from RPC replies
+through a bounded broadcast queue. Lagging consumers must resynchronize. Tauri
+forwards endpoint-qualified events; frontend subscriptions share each root between
+cards and tabs, retry failures with 1–30 second backoff, and release listeners and
+server watchers when no longer needed. Git handles are reopened after reconnect.
+
 ## Bounds and scope
 
 Git commands use argument arrays, literal pathspecs, disabled external diff and
 textconv, no terminal prompting, and optional index locking disabled. There are
-8 Git process slots per server, 32 ordinary requests plus 4 reserved cancellation
-requests per connection, and 16 queued responses. Frames are capped at 1 MiB;
+8 Git process slots per server, 32 ordinary requests plus 4 reserved cancellation/unsubscribe
+requests per connection, and 16 queued responses/notifications. The client limits
+ordinary calls to 24 in flight and reserves 4 control slots. Frames are capped at 1 MiB;
 oversize responses return `-32004`, malformed/oversize input or overload can close
 the connection. Each process has a 30-second timeout, 8 MiB ordinary output cap
 and 64 KiB stderr cap. A timeout, cancellation or output limit kills and waits for
@@ -267,7 +299,7 @@ to 1024 distinct starting OIDs. The captured OIDs are passed through Git's stdin
 to avoid Windows command-line limits while keeping pagination stable. These are
 explicit errors/refresh conditions, never silent partial results.
 
-No Git mutation methods, watchers or standalone TLS/authentication layer are
+No Git mutation methods or standalone TLS/authentication layer are
 implemented; SSH transport uses OpenSSH authentication and encryption. The prototype HTTP/WS
 adapter remains behind the optional `network` feature for development on loopback;
 it is not enabled in the sidecar build and is not a production remote endpoint.

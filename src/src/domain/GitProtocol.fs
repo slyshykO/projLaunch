@@ -32,6 +32,17 @@ let repositoryLabel endpoint name =
     | Some value when value.kind = "wsl" || value.kind = "ssh" -> name + " [" + endpointLabel endpoint + "]"
     | _ -> name
 
+let repositoryKey endpoint root = endpointKey endpoint + "\n" + root
+
+type ChangeEvent =
+    {
+        endpoint: Endpoint option
+        subscriptionId: string option
+        history: bool
+        workingTree: bool
+        error: string option
+    }
+
 type RepositoryStatus =
     {
         root: string

@@ -45,6 +45,24 @@ window focus reload the active repository from a fresh snapshot. Failed reads
 keep previously loaded rows visible; Refresh also recovers from expired cursors
 or a restarted server.
 
+Git updates also arrive automatically from filesystem subscriptions in each
+repository's local, WSL or SSH server. One subscription is shared by project
+cards and tabs for the same endpoint/worktree. Working-tree and index edits
+refresh status and the selected mutable diff, including further edits to an
+already dirty file. HEAD, branch, tag and configuration changes also refresh
+history and branches. Linked worktrees observe their separate index/HEAD and
+shared refs. Bursts are coalesced over 300 ms; changes arriving during a read
+are retained for another update.
+
+Automatic history refresh keeps the loaded depth, selection and scroll anchor;
+the old rows remain visible until the replacement pages are ready. Background
+tabs defer reads until selected. Closing the last card/tab reference releases
+its subscription. Disconnects retry with a bounded backoff and invalidate views
+after reconnecting. Watch errors show a warning; manual Refresh and focus refresh
+remain available. Observation depends on native filesystem notifications; some
+network/shared mounts may not report external changes reliably. Ignored build
+outputs can cause coalesced status checks, but do not reload history.
+
 A left sidebar lists all local and remote-tracking branches, independently of
 loaded history pages. Filter names, switch between a flat list and a tree grouped
 by `/`, or collapse individual groups. The current branch is marked; full refs,
@@ -579,6 +597,8 @@ dotnet fable src -o ./src/bin/fable-js --configuration Debug
 node scripts/tests/test-project-editor.mjs
 node scripts/tests/test-project-git.mjs
 node scripts/tests/test-about-version.mjs
+node scripts/tests/test-git-watching.mjs
+node scripts/tests/test-git-watch-lifecycle.mjs
 node scripts/tests/test-project-menu.mjs
 node scripts/tests/test-desktop-tabs.mjs
 node scripts/tests/test-repository-history.mjs

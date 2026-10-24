@@ -23,7 +23,8 @@ let private ProjectGitIndicators (check: ProjectGitCheck option) (dispatch: Msg 
         prop.children [
             match check with
             | None -> Html.none
-            | Some check when check.isLoading -> note "Checking Git…" "Checking associated repositories"
+            | Some check when check.isLoading && check.result.IsNone ->
+                note "Checking Git…" "Checking associated repositories"
             | Some check ->
                 match check.result, check.error with
                 | _, Some error -> note "Git unavailable" error
@@ -347,6 +348,22 @@ let View (state: State) dispatch =
         pageTheme state
         prop.children [
             DesktopTabs.TabBar state.repositoryTabs state.activeRepositoryTab dispatch
+            let watchErrors =
+                watchedRepositories state
+                |> List.choose (fun (endpoint, root) ->
+                    state.gitWatchErrors
+                    |> Map.tryFind (GitProtocol.repositoryKey endpoint root)
+                    |> Option.map (fun error -> $"{GitProtocol.endpointLabel endpoint} · {root}: {error}"))
+
+            if not watchErrors.IsEmpty then
+                Html.div [
+                    prop.role "status"
+                    prop.className "shrink-0 px-4 py-2 bg-warning/15 text-sm"
+                    prop.title (String.concat "\n" watchErrors)
+                    prop.text
+                        $"Automatic Git updates unavailable for {watchErrors.Length} repositories. Retrying automatically; Refresh is still available."
+                ]
+
             if isStorageReadOnly state then
                 Html.div [
                     prop.role "status"
@@ -361,12 +378,14 @@ let View (state: State) dispatch =
                         $"Read-only database: another ProjLaunch instance{owner} owns write access. Projects and layout changes will not be saved. Restart this window after the owner exits to enable changes."
                     )
                 ]
+
             if state.workspaceLoading then
                 Html.p [
                     prop.role "status"
                     prop.className "px-4 py-2 text-sm"
                     prop.text "Restoring workspace…"
                 ]
+
             match state.workspaceError with
             | Some error ->
                 Html.div [
@@ -389,6 +408,7 @@ let View (state: State) dispatch =
                     ]
                 ]
             | None -> Html.none
+
             match state.projectEditor with
             | Some project ->
                 Html.div [
@@ -403,8 +423,10 @@ let View (state: State) dispatch =
                     ]
                 ]
             | None -> Html.none
+
             if state.isAboutOpen then
                 AboutDialog state dispatch
+
             Html.main [
                 prop.id "main-view"
                 prop.className "flex-1 min-h-0 overflow-hidden"

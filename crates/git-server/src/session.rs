@@ -23,6 +23,7 @@ pub struct Session {
     pub repositories: Mutex<HashMap<String, Arc<Repo>>>,
     pub cursors: Mutex<HashMap<String, Cursor>>,
     operations: Mutex<HashMap<String, CancellationToken>>,
+    subscriptions: tokio::sync::Mutex<HashMap<String, crate::watcher::Subscription>>,
 }
 
 pub struct Operation {
@@ -45,6 +46,7 @@ impl Session {
             repositories: Mutex::default(),
             cursors: Mutex::default(),
             operations: Mutex::default(),
+            subscriptions: tokio::sync::Mutex::default(),
         })
     }
     pub fn operation(self: &Arc<Self>, id: &str) -> Result<Operation> {
@@ -65,6 +67,42 @@ impl Session {
     pub fn cancel(&self, id: &str) -> bool {
         if let Some(token) = self.operations.lock().unwrap().get(id) {
             token.cancel();
+            true
+        } else {
+            false
+        }
+    }
+    pub async fn subscribe(&self, params: git_protocol::SubscribeParams) -> Result<bool> {
+        ensure!(
+            !params.subscription_id.is_empty() && params.subscription_id.len() <= 128,
+            "subscriptionId must contain 1–128 bytes"
+        );
+        let outgoing = self
+            .outgoing
+            .clone()
+            .context("Subscriptions require a streaming transport")?;
+        let repo = self.repo(&params.repo_id)?;
+        let mut subscriptions = self.subscriptions.lock().await;
+        ensure!(!self.closed.is_cancelled(), "Session closed");
+        ensure!(
+            !subscriptions.contains_key(&params.subscription_id),
+            "Duplicate subscriptionId"
+        );
+        ensure!(subscriptions.len() < 128, "Too many subscriptions");
+        let watch = crate::watcher::subscribe(
+            repo,
+            params.subscription_id.clone(),
+            outgoing,
+            self.closed.child_token(),
+        )
+        .await?;
+        subscriptions.insert(params.subscription_id, watch);
+        Ok(true)
+    }
+    pub async fn unsubscribe(&self, id: &str) -> bool {
+        let watch = self.subscriptions.lock().await.remove(id);
+        if let Some(watch) = watch {
+            watch.close().await;
             true
         } else {
             false
@@ -121,6 +159,10 @@ impl Session {
     }
     pub async fn shutdown(&self) {
         self.closed.cancel();
+        let subscriptions = std::mem::take(&mut *self.subscriptions.lock().await);
+        for subscription in subscriptions.into_values() {
+            subscription.close().await;
+        }
         self.cursors.lock().unwrap().clear();
         self.repositories.lock().unwrap().clear();
     }

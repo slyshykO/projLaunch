@@ -24,6 +24,7 @@
     <Compile Include="src/domain/ProjectData.fs" />
     <Compile Include="src/Debug.fs" />
     <Compile Include="src/State.fs" />
+    <Compile Include="src/GitWatch.fs" />
     <Compile Include="src/ui/ProjectMenu.fs" />
     <Compile Include="src/ui/SvgIcons.fs" />
     <Compile Include="src/ui/CommitFiles.fs" />

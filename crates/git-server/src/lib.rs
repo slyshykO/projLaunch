@@ -12,3 +12,4 @@ pub mod git;
 pub mod network;
 pub mod session;
 pub mod transport;
+mod watcher;

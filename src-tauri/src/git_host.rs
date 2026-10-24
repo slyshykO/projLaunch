@@ -10,18 +10,21 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicU64, Ordering},
     },
 };
+use tauri::Emitter;
 use tokio::sync::{Mutex, Semaphore};
 
 type ConnectionSlot = Arc<Mutex<Option<Arc<Client>>>>;
+type EventSink = Arc<dyn Fn(GitEvent) + Send + Sync>;
 
 pub struct GitHost {
     connections: Mutex<HashMap<Endpoint, ConnectionSlot>>,
     project_checks: Semaphore,
     next_check: AtomicU64,
+    events: OnceLock<EventSink>,
 }
 
 impl Default for GitHost {
@@ -30,11 +33,22 @@ impl Default for GitHost {
             connections: Mutex::new(HashMap::new()),
             project_checks: Semaphore::new(4),
             next_check: AtomicU64::new(1),
+            events: OnceLock::new(),
         }
     }
 }
 
 impl GitHost {
+    pub fn set_app(&self, app: tauri::AppHandle) {
+        // Keep the transport independent of a WebView runtime (also in native
+        // tests). Only the application entry point installs the UI event sink.
+        let _ = self.events.set(Arc::new(move |event| {
+            if let Err(error) = app.emit_to("main", "git-repository-changed", event) {
+                tracing::warn!(%error, "Could not forward Git notification");
+            }
+        }));
+    }
+
     async fn client(&self, endpoint: &Endpoint) -> Result<Arc<Client>, String> {
         endpoint.validate().map_err(|e| e.to_string())?;
         let slot = self
@@ -60,6 +74,46 @@ impl GitHost {
             }
             .map_err(|e| format!("{e:#}"))?,
         );
+        if let Some(emit) = self.events.get().cloned() {
+            let endpoint = endpoint.clone();
+            let mut events = client.events();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    let (subscription_id, history, working_tree, error, closed) =
+                        match events.recv().await {
+                            Ok(git_client::Event::Changed(event)) => (
+                                Some(event.subscription_id),
+                                event.history,
+                                event.working_tree,
+                                event.error,
+                                false,
+                            ),
+                            Ok(git_client::Event::Disconnected(error)) => {
+                                (None, true, true, Some(error), true)
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => (
+                                None,
+                                true,
+                                true,
+                                Some("Git notifications were missed; reconnecting".into()),
+                                false,
+                            ),
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        };
+                    let event = GitEvent {
+                        endpoint: endpoint.clone(),
+                        subscription_id,
+                        history,
+                        working_tree,
+                        error,
+                    };
+                    emit(event);
+                    if closed {
+                        break;
+                    }
+                }
+            });
+        }
         *connection = Some(client.clone());
         tracing::info!(?endpoint, "Git server connected");
         Ok(client)
@@ -158,6 +212,78 @@ impl GitHost {
             result.repositories.push(entry);
         }
         Ok(result)
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitEvent {
+    endpoint: Endpoint,
+    subscription_id: Option<String>,
+    history: bool,
+    working_tree: bool,
+    error: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WatchParams {
+    path: String,
+    subscription_id: String,
+}
+
+#[tauri::command]
+pub async fn git_watch(
+    host: tauri::State<'_, GitHost>,
+    endpoint: Option<Endpoint>,
+    params: WatchParams,
+) -> Result<bool, String> {
+    let client = host.client(&endpoint.unwrap_or_default()).await?;
+    let repository: Repository = client
+        .call(
+            "repo.open",
+            &OpenParams {
+                path: params.path,
+                operation_id: format!("watch-{}", params.subscription_id),
+            },
+        )
+        .await
+        .map_err(|e| format!("{e:#}"))?;
+    client
+        .call(
+            "repo.subscribe",
+            &SubscribeParams {
+                repo_id: repository.repo_id,
+                subscription_id: params.subscription_id,
+            },
+        )
+        .await
+        .map_err(|e| format!("{e:#}"))
+}
+
+#[tauri::command]
+pub async fn git_unwatch(
+    host: tauri::State<'_, GitHost>,
+    endpoint: Option<Endpoint>,
+    params: UnsubscribeParams,
+) -> Result<bool, String> {
+    // Disposing a view must never start/reconnect a server just to unsubscribe.
+    let slot = host
+        .connections
+        .lock()
+        .await
+        .get(&endpoint.unwrap_or_default())
+        .cloned();
+    let client = match slot {
+        Some(slot) => slot.lock().await.clone(),
+        None => None,
+    };
+    match client.filter(|client| !client.is_closed()) {
+        Some(client) => client
+            .call("repo.unsubscribe", &params)
+            .await
+            .map_err(|e| format!("{e:#}")),
+        None => Ok(false),
     }
 }
 
@@ -385,6 +511,56 @@ mod tests {
             environment: Default::default(),
             remote: None,
         }
+    }
+
+    #[tokio::test]
+    async fn subscription_events_keep_endpoint_identity_and_report_disconnect() {
+        let temp = tempfile::tempdir().unwrap();
+        git(temp.path(), &["init", "--quiet"]);
+        let host = GitHost::default();
+        let (tx, mut events) = tokio::sync::mpsc::unbounded_channel();
+        assert!(
+            host.events
+                .set(Arc::new(move |event| {
+                    let _ = tx.send(event);
+                }))
+                .is_ok()
+        );
+        let client = host.client(&Endpoint::Local).await.unwrap();
+        let (repository, _) = repository_status(&client, temp.path().to_str().unwrap(), 1)
+            .await
+            .unwrap();
+        client
+            .call::<_, bool>(
+                "repo.subscribe",
+                &SubscribeParams {
+                    repo_id: repository.repo_id,
+                    subscription_id: "host-watch".into(),
+                },
+            )
+            .await
+            .unwrap();
+        fs::write(temp.path().join("new.txt"), "observed").unwrap();
+        let event = tokio::time::timeout(std::time::Duration::from_secs(8), events.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(event.endpoint, Endpoint::Local);
+        assert_eq!(event.subscription_id.as_deref(), Some("host-watch"));
+        assert!(event.working_tree && !event.history && event.error.is_none());
+        host.shutdown().await;
+        tokio::time::timeout(std::time::Duration::from_secs(8), async {
+            loop {
+                let event = events.recv().await.unwrap();
+                if event.subscription_id.is_none() {
+                    assert_eq!(event.endpoint, Endpoint::Local);
+                    assert!(event.error.is_some());
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
     }
 
     #[tokio::test]

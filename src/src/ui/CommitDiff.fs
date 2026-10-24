@@ -101,7 +101,7 @@ let Panel (tabId: string) (selection: CommitFiles) (diff: CommitDiff) dispatch =
 
     let diffContent =
         [
-            if diff.requestId.IsSome then
+            if diff.requestId.IsSome && diff.patch.IsNone then
                 Html.p [ prop.role "status"; prop.className "p-4"; prop.text "Loading diff…" ]
             else
                 match diff.error, diff.patch with

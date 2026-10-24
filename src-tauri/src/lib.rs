@@ -145,6 +145,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(git_host::GitHost::default())
         .setup(|app| {
+            app.state::<git_host::GitHost>()
+                .set_app(app.handle().clone());
             let directory = app.path().app_data_dir().map_err(|error| error.to_string());
             app.manage(logging::Logging::start(
                 directory.as_deref().map_err(String::as_str),
@@ -212,6 +214,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_data_dir,
+            git_host::git_watch,
+            git_host::git_unwatch,
             get_projects,
             get_storage_access,
             load_workspace,

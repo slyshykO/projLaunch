@@ -15,7 +15,7 @@ globalThis.window = {
         },
     },
 };
-const { init, update, Msg } = await import('../../src/bin/fable-js/src/State.js');
+const { init, update, Msg, watchedRepositories } = await import('../../src/bin/fable-js/src/State.js');
 const { ProjectGitIndicators } = await import('../../src/bin/fable-js/src/ui/View.js');
 const cases = new Msg(0, []).cases();
 const step = (state, name, ...fields) => {
@@ -51,14 +51,21 @@ const newCompletion = execute(command);
 requests[1].resolve(summary(false));
 state = update(await newCompletion, state)[0];
 assert.equal(checkFor(state).result.repositories[0].dirty, false);
+assert.equal(Array.from(watchedRepositories(state)).length, 1);
+const withTab = step(state, 'OpenRepositoryTab', summary(false).repositories[0])[0];
+assert.equal(Array.from(watchedRepositories(withTab)).length, 1, 'A tab and card share one observer');
+const withRemote = step(withTab, 'OpenRepositoryTab', { ...summary(false).repositories[0], endpoint: { kind: 'wsl', distribution: 'Ubuntu' } })[0];
+assert.equal(Array.from(watchedRepositories(withRemote)).length, 2, 'Equal roots in distinct endpoints have separate observers');
 assert.equal(checkFor(state).isLoading, false);
 assert.equal(update(oldMessage, state)[0], state, 'An old result cannot overwrite a newer result');
 
 [state, command] = step(state, 'RefreshProjectGit', 'fixture');
 const failed = execute(command);
+assert.equal(Array.from(watchedRepositories(state)).length, 1, 'A refresh keeps its existing observer');
 requests[2].reject('Git server unavailable');
 state = update(await failed, state)[0];
 assert.equal(checkFor(state).result, undefined, 'An error must not retain a clean result');
+assert.equal(Array.from(watchedRepositories(state)).length, 1, 'An error keeps observing the known root for recovery');
 assert.match(checkFor(state).error, /Git server unavailable/);
 assert.equal(checkFor(state).isLoading, false);
 
@@ -70,6 +77,7 @@ assert.equal(checkFor(state).result.repositories[0].dirty, true);
 assert.equal(checkFor(state).error, undefined);
 state = step(state, 'OnGetProjectsSuccess', [])[0];
 assert.equal(Array.from(state.projectGit).length, 0);
+assert.equal(Array.from(watchedRepositories(state)).length, 0);
 assert.equal(update(oldMessage, state)[0], state);
 
 const render = check => renderToStaticMarkup(React.createElement(ProjectGitIndicators, { check }));

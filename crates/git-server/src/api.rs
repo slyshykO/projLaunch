@@ -36,6 +36,8 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
     let log = session.clone();
     let files = session.clone();
     let patch = session.clone();
+    let subscribe = session.clone();
+    let unsubscribe = session.clone();
     JsonRpc::new()
         .add("server.hello", move |_: serde_json::Value| {
             let session = hello.clone();
@@ -57,6 +59,8 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                     capabilities: [
                         "project.discover",
                         "repo.open",
+                        "repo.subscribe",
+                        "repo.unsubscribe",
                         "git.status",
                         "git.branches",
                         "git.log",
@@ -191,6 +195,14 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                 .await
                 .map_err(rpc_error)
             }
+        })
+        .add("repo.subscribe", move |params: SubscribeParams| {
+            let session = subscribe.clone();
+            async move { session.subscribe(params).await.map_err(rpc_error) }
+        })
+        .add("repo.unsubscribe", move |params: UnsubscribeParams| {
+            let session = unsubscribe.clone();
+            async move { Ok(session.unsubscribe(&params.subscription_id).await) }
         })
         .add("git.cancel", move |params: CancelParams| {
             let cancelled = session.cancel(&params.operation_id);

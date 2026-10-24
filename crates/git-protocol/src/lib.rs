@@ -53,6 +53,30 @@ pub struct CancelParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SubscribeParams {
+    pub repo_id: String,
+    pub subscription_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UnsubscribeParams {
+    pub subscription_id: String,
+}
+
+/// Invalidations, never cached Git results. IDs are scoped to one connection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositoryChanged {
+    pub subscription_id: String,
+    pub repo_id: String,
+    pub history: bool,
+    pub working_tree: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatusEntry {
     pub path: String,

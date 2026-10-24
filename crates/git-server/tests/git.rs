@@ -58,6 +58,165 @@ async fn request(client: &Client, method: &str, mut params: Value) -> Value {
 }
 
 #[tokio::test]
+async fn client_bounds_a_workspace_burst_below_the_server_request_limit() {
+    let fixture = Fixture::new();
+    let (client, _) = fixture.connect().await;
+    let replies = futures_util::future::join_all(
+        (0..64).map(|_| async { client.call::<_, Value>("server.hello", &json!({})).await }),
+    )
+    .await;
+    assert!(replies.iter().all(Result::is_ok), "{replies:?}");
+    assert!(!client.is_closed());
+    client.shutdown().await;
+    let mut late = client.events();
+    assert!(matches!(
+        late.try_recv().unwrap(),
+        git_client::Event::Disconnected(_)
+    ));
+}
+
+async fn changed(
+    events: &mut tokio::sync::broadcast::Receiver<git_client::Event>,
+    history: bool,
+) -> git_protocol::RepositoryChanged {
+    tokio::time::timeout(std::time::Duration::from_secs(8), async {
+        loop {
+            match events.recv().await.unwrap() {
+                git_client::Event::Changed(event) => {
+                    assert!(event.error.is_none(), "{event:?}");
+                    if !history || event.history {
+                        return event;
+                    }
+                }
+                event => panic!("Unexpected {event:?}"),
+            }
+        }
+    })
+    .await
+    .expect("Expected filesystem invalidation")
+}
+
+async fn drain_events(events: &mut tokio::sync::broadcast::Receiver<git_client::Event>) {
+    while tokio::time::timeout(std::time::Duration::from_millis(600), events.recv())
+        .await
+        .is_ok()
+    {}
+}
+
+#[tokio::test]
+async fn subscriptions_observe_content_index_refs_and_stop_without_read_feedback() {
+    let fixture = Fixture::new();
+    fixture.write("tracked.txt", "initial");
+    fixture.commit("Initial");
+    let (client, repo) = fixture.connect().await;
+    let mut events = client.events();
+    let params = json!({"repoId":repo,"subscriptionId":"watch"});
+    assert!(
+        client
+            .call::<_, bool>("repo.subscribe", &params)
+            .await
+            .unwrap()
+    );
+    assert!(
+        client
+            .call::<_, bool>("repo.subscribe", &params)
+            .await
+            .is_err()
+    );
+    fixture.write("new.txt", "untracked");
+    let event = changed(&mut events, false).await;
+    assert_eq!(event.subscription_id, "watch");
+    assert_eq!(event.repo_id, repo);
+    assert!(event.working_tree);
+    assert!(!event.history);
+    fixture.write("tracked.txt", "modified");
+    changed(&mut events, false).await;
+    // Another edit to an already dirty file must invalidate an open diff too.
+    fixture.write("tracked.txt", "modified again");
+    changed(&mut events, false).await;
+    fixture.git(&["add", "tracked.txt"]);
+    assert!(changed(&mut events, false).await.working_tree);
+    fixture.commit("Second");
+    assert!(changed(&mut events, true).await.history);
+    fixture.git(&["branch", "another"]);
+    changed(&mut events, true).await;
+    fixture.git(&["pack-refs", "--all"]);
+    changed(&mut events, true).await;
+    drain_events(&mut events).await;
+    request(&client, "git.status", json!({"repoId":repo})).await;
+    request(&client, "git.log", json!({"repoId":repo})).await;
+    request(&client, "git.branches", json!({"repoId":repo})).await;
+    let unexpected =
+        tokio::time::timeout(std::time::Duration::from_millis(800), events.recv()).await;
+    assert!(
+        unexpected.is_err(),
+        "Reads must not trigger a refresh loop: {unexpected:?}"
+    );
+    assert!(
+        client
+            .call::<_, bool>("repo.unsubscribe", &json!({"subscriptionId":"watch"}))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !client
+            .call::<_, bool>("repo.unsubscribe", &json!({"subscriptionId":"watch"}))
+            .await
+            .unwrap()
+    );
+    fixture.write("tracked.txt", "after unsubscribe");
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(800), events.recv())
+            .await
+            .is_err()
+    );
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn linked_worktree_subscriptions_watch_shared_refs_and_are_session_scoped() {
+    let fixture = Fixture::new();
+    fixture.write("tracked.txt", "initial");
+    fixture.commit("Initial");
+    let linked = tempfile::tempdir().unwrap();
+    let root = linked.path().join("linked worktree");
+    fixture.git(&["worktree", "add", "-b", "linked", root.to_str().unwrap()]);
+    let (first, main_repo) = fixture.connect().await;
+    let (second, _) = fixture.connect().await;
+    let other = request(&second, "repo.open", json!({"path":root})).await;
+    let mut main_events = first.events();
+    let mut linked_events = second.events();
+    first
+        .call::<_, bool>(
+            "repo.subscribe",
+            &json!({"repoId":main_repo,"subscriptionId":"same-id"}),
+        )
+        .await
+        .unwrap();
+    second
+        .call::<_, bool>(
+            "repo.subscribe",
+            &json!({"repoId":other["repoId"],"subscriptionId":"same-id"}),
+        )
+        .await
+        .unwrap();
+    fs::write(root.join("tracked.txt"), "linked edit").unwrap();
+    assert!(changed(&mut linked_events, false).await.working_tree);
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(600), main_events.recv())
+            .await
+            .is_err()
+    );
+    fixture.git(&["tag", "shared-tag"]);
+    changed(&mut linked_events, true).await;
+    changed(&mut main_events, true).await;
+    first.shutdown().await;
+    fixture.git(&["branch", "after-other-session-closed"]);
+    changed(&mut linked_events, true).await;
+    second.shutdown().await;
+}
+
+#[tokio::test]
 async fn empty_repository_and_unborn_staged_diff() {
     let fixture = Fixture::new();
     let (client, repo) = fixture.connect().await;

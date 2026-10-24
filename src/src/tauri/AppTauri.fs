@@ -69,6 +69,20 @@ module Git =
     let private invoke<'T> endpoint command fields : JS.Promise<'T> =
         Core.invoke command (Some(createObj [ "params" ==> createObj fields; "endpoint" ==> endpoint ]))
 
+    let watch endpoint path subscriptionId : JS.Promise<bool> =
+        invoke endpoint "git_watch" [ "path" ==> path; "subscriptionId" ==> subscriptionId ]
+
+    let unwatch endpoint subscriptionId : JS.Promise<bool> =
+        invoke endpoint "git_unwatch" [ "subscriptionId" ==> subscriptionId ]
+
+    let onChanged (handler: GitProtocol.ChangeEvent -> unit) : JS.Promise<Tauri.Event.UnlistenFn> =
+        Tauri.Window.Window
+            .getCurrent()
+            .listen(
+                U2.Case1 "git-repository-changed",
+                fun (event: Tauri.Event.Event<GitProtocol.ChangeEvent>) -> handler event.payload
+            )
+
     let private target =
         function
         | GitProtocol.Unstaged -> createObj [ "kind" ==> "unstaged" ]

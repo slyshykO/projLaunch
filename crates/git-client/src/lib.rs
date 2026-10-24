@@ -1,7 +1,7 @@
 //! Multiplexed NDJSON client. Owns and reaps only its own server process.
 use anyhow::{Context, Result, bail, ensure};
 use futures_util::{SinkExt, StreamExt};
-use git_protocol::{Hello, MAX_FRAME, PROTOCOL_VERSION};
+use git_protocol::{Hello, MAX_FRAME, PROTOCOL_VERSION, RepositoryChanged};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{
@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::{
     process::Command,
-    sync::{mpsc, oneshot, watch},
+    sync::{Semaphore, broadcast, mpsc, oneshot, watch},
 };
 use tokio_util::{
     codec::{FramedRead, FramedWrite, LinesCodec},
@@ -32,6 +32,15 @@ pub struct Client {
     stop: CancellationToken,
     finished: watch::Receiver<bool>,
     next_id: AtomicU64,
+    events: broadcast::Sender<Event>,
+    calls: Semaphore,
+    controls: Semaphore,
+}
+
+#[derive(Clone, Debug)]
+pub enum Event {
+    Changed(RepositoryChanged),
+    Disconnected(String),
 }
 
 impl Drop for Client {
@@ -71,6 +80,8 @@ impl Client {
         let stop = CancellationToken::new();
         let stopped = stop.clone();
         let (done, finished) = watch::channel(false);
+        let (events, _) = broadcast::channel(256);
+        let notifications = events.clone();
         tokio::spawn(async move {
             let mut pending: HashMap<u64, Reply> = HashMap::new();
             let result: Result<()> = async {
@@ -83,6 +94,11 @@ impl Client {
                             let line = response.context("Git server closed stdout")??;
                             let value: Value = serde_json::from_str(&line)?;
                             ensure!(value["jsonrpc"] == "2.0", "Invalid Git server protocol");
+                            if value.get("id").is_none() && value["method"] == "repo.changed" {
+                                let event = serde_json::from_value(value["params"].clone())?;
+                                let _ = notifications.send(Event::Changed(event));
+                                continue;
+                            }
                             let id = value["id"].as_u64().context("Invalid Git response ID")?;
                             let reply = pending.remove(&id).context("Unknown Git response ID")?;
                             let response = if let Some(error) = value.get("error") {
@@ -106,6 +122,7 @@ impl Client {
                 .err()
                 .map(|e| format!("{e:#}"))
                 .unwrap_or_else(|| "Git server disconnected; reopen repositories".into());
+            let _ = notifications.send(Event::Disconnected(error.clone()));
             incoming.close();
             for (_, reply) in pending {
                 let _ = reply.send(Err(error.clone()));
@@ -129,6 +146,9 @@ impl Client {
             stop,
             finished,
             next_id: AtomicU64::new(1),
+            events,
+            calls: Semaphore::new(24),
+            controls: Semaphore::new(4),
         };
         let hello: Hello = client.call("server.hello", &json!({})).await?;
         ensure!(
@@ -140,6 +160,19 @@ impl Client {
 
     pub fn is_closed(&self) -> bool {
         self.stop.is_cancelled()
+    }
+    /// Subscribe before repo.subscribe; notifications may precede its reply.
+    /// A lagged receiver must invalidate its views rather than ignore lost events.
+    pub fn events(&self) -> broadcast::Receiver<Event> {
+        let receiver = self.events.subscribe();
+        // Cover a server exiting between the hello response and installing the
+        // host's receiver; a broadcast sent before subscribe is otherwise lost.
+        if self.is_closed() {
+            let _ = self.events.send(Event::Disconnected(
+                "Git server disconnected; reopen repositories".into(),
+            ));
+        }
+        receiver
     }
     pub fn stop(&self) {
         self.stop.cancel();
@@ -171,6 +204,15 @@ impl Client {
         ensure!(line.len() <= MAX_FRAME, "Git request exceeds frame limit");
         let (reply, result) = oneshot::channel();
         let operation = async {
+            // Opening a workspace can subscribe many roots at once. Bound active
+            // RPCs below the server's limit and reserve room for cancellation and
+            // unsubscribe even when ordinary reads are busy.
+            let slots = if matches!(method, "git.cancel" | "repo.unsubscribe") {
+                &self.controls
+            } else {
+                &self.calls
+            };
+            let _permit = slots.acquire().await?;
             self.requests
                 .send(Request { id, line, reply })
                 .await

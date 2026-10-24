@@ -51,7 +51,7 @@ where
                 Some(Err(e)) => break Err(e.into()),
                 Some(Ok(message)) => {
                     if message.len()>MAX_FRAME {break Err(anyhow::anyhow!("frame too large"));}
-                    let control = serde_json::from_str::<serde_json::Value>(&message).ok().is_some_and(|v| v["method"] == "git.cancel");
+                    let control = serde_json::from_str::<serde_json::Value>(&message).ok().is_some_and(|v| v["method"] == "git.cancel" || v["method"] == "repo.unsubscribe");
                     let permits = if control { &controls } else { &slots };
                     let permit = match permits.clone().try_acquire_owned() {
                         Ok(permit)=>permit, Err(_)=>break Err(anyhow::anyhow!("too many concurrent requests")),

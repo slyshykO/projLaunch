@@ -14,6 +14,7 @@ type ProjectGitCheck =
         remote: Remote option
         isLoading: bool
         result: GitProtocol.ProjectStatus option
+        watchRoots: (GitProtocol.Endpoint option * string) array
         error: string option
     }
 
@@ -69,6 +70,9 @@ type RepositoryTab =
         history: RepositoryHistory
         workingTree: Result<GitProtocol.Status, string> option
         selection: CommitFiles option
+        historyInvalidated: bool
+        statusInvalidated: bool
+        autoRefreshing: bool
     }
 
 type Msg =
@@ -92,6 +96,10 @@ type Msg =
     | CloseRepositoryTab of string
     | CloseActiveTab
     | RefreshRepositoryHistory of string
+    | RefreshWatchedRepository of string
+    | GitChanged of GitProtocol.Endpoint option * string * bool * bool
+    | GitWatchStatus of GitProtocol.Endpoint option * string * string option
+    | ApplyGitChanges
     | LoadMoreCommits of string
     | ContinueHistoryRestore of string
     | CancelHistoryRestore of string
@@ -194,6 +202,8 @@ type State =
         projects: ProjectData list
         projectStorageError: string option
         projectGit: Map<string, ProjectGitCheck>
+        pendingProjectGit: Set<string>
+        gitWatchErrors: Map<string, string>
         projectEditor: ProjectData option
         isProjectSaving: bool
         projectSaveError: string option
@@ -238,6 +248,8 @@ let init () =
             projects = pd
             projectStorageError = None
             projectGit = Map.empty
+            pendingProjectGit = Set.empty
+            gitWatchErrors = Map.empty
             projectEditor = None
             isProjectSaving = false
             projectSaveError = None
@@ -269,6 +281,9 @@ let private newRepositoryTab endpoint root name =
         branchesError = None
         selection = None
         workingTree = None
+        historyInvalidated = false
+        statusInvalidated = false
+        autoRefreshing = false
         history =
             {
                 repoId = None
@@ -279,6 +294,18 @@ let private newRepositoryTab endpoint root name =
                 error = None
             }
     }
+
+/// One observation per endpoint/worktree, shared by cards and open tabs.
+let watchedRepositories (state: State) =
+    [
+        for tab in state.repositoryTabs do
+            yield tab.endpoint, tab.root
+        for project in state.projects do
+            match state.projectGit |> Map.tryFind project.id with
+            | Some check when check.path = project.path && check.remote = project.remote -> yield! check.watchRoots
+            | _ -> ()
+    ]
+    |> List.distinctBy (fun (endpoint, root) -> GitProtocol.repositoryKey endpoint root)
 
 let workspaceSnapshot (state: State) : Workspace.Snapshot =
     {
@@ -888,14 +915,15 @@ let rec private updateCore msg state =
                     |> Option.forall (fun commit -> commit.parents.Length <= 1 || selection.parent.IsSome))
                 ->
                 let requestId = Guid.NewGuid().ToString()
+                let preserveDiff = selection.commit.IsNone && tab.restoreFile.IsSome
 
                 let next =
                     { selection with
                         requestId = Some requestId
-                        diff = None
-                        files = [||]
-                        groups = [||]
-                        hasLoaded = false
+                        diff = if preserveDiff then selection.diff else None
+                        files = if preserveDiff then selection.files else [||]
+                        groups = if preserveDiff then selection.groups else [||]
+                        hasLoaded = preserveDiff && selection.hasLoaded
                         error = None
                     }
 
@@ -994,6 +1022,11 @@ let rec private updateCore msg state =
                                 Some
                                     { selection with
                                         groups = groups
+                                        diff =
+                                            if tab.restoreFile.IsSome && pending.IsNone then
+                                                None
+                                            else
+                                                selection.diff
                                         files = groups |> Array.collect snd |> Array.distinctBy (fun file -> file.path)
                                         requestId = None
                                         hasLoaded = true
@@ -1033,7 +1066,7 @@ let rec private updateCore msg state =
                                 selection.diff
                                 |> Option.exists (fun diff -> diff.target = target && diff.file.path = path)
 
-                        if alreadySelected then
+                        if alreadySelected && tab.restoreFile.IsNone then
                             None
                         else
                             selection.groups
@@ -1050,7 +1083,13 @@ let rec private updateCore msg state =
                             file = file
                             target = target
                             requestId = Some requestId
-                            patch = None
+                            patch =
+                                if tab.restoreFile.IsSome then
+                                    selection.diff
+                                    |> Option.filter (fun diff -> diff.target = target && diff.file.path = file.path)
+                                    |> Option.bind (fun diff -> diff.patch)
+                                else
+                                    None
                             error = None
                         }
 
@@ -1191,8 +1230,88 @@ let rec private updateCore msg state =
             updateCore (LoadMoreCommits id) state
         | _ -> state, Cmd.none
 
+    | GitWatchStatus(endpoint, root, error) ->
+        let key = GitProtocol.repositoryKey endpoint root
+
+        { state with
+            gitWatchErrors =
+                match error with
+                | Some error -> state.gitWatchErrors |> Map.add key error
+                | None -> state.gitWatchErrors |> Map.remove key
+        },
+        Cmd.none
+
+    | GitChanged(endpoint, root, history, workingTree) ->
+        let matches otherEndpoint otherRoot =
+            GitProtocol.repositoryKey endpoint root = GitProtocol.repositoryKey otherEndpoint otherRoot
+
+        let projects =
+            state.projectGit
+            |> Map.toSeq
+            |> Seq.choose (fun (id, check) ->
+                if check.watchRoots |> Array.exists (fun (endpoint, root) -> matches endpoint root) then
+                    Some id
+                else
+                    None)
+            |> Set.ofSeq
+
+        { state with
+            pendingProjectGit = Set.union state.pendingProjectGit projects
+            repositoryTabs =
+                state.repositoryTabs
+                |> List.map (fun tab ->
+                    if matches tab.endpoint tab.root then
+                        { tab with
+                            historyInvalidated = tab.historyInvalidated || history
+                            statusInvalidated = tab.statusInvalidated || workingTree || history
+                        }
+                    else
+                        tab)
+        },
+        Cmd.ofMsg ApplyGitChanges
+
+    | ApplyGitChanges ->
+        if state.isWindowClosePending then
+            state, Cmd.none
+        else
+            let projects =
+                state.pendingProjectGit
+                |> Set.filter (fun id ->
+                    state.projectGit
+                    |> Map.tryFind id
+                    |> Option.forall (fun check -> not check.isLoading))
+
+            { state with
+                pendingProjectGit = Set.difference state.pendingProjectGit projects
+            },
+            Cmd.batch
+                [
+                    for id in projects do
+                        Cmd.ofMsg (RefreshProjectGit id)
+                    for tab in state.repositoryTabs do
+                        if
+                            state.activeRepositoryTab = Some tab.id
+                            && (tab.historyInvalidated || tab.statusInvalidated)
+                            && (tab.history.hasLoaded || tab.history.error.IsSome)
+                            && tab.history.requestId.IsNone
+                            && not tab.restoringHistory
+                            && tab.commitNavigation.IsNone
+                            && (tab.selection
+                                |> Option.forall (fun selection ->
+                                    selection.requestId.IsNone
+                                    && (selection.diff |> Option.forall (fun diff -> diff.requestId.IsNone))))
+                        then
+                            Cmd.ofMsg (RefreshWatchedRepository tab.id)
+                ]
+
+    | RefreshWatchedRepository id
     | RefreshRepositoryHistory id
     | LoadMoreCommits id ->
+        let automatic =
+            match msg with
+            | RefreshWatchedRepository _ -> true
+            | _ -> false
+
         let append =
             match msg with
             | LoadMoreCommits _ -> true
@@ -1229,15 +1348,54 @@ let rec private updateCore msg state =
                     let! result =
                         promise {
                             try
-                                let! page =
-                                    AppTauri.Git.log
-                                        tab.endpoint
-                                        repoId
-                                        $"history-{requestId}-log"
-                                        (if append then tab.history.nextCursor else None)
-                                        100
+                                if automatic && not tab.historyInvalidated && tab.history.repoId = Some repoId then
+                                    return
+                                        Ok(
+                                            repoId,
+                                            ({
+                                                commits = tab.history.commits
+                                                nextCursor = tab.history.nextCursor
+                                            }
+                                            : GitProtocol.LogPage)
+                                        )
+                                else
+                                    let! page =
+                                        AppTauri.Git.log
+                                            tab.endpoint
+                                            repoId
+                                            $"history-{requestId}-log"
+                                            (if append then tab.history.nextCursor else None)
+                                            100
+                                    // Keep the current rows mounted until the replacement snapshot
+                                    // has reached their depth. A failed page leaves them intact.
+                                    let mutable page = page
+                                    let mutable count = page.commits.Length
 
-                                return Ok(repoId, page)
+                                    while automatic && count < tab.history.commits.Length && page.nextCursor.IsSome do
+                                        let! more =
+                                            AppTauri.Git.log
+                                                tab.endpoint
+                                                repoId
+                                                $"history-{requestId}-log-{count}"
+                                                page.nextCursor
+                                                100
+
+                                        let commits =
+                                            Array.append page.commits more.commits
+                                            |> Array.distinctBy (fun commit -> commit.oid)
+
+                                        if commits.Length <= count && more.nextCursor.IsSome then
+                                            failwith "History pagination made no progress. Refresh to try again."
+
+                                        count <- commits.Length
+
+                                        page <-
+                                            {
+                                                commits = commits
+                                                nextCursor = more.nextCursor
+                                            }
+
+                                    return Ok(repoId, page)
                             with error ->
                                 return Error error
                         }
@@ -1275,11 +1433,28 @@ let rec private updateCore msg state =
                         if item.id = id then
                             { item with
                                 history = history
+                                autoRefreshing = automatic
+                                historyInvalidated = if append then item.historyInvalidated else false
+                                statusInvalidated = if append then item.statusInvalidated else false
+                                restoreFile =
+                                    if automatic then
+                                        item.selection
+                                        |> Option.filter (fun selection -> selection.commit.IsNone)
+                                        |> Option.bind (fun selection -> selection.diff)
+                                        |> Option.map (fun diff ->
+                                            ({
+                                                target = Workspace.targetName diff.target
+                                                path = diff.file.path
+                                            }
+                                            : Workspace.File))
+                                        |> Option.orElse item.restoreFile
+                                    else
+                                        item.restoreFile
                                 branchesError = if append then item.branchesError else None
                                 selection =
                                     item.selection
                                     |> Option.map (fun selection ->
-                                        if not append && selection.commit.IsNone then
+                                        if not append && not automatic && selection.commit.IsNone then
                                             { selection with
                                                 requestId = None
                                                 files = [||]
@@ -1307,7 +1482,7 @@ let rec private updateCore msg state =
             |> List.tryFind (fun tab -> tab.id = id && tab.history.requestId = Some requestId)
         with
         | None -> state, Cmd.none
-        | Some _ ->
+        | Some original ->
             let updated, navigation =
                 updateCore (OnRepositoryHistory(id, requestId, false, result)) state
 
@@ -1316,6 +1491,12 @@ let rec private updateCore msg state =
                 |> List.map (fun tab ->
                     if tab.id = id then
                         { tab with
+                            autoRefreshing = false
+                            scrollRestoreId =
+                                if original.autoRefreshing then
+                                    Some(Guid.NewGuid().ToString())
+                                else
+                                    tab.scrollRestoreId
                             workingTree = Some status
                             branches =
                                 match branches with
@@ -1463,7 +1644,15 @@ let rec private updateCore msg state =
                         path = project.path
                         remote = project.remote
                         isLoading = true
-                        result = None
+                        watchRoots =
+                            previous
+                            |> Option.filter (fun check -> check.path = project.path && check.remote = project.remote)
+                            |> Option.map (fun check -> check.watchRoots)
+                            |> Option.defaultValue [||]
+                        result =
+                            previous
+                            |> Option.filter (fun check -> check.path = project.path && check.remote = project.remote)
+                            |> Option.bind (fun check -> check.result)
                         error = None
                     }
 
@@ -1491,6 +1680,7 @@ let rec private updateCore msg state =
                     { check with
                         isLoading = false
                         result = Some result
+                        watchRoots = result.repositories |> Array.map (fun repo -> repo.endpoint, repo.root)
                         error = None
                     }
                 | Error error ->
@@ -1852,7 +2042,7 @@ let rec private updateCore msg state =
 
     | Tick time ->
         let newState = { state with currentTime = time }
-        newState, Cmd.none
+        newState, Cmd.ofMsg ApplyGitChanges
 
 /// Serialize durable choices only when they change. One writer is in flight;
 /// newer choices are coalesced and flushed after its acknowledgement.
