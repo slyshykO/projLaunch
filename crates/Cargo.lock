@@ -302,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "git-client"
-version = "0.5.1+1.gc0cd24e"
+version = "0.5.1+6.gb5c5836.dirty"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -315,7 +315,7 @@ dependencies = [
 
 [[package]]
 name = "git-discovery"
-version = "0.5.1+1.gc0cd24e"
+version = "0.5.1+6.gb5c5836.dirty"
 dependencies = [
  "anyhow",
  "jsonc-parser",
@@ -328,14 +328,14 @@ dependencies = [
 
 [[package]]
 name = "git-protocol"
-version = "0.5.1+1.gc0cd24e"
+version = "0.5.1+6.gb5c5836.dirty"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "git-server"
-version = "0.5.1+1.gc0cd24e"
+version = "0.5.1+6.gb5c5836.dirty"
 dependencies = [
  "anyhow",
  "axum",

@@ -23,7 +23,9 @@ Run commands from the repository root. Install Node/npm, Git, Rust, the SDK sele
 - `.\build.bat build`: build the debug desktop app; append `--release` for release.
 - `.\build.bat run`: build and launch the app.
 
-Version hooks may edit manifests or commit cleanup of stale `.dirty` suffixes; review `git status` afterward.
+Before committing implementation changes, prefer a standard build entry point that runs version synchronization: `.\build.bat build` for the desktop app or `npm run build` for the frontend. If using direct compiler commands for targeted validation, run `npm run gen:version` first so the build includes current Git version metadata. Do not bypass version hooks just to keep manifests unchanged.
+
+Version hooks may edit tracked manifests and lockfiles or commit cleanup of stale `.dirty` suffixes; review `git status` afterward and include all resulting project-version changes in the requested commit.
 
 ## Coding Style & Naming Conventions
 
@@ -42,4 +44,6 @@ Use descriptive behavior names, Rust `snake_case` tests, temporary directories, 
 
 ## Commit & Pull Request Guidelines
 
-History favors short imperative subjects, such as `Add test scripts for Serde probes`; some commits use `feat:`. Keep commits focused. PRs should describe behavior changes, list validation commands/results, link relevant issues, and include screenshots for UI changes. Update README/handoff documentation when behavior changes. Exclude generated outputs and personal app data.
+History favors short imperative subjects, such as `Add test scripts for Serde probes`; some commits use `feat:`. Keep commits focused. PRs should describe behavior changes, list validation commands/results, link relevant issues, and include screenshots for UI changes. Update README/handoff documentation when behavior changes. Exclude generated build outputs and personal app data.
+
+Always commit project-version changes in tracked manifests and lockfiles together with the work being committed, including version changes already present before the task. This includes `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`, Cargo manifests and Cargo lockfiles. These changes are part of the build workflow: do not revert, exclude or leave them uncommitted merely because they were generated automatically. Review mixed diffs so unrelated non-version edits are not included accidentally.
