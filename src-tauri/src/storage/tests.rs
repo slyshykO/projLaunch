@@ -71,6 +71,14 @@ fn workspace_roundtrip_keeps_order_selection_layout_and_empty_session() {
     let dir = TempDir::new().unwrap();
     let mut db = Database::open(dir.path()).unwrap();
     let mut saved = workspace(dir.path());
+    saved.version = 3;
+    saved.tabs[0].history = Some(
+        serde_json::from_value(json!({
+            "count": 300,
+            "scroll": { "top": 4521.5, "left": 42.0, "anchor": "a".repeat(40), "offset": 13.25 }
+        }))
+        .unwrap(),
+    );
     let mut other = saved.tabs[0].clone();
     other.root = dir
         .path()
@@ -78,6 +86,7 @@ fn workspace_roundtrip_keeps_order_selection_layout_and_empty_session() {
         .to_string_lossy()
         .into_owned();
     other.selection = None;
+    other.history = None;
     saved.tabs.push(other);
     db.save_workspace(&saved).unwrap();
     drop(db);

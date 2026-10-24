@@ -111,9 +111,22 @@ upgraded to version 3 without changing project records or legacy imports.
 Restored tabs receive new runtime IDs and reload Git data: the active repository
 loads immediately, background repositories load when selected. Missing repositories
 remain as tabs with retryable errors. A missing saved diff file falls back to the
-file list. Patches, cursors, loaded history pages and scroll offsets are not persisted;
-history starts with a fresh first page, while a selected older commit can still be
-inspected. Existing in-session scroll retention is unchanged.
+file list. Each tab also saves its loaded commit count and history scroll position,
+including horizontal scroll and the first visible commit with an offset inside its row.
+On restart, a fresh Git snapshot loads sequential pages until the saved count or the
+end of history. The visible commit anchors the scroll position even when preceding
+rows have moved; if it is absent from the reloaded pages, the saved pixel offset is
+clamped to the available history. History hidden behind a restored diff waits until
+shown before applying its scroll position. A selected older commit can still be inspected.
+
+Switching away pauses automatic page loading after the current read; selecting the
+tab resumes it. Cancel, scrolling or choosing a commit/branch takes precedence over
+restoration. Errors retain the saved depth and position; Refresh retries from a new
+snapshot. Closing during restoration preserves its target for the next launch.
+Ordinary Refresh after restoration still starts at the first page. Scroll saves are
+debounced, while closing drains the latest position through the existing workspace save.
+Workspace JSON v3 reads older v1/v2 sessions without history state; the SQLite schema
+remains version 3. Patches, commit-page contents and transport IDs/cursors are not saved.
 
 Repositories with local changes show an `Uncommitted changes` row above history.
 Its hollow node connects to the current HEAD with a dashed line, including when
@@ -574,6 +587,8 @@ node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-working-tree.mjs
 node scripts/tests/test-workspace-state.mjs
+node scripts/tests/test-history-restoration.mjs
+node scripts/tests/test-history-scroll.mjs
 node scripts/tests/test-wsl-endpoints.mjs
 node scripts/tests/test-ssh-endpoints.mjs
 node scripts/tests/test-parent-navigation.mjs

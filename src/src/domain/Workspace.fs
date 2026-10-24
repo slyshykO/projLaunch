@@ -1,5 +1,8 @@
 module Workspace
 
+[<Literal>]
+let CurrentVersion = 3
+
 /// Only durable UI choices. Transport IDs, cursors, patches and pending requests
 /// always belong to the current process and are never saved.
 type File = { target: string; path: string }
@@ -11,6 +14,26 @@ type Selection =
         file: File option
     }
 
+type Scroll =
+    {
+        top: float
+        left: float
+        anchor: string option
+        offset: float
+    }
+
+type History = { count: int; scroll: Scroll }
+
+let emptyScroll =
+    {
+        top = 0.0
+        left = 0.0
+        anchor = None
+        offset = 0.0
+    }
+
+let emptyHistory = { count = 0; scroll = emptyScroll }
+
 type Tab =
     {
         endpoint: GitProtocol.Endpoint option
@@ -19,6 +42,7 @@ type Tab =
         filesWidth: float
         filesHeight: float
         selection: Selection option
+        history: History option
     }
 
 type Snapshot =

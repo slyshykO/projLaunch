@@ -57,6 +57,9 @@ type RepositoryTab =
         filesWidth: float
         filesHeight: float
         restoreFile: Workspace.File option
+        historyView: Workspace.History
+        restoringHistory: bool
+        scrollRestoreId: string option
         commitNavigation: string option
         commitNavigationError: string option
         navigationLabel: string
@@ -78,6 +81,7 @@ type Msg =
     | OnStorageAccess of Result<AppTauri.Storage.Access, exn>
     | OnWorkspaceLoaded of int * Result<Workspace.Snapshot option, exn>
     | SaveWorkspace
+    | SaveScrolledWorkspace of int
     | OnWorkspaceSaved of int * Result<unit, exn>
     | ContinueWindowClose
     | SaveWindowAndClose
@@ -89,6 +93,10 @@ type Msg =
     | CloseActiveTab
     | RefreshRepositoryHistory of string
     | LoadMoreCommits of string
+    | ContinueHistoryRestore of string
+    | CancelHistoryRestore of string
+    | HistoryScrolled of string * Workspace.Scroll
+    | HistoryScrollRestored of string * string * Workspace.Scroll
     | OnRepositoryHistory of string * string * bool * Result<string * GitProtocol.LogPage, exn>
     | OnRepositoryRefresh of
         string *
@@ -250,6 +258,9 @@ let private newRepositoryTab endpoint root name =
         filesWidth = 40.0
         filesHeight = 40.0
         restoreFile = None
+        historyView = Workspace.emptyHistory
+        restoringHistory = false
+        scrollRestoreId = None
         commitNavigation = None
         commitNavigationError = None
         navigationLabel = "parent"
@@ -271,7 +282,7 @@ let private newRepositoryTab endpoint root name =
 
 let workspaceSnapshot (state: State) : Workspace.Snapshot =
     {
-        version = 2
+        version = Workspace.CurrentVersion
         activeEndpoint =
             state.repositoryTabs
             |> List.tryFind (fun tab -> Some tab.id = state.activeRepositoryTab)
@@ -289,6 +300,7 @@ let workspaceSnapshot (state: State) : Workspace.Snapshot =
                     name = tab.name
                     filesWidth = tab.filesWidth
                     filesHeight = tab.filesHeight
+                    history = Some tab.historyView
                     selection =
                         tab.selection
                         |> Option.map (fun selection ->
@@ -315,6 +327,9 @@ let private restoreTab (saved: Workspace.Tab) =
         filesWidth = Workspace.panelSize saved.filesWidth
         filesHeight = Workspace.panelSize saved.filesHeight
         restoreFile = saved.selection |> Option.bind (fun selection -> selection.file)
+        historyView = saved.history |> Option.defaultValue Workspace.emptyHistory
+        restoringHistory = saved.history |> Option.exists (fun history -> history.count > 0)
+        scrollRestoreId = saved.history |> Option.map (fun _ -> Guid.NewGuid().ToString())
         selection =
             saved.selection
             |> Option.map (fun selection ->
@@ -476,6 +491,13 @@ let rec private updateCore msg state =
                         Cmd.ofMsg ContinueWindowClose
                     ]
 
+    | SaveScrolledWorkspace revision ->
+        state,
+        if revision = state.workspaceRevision && state.workspaceError.IsNone then
+            Cmd.ofMsg SaveWorkspace
+        else
+            Cmd.none
+
     | SaveWorkspace ->
         if
             isStorageReadOnly state
@@ -557,6 +579,8 @@ let rec private updateCore msg state =
             },
             if not tab.history.hasLoaded && tab.history.requestId.IsNone then
                 Cmd.ofMsg (RefreshRepositoryHistory tab.id)
+            elif tab.restoringHistory then
+                Cmd.ofMsg (ContinueHistoryRestore tab.id)
             else
                 Cmd.none
         | None ->
@@ -575,6 +599,8 @@ let rec private updateCore msg state =
             },
             if not tab.history.hasLoaded && tab.history.requestId.IsNone then
                 Cmd.ofMsg (RefreshRepositoryHistory id)
+            elif tab.restoringHistory then
+                Cmd.ofMsg (ContinueHistoryRestore id)
             else
                 Cmd.none
         | None -> state, Cmd.none
@@ -666,6 +692,8 @@ let rec private updateCore msg state =
     | BeginCommitNavigation(id, oid, label, fresh) ->
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
         | Some tab ->
+            let state, _ = updateCore (CancelHistoryRestore id) state
+
             let next =
                 { state with
                     repositoryTabs =
@@ -1104,6 +1132,65 @@ let rec private updateCore msg state =
         },
         Cmd.none
 
+    | HistoryScrolled(id, scroll)
+    | HistoryScrollRestored(id, _, scroll) ->
+        let tabs =
+            state.repositoryTabs
+            |> List.map (fun tab ->
+                let accepted =
+                    match msg with
+                    | HistoryScrollRestored(_, token, _) ->
+                        tab.scrollRestoreId = Some token && not tab.restoringHistory
+                    | _ -> state.activeRepositoryTab = Some id
+
+                if tab.id = id && accepted then
+                    { tab with
+                        historyView =
+                            {
+                                count = tab.history.commits.Length
+                                scroll = scroll
+                            }
+                        restoringHistory = false
+                        scrollRestoreId = None
+                    }
+                else
+                    tab)
+
+        { state with repositoryTabs = tabs }, Cmd.none
+
+    | CancelHistoryRestore id ->
+        { state with
+            repositoryTabs =
+                state.repositoryTabs
+                |> List.map (fun tab ->
+                    if tab.id = id && (tab.restoringHistory || tab.scrollRestoreId.IsSome) then
+                        { tab with
+                            restoringHistory = false
+                            scrollRestoreId = None
+                            historyView =
+                                {
+                                    count = tab.history.commits.Length
+                                    scroll = Workspace.emptyScroll
+                                }
+                        }
+                    else
+                        tab)
+        },
+        Cmd.none
+
+    | ContinueHistoryRestore id ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when
+            tab.restoringHistory
+            && state.activeRepositoryTab = Some id
+            && not state.isWindowClosePending
+            && tab.history.requestId.IsNone
+            && tab.history.error.IsNone
+            && tab.history.hasLoaded
+            ->
+            updateCore (LoadMoreCommits id) state
+        | _ -> state, Cmd.none
+
     | RefreshRepositoryHistory id
     | LoadMoreCommits id ->
         let append =
@@ -1290,7 +1377,37 @@ let rec private updateCore msg state =
                                 error = Some(string error)
                             }
 
-                    { tab with history = history })
+                    let noProgress =
+                        tab.restoringHistory
+                        && append
+                        && history.error.IsNone
+                        && history.nextCursor.IsSome
+                        && history.commits.Length <= tab.history.commits.Length
+
+                    let history =
+                        if noProgress then
+                            { history with
+                                error = Some "History pagination made no progress. Refresh to try again."
+                            }
+                        else
+                            history
+
+                    let restoring =
+                        tab.restoringHistory
+                        && (history.error.IsSome
+                            || (history.commits.Length < tab.historyView.count && history.nextCursor.IsSome))
+
+                    { tab with
+                        history = history
+                        restoringHistory = restoring
+                        historyView =
+                            if restoring || history.error.IsSome then
+                                tab.historyView
+                            else
+                                { tab.historyView with
+                                    count = history.commits.Length
+                                }
+                    })
 
         let navigation =
             state.repositoryTabs
@@ -1299,7 +1416,21 @@ let rec private updateCore msg state =
             |> Option.map (fun oid -> Cmd.ofMsg (ContinueCommitNavigation(id, oid)))
             |> Option.defaultValue Cmd.none
 
-        { state with repositoryTabs = tabs }, navigation
+        let restore =
+            if
+                state.repositoryTabs
+                |> List.exists (fun tab -> tab.id = id && tab.history.requestId = Some requestId)
+            then
+                match
+                    tabs
+                    |> List.tryFind (fun tab -> tab.id = id && tab.restoringHistory && tab.history.error.IsNone)
+                with
+                | Some _ -> Cmd.ofMsg (ContinueHistoryRestore id)
+                | None -> Cmd.none
+            else
+                Cmd.none
+
+        { state with repositoryTabs = tabs }, Cmd.batch [ navigation; restore ]
 
     | RefreshGitStatuses ->
         state,
@@ -1738,6 +1869,16 @@ let update msg state =
                             { tab with
                                 commitNavigation = None
                                 commitNavigationError = None
+                                restoringHistory = false
+                                scrollRestoreId = None
+                                historyView =
+                                    if tab.scrollRestoreId.IsSome then
+                                        {
+                                            count = tab.history.commits.Length
+                                            scroll = Workspace.emptyScroll
+                                        }
+                                    else
+                                        tab.historyView
                             }
                         else
                             tab)
@@ -1762,5 +1903,15 @@ let update msg state =
                 [
                     command
                     if changed.workspaceReady && not (isStorageReadOnly changed) then
-                        Cmd.ofMsg SaveWorkspace
+                        match msg with
+                        | HistoryScrolled _ ->
+                            Cmd.OfPromise.perform
+                                (fun () ->
+                                    promise {
+                                        do! Promise.sleep 200
+                                        return changed.workspaceRevision
+                                    })
+                                ()
+                                SaveScrolledWorkspace
+                        | _ -> Cmd.ofMsg SaveWorkspace
                 ]

@@ -20,6 +20,52 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn history_state_accepts_legacy_snapshots_and_validates_new_positions() {
+        let mut value = json!({
+            "version": 1, "tabs": [{ "root": "/repo", "endpoint": {"kind": "wsl", "distribution": "Ubuntu"},
+                "name": "repo", "filesWidth": 40, "filesHeight": 40 }]
+        });
+        for version in [1, 2, 3] {
+            value["version"] = json!(version);
+            assert!(
+                Workspace::from_json(&value.to_string()).unwrap().tabs[0]
+                    .history
+                    .is_none()
+            );
+        }
+        let history = json!({"count": 300, "scroll": {
+            "top": 1245.5, "left": 80.0, "anchor": "a".repeat(40), "offset": -12.5
+        }});
+        value["tabs"][0]["history"] = history.clone();
+        let restored = Workspace::from_json(&value.to_string()).unwrap();
+        assert_eq!(
+            serde_json::to_value(&restored.tabs[0].history).unwrap(),
+            history
+        );
+        for (field, invalid) in [
+            ("top", json!(-1)),
+            ("left", json!(-1)),
+            ("anchor", json!("not-an-oid")),
+            ("offset", json!("invalid")),
+        ] {
+            let mut invalid_value = value.clone();
+            invalid_value["tabs"][0]["history"]["scroll"][field] = invalid;
+            assert!(Workspace::from_json(&invalid_value.to_string()).is_err());
+        }
+        for count in [json!(-1), json!(1.5), json!(u32::MAX)] {
+            let mut invalid_value = value.clone();
+            invalid_value["tabs"][0]["history"]["count"] = count;
+            assert!(Workspace::from_json(&invalid_value.to_string()).is_err());
+        }
+        let mut invalid = restored.clone();
+        invalid.tabs[0].history.as_mut().unwrap().scroll.top = f64::NAN;
+        assert!(invalid.validate().is_err());
+        invalid.tabs[0].history.as_mut().unwrap().scroll.top = 0.0;
+        invalid.tabs[0].history.as_mut().unwrap().scroll.offset = f64::INFINITY;
+        assert!(invalid.validate().is_err());
+    }
+
+    #[test]
     fn ssh_tabs_keep_host_user_and_config_alias_on_roundtrip() {
         let endpoint =
             |username: &str| json!({"kind": "ssh", "host": "work-alias", "username": username});
@@ -83,6 +129,22 @@ pub(crate) struct RepositoryTab {
     pub files_width: f64,
     pub files_height: f64,
     pub selection: Option<Selection>,
+    #[serde(default)]
+    pub history: Option<History>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct History {
+    pub count: u32,
+    pub scroll: Scroll,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct Scroll {
+    pub top: f64,
+    pub left: f64,
+    pub anchor: Option<String>,
+    pub offset: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,8 +164,11 @@ pub(crate) struct SelectedFile {
 
 impl Workspace {
     pub(crate) fn validate(&self) -> Result<()> {
+        // Workspace JSON version, independent of the SQLite schema version.
+        // Keep the upper bound in sync with Workspace.CurrentVersion in
+        // src/src/domain/Workspace.fs; versions 1 and 2 remain readable.
         ensure!(
-            matches!(self.version, 1 | 2),
+            matches!(self.version, 1..=3),
             "Unsupported workspace state version {}",
             self.version
         );
@@ -129,6 +194,29 @@ impl Workspace {
                     && (20.0..=70.0).contains(&tab.files_height),
                 "Saved panel sizes must be between 20 and 70 percent"
             );
+            if let Some(history) = &tab.history {
+                let scroll = &history.scroll;
+                ensure!(
+                    history.count <= i32::MAX as u32,
+                    "Invalid saved history depth"
+                );
+                ensure!(
+                    scroll.top.is_finite()
+                        && scroll.top >= 0.0
+                        && scroll.left.is_finite()
+                        && scroll.left >= 0.0
+                        && scroll.offset.is_finite(),
+                    "Invalid saved history scroll position"
+                );
+                ensure!(
+                    scroll
+                        .anchor
+                        .as_ref()
+                        .is_none_or(|oid| matches!(oid.len(), 40 | 64)
+                            && oid.bytes().all(|c| c.is_ascii_hexdigit())),
+                    "Invalid saved history anchor"
+                );
+            }
             if let Some(selection) = &tab.selection {
                 if let Some(commit) = &selection.commit {
                     let valid_oid = |oid: &str| {

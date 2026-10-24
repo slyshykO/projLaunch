@@ -53,7 +53,7 @@ for (const name of ['git_open', 'git_diff_files', 'git_diff']) {
 }
 assert.ok(calls.filter(call => call.command.startsWith('git_')).every(call => call.endpoint.distribution === 'Ubuntu'));
 saved = JSON.parse(JSON.stringify(workspaceSnapshot(state)));
-assert.equal(saved.version, 2);
+assert.equal(saved.version, 3);
 assert.equal(saved.activeEndpoint.distribution, 'Ubuntu');
 state = init()[0];
 calls.length = 0;

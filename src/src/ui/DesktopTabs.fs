@@ -8,6 +8,19 @@ open Fable.Core
 [<Fable.Core.Emit("$0.scrollIntoView({block: 'nearest', inline: 'nearest'})")>]
 let private revealRow (element: Browser.Types.Element) : unit = jsNative
 
+type private HistoryScrollController =
+    abstract update: Workspace.Scroll * string option * bool -> unit
+    abstract dispose: unit -> unit
+
+[<Import("attachHistoryScroll", "../interop/_HistoryScroll.js")>]
+let private attachHistoryScroll
+    (element: Browser.Types.HTMLElement)
+    (onScroll: Workspace.Scroll -> unit)
+    (onRestored: string -> Workspace.Scroll -> unit)
+    (onCancel: unit -> unit)
+    : HistoryScrollController =
+    jsNative
+
 [<ReactComponent>]
 let TabBar (tabs: RepositoryTab list) (active: string option) (dispatch: Msg -> unit) =
     let items =
@@ -161,6 +174,8 @@ let private CommitRow
                 + if selected then "bg-primary/10" else "hover:bg-base-200/60"
             )
             prop.custom ("data-selected", selected)
+            if not graphRow.uncommitted then
+                prop.custom ("data-history-oid", commit.oid)
             prop.custom ("data-graph-member", (activeLine = Some graphRow.color))
             prop.style [ style.custom ("--commit-graph-color", CommitGraphView.color graphRow.color) ]
             prop.onMouseEnter (fun _ -> onHover (Some graphRow.color))
@@ -216,6 +231,51 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
     let hoveredLine, setHoveredLine = React.useState<int option> None
     let focusedLine, setFocusedLine = React.useState<int option> None
     let activeLine = hoveredLine |> Option.orElse focusedLine
+    let scrollElement = React.useRef<Browser.Types.HTMLElement option> None
+    let scrollController = React.useRef<HistoryScrollController option> None
+
+    React.useLayoutEffect (
+        (fun () ->
+            scrollController.current <-
+                scrollElement.current
+                |> Option.map (fun element ->
+                    attachHistoryScroll
+                        element
+                        (fun scroll -> dispatch (HistoryScrolled(tab.id, scroll)))
+                        (fun token scroll -> dispatch (HistoryScrollRestored(tab.id, token, scroll)))
+                        (fun () -> dispatch (CancelHistoryRestore tab.id)))
+
+            { new IDisposable with
+                member _.Dispose() =
+                    scrollController.current
+                    |> Option.iter (fun controller -> controller.dispose ())
+
+                    scrollController.current <- None
+            }),
+        [| box tab.id |]
+    )
+
+    React.useLayoutEffect (
+        (fun () ->
+            scrollController.current
+            |> Option.iter (fun controller ->
+                controller.update (
+                    tab.historyView.scroll,
+                    tab.scrollRestoreId,
+                    history.hasLoaded
+                    && not loading
+                    && not tab.restoringHistory
+                    && history.error.IsNone
+                ))),
+        [|
+            box tab.historyView
+            box tab.scrollRestoreId
+            box tab.restoringHistory
+            box history.hasLoaded
+            box loading
+            box history.error
+        |]
+    )
 
     let selectedOid =
         tab.selection
@@ -224,7 +284,7 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
 
     React.useEffect (
         (fun () ->
-            selectedOid
+            (if tab.scrollRestoreId.IsSome then None else selectedOid)
             |> Option.iter (fun oid ->
                 let row = Browser.Dom.document.getElementById $"commit-{tab.id}-{oid}"
 
@@ -348,7 +408,9 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                             [
                                 prop.role "status"
                                 prop.text (
-                                    if loading then
+                                    if tab.restoringHistory then
+                                        $"Restoring history… {history.commits.Length} / {tab.historyView.count} commits"
+                                    elif loading then
                                         $"Loading… {history.commits.Length} commits shown"
                                     elif history.hasLoaded then
                                         $"{history.commits.Length} commits shown"
@@ -356,7 +418,16 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                         "Commit history"
                                 )
                             ]
-                        if history.nextCursor.IsSome then
+                        if tab.restoringHistory then
+                            Html.button
+                                [
+                                    prop.type' "button"
+                                    prop.className "btn btn-sm"
+                                    prop.text "Cancel"
+                                    prop.ariaLabel "Cancel history restoration"
+                                    prop.onClick (fun _ -> dispatch (CancelHistoryRestore tab.id))
+                                ]
+                        elif history.nextCursor.IsSome then
                             Html.button
                                 [
                                     prop.type' "button"
@@ -438,6 +509,8 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                     Html.div
                         [
                             prop.className "flex-1 min-h-0 overflow-auto"
+                            prop.ref scrollElement
+                            prop.custom ("data-history-scroll", tab.id)
                             prop.ariaBusy loading
                             prop.children historyContent
                         ]
