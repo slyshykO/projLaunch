@@ -81,7 +81,7 @@ let Panel (tabId: string) (selection: CommitFiles) (diff: CommitDiff) dispatch =
                 prop.autoFocus true
                 prop.ariaLabel "Close diff and return to commit history"
                 prop.title "Close diff"
-                prop.text "✕"
+                prop.children [ Icons.close 16 ]
                 prop.onClick (fun _ ->
                     dispatch (CloseCommitDiff tabId)
 

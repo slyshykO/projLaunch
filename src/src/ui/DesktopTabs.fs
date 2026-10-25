@@ -98,8 +98,8 @@ let TabBar (tabs: RepositoryTab list) (active: string option) (dispatch: Msg -> 
                             prop.title $"Close {name}"
                             prop.ariaLabel $"Close repository {name}"
                             prop.className
-                                "mr-1 rounded px-2 py-1 text-base-content/50 hover:bg-base-300 hover:text-base-content focus-visible:outline-2 focus-visible:outline-primary"
-                            prop.text "×"
+                                "mr-1 inline-flex items-center justify-center rounded px-2 py-1 text-base-content/50 hover:bg-base-300 hover:text-base-content focus-visible:outline-2 focus-visible:outline-primary"
+                            prop.children [ Icons.close 16 ]
                             prop.onClick (fun _ ->
                                 dispatch (CloseRepositoryTab id)
                                 let previous, _, _ = items[max 0 (index - 1)]

@@ -57,6 +57,25 @@ Detailed UI behavior, Git subscriptions and workspace restoration are described
 in the [user guide](USER-GUIDE.md). WSL/SSH installation and transport are covered
 in [remote repositories](REMOTE-REPOSITORIES.md).
 
+## UI Icons
+
+Lucide is the default icon set. `src/src/ui/Icons.fs` wraps explicit named
+imports from `lucide-react`; add new UI icons there so Vite can remove unused
+icons. Do not import the complete icon registry or load icons from a CDN.
+Icons use inline SVG, `currentColor`, a 1.75 stroke and a caller-selected size
+(currently 16 px). Accessible names and tooltips belong to the containing
+button/link; decorative SVGs are hidden from assistive technology.
+
+Use Octicons only for a Git-specific meaning that Lucide cannot express clearly.
+It is a fallback policy, not an installed dependency: introduce individual
+Octicons through the same module only when a concrete gap appears. Git and IDE
+brand logos remain separate assets (`SvgIcons.fs` retains the Git logo).
+
+The Vite build embeds the full Lucide/Feather license notices from the installed
+package into the generated HTML, including the single-file desktop bundle.
+See the [Lucide React guide](https://lucide.dev/guide/packages/lucide-react)
+for package usage and [Octicons](https://primer.style/octicons/) for the fallback.
+
 ## Project Storage
 
 Saved projects are stored in `projlaunch.db` in the Tauri app data directory

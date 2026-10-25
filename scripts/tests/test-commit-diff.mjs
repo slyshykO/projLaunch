@@ -71,7 +71,7 @@ assert.equal(requests.length, 0);
 send('SelectCommitFile', id, files[0].path);
 assert.match(render(), /Loading diff/);
 assert.match(render(), /hidden=""/, 'Keep history mounted and hidden while displaying diff');
-assert.match(render(), /title="Close diff">✕<\/button>/);
+assert.match(render(), /<button[^>]*aria-label="Close diff and return to commit history"[^>]*title="Close diff"><svg[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg><\/button>/);
 send('SelectCommitFile', id, files[0].path);
 send('RetryCommitDiff', id);
 const first = await openDiff(files[0].path);

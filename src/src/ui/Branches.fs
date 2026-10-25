@@ -127,7 +127,10 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
 
                 let folderLabel =
                     [
-                        Html.span [ prop.ariaHidden true; prop.text (if expanded then "▾" else "▸") ]
+                        if expanded then
+                            Icons.chevronDown 16
+                        else
+                            Icons.chevronRight 16
                         Html.span [ prop.className "branch-name"; prop.text name ]
                         if children |> Array.exists (fun branch -> branch.isCurrent) then
                             Html.span [ prop.className "branch-dot"; prop.title "Contains current branch" ]
@@ -171,7 +174,10 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                     prop.onClick (fun _ -> toggle title)
                     prop.children
                         [
-                            Html.span [ prop.ariaHidden true; prop.text (if expanded then "▾" else "▸") ]
+                            if expanded then
+                                Icons.chevronDown 16
+                            else
+                                Icons.chevronRight 16
                             Html.span [ prop.text title ]
                             Html.span [ prop.className "branch-count"; prop.text all.Length ]
                         ]
@@ -226,7 +232,13 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                 prop.title (if hidden then "Show branches" else "Hide branches")
                                 prop.ariaExpanded (not hidden)
                                 prop.onClick (fun _ -> setHidden (not hidden))
-                                prop.text (if hidden then "›" else "‹")
+                                prop.children
+                                    [
+                                        if hidden then
+                                            Icons.chevronRight 16
+                                        else
+                                            Icons.chevronLeft 16
+                                    ]
                             ]
                     ]
             ]

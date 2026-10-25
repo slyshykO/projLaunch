@@ -1,7 +1,7 @@
 {
   "name": "projlaunch",
   "private": true,
-  "version": "0.5.1+12.g855339a.dirty",
+  "version": "0.5.1+13.gce17524.dirty",
   "type": "module",
   "scripts": {
     "gen:version": "dotnet fsi --exec build/scripts/version/version.fsx src/bin",
@@ -21,6 +21,7 @@
     "@tauri-apps/api": "^2.3",
     "@tauri-apps/plugin-window-state": "^2.3.0",
     "daisyui": "^5.0",
+    "lucide-react": "1.61.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.0"

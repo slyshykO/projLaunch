@@ -44,6 +44,7 @@ The detailed [Git server API guide](crates/git-server/README.md) remains next to
 - Preserve stale-response guards based on repository, selection, and request generation.
 - After reconnecting, reopen repositories and discard old runtime repo IDs and history cursors.
 - Preserve explicit merge-parent selection for diff and binary/truncated/empty states.
+- Use Lucide through `src/src/ui/Icons.fs` for UI icons. Octicons are reserved for Git-specific gaps; add them only when needed. Keep brand logos separate. See [UI icon conventions](docs/ARCHITECTURE.md#ui-icons).
 
 ## Build, Test, and Development Commands
 

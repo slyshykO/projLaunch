@@ -39,6 +39,9 @@ function viteTest() {
             console.log('changing favicon with base64...')
             console.log(`work dir: ${process.cwd()}`);
             const html = bundle["index.html"] /*as OutputAsset*/;
+            // Keep the full notices in the desktop HTML after JS minification.
+            const iconLicense = readFileSync(new URL('./node_modules/lucide-react/LICENSE', import.meta.url), 'utf8');
+            html.source = html.source.replace('</head>', `<script type="text/plain" id="lucide-license">\n${iconLicense}\n</script>\n</head>`);
             const htmlDir = html.fileName.replace(/[^/]*$/, '');
             console.log(`html: ${html.fileName}, htmlDir: ${htmlDir}`);
             console.log(`{css,public,dist${htmlDir ? `,${htmlDir}` : ''}}/*.{png,jpeg}`);

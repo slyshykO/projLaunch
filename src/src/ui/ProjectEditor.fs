@@ -257,7 +257,7 @@ let Dialog (initial: ProjectData) (isNew: bool) (isSaving: bool) (saveError: str
                     prop.type' "button"
                     prop.className "btn btn-sm btn-ghost btn-square"
                     prop.ariaLabel $"Remove variable {index + 1}"
-                    prop.text "✕"
+                    prop.children [ Icons.close 16 ]
                     prop.onClick (fun _ -> removeEnvironmentRow index)
                 ]
 
@@ -371,7 +371,7 @@ let Dialog (initial: ProjectData) (isNew: bool) (isSaving: bool) (saveError: str
                 prop.className "btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
                 prop.ariaLabel "Close project editor"
                 prop.disabled isSaving
-                prop.text "✕"
+                prop.children [ Icons.close 16 ]
                 prop.onClick (fun _ -> dispatch CloseProjectEditor)
             ]
 

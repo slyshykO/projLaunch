@@ -111,7 +111,7 @@ let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (readOnly: boo
                                     prop.title "Edit project"
                                     prop.disabled readOnly
                                     prop.ariaLabel $"Edit project {prj.name}"
-                                    prop.children [ svgIcons.edit 16 ]
+                                    prop.children [ Icons.edit 16 ]
                                     prop.onClick (fun _ -> dispatch (OpenEditProjectModal prj.id))
                                 ]
                                 Html.button [
@@ -121,7 +121,7 @@ let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (readOnly: boo
                                     prop.title "Remove project"
                                     prop.disabled readOnly
                                     prop.ariaLabel $"Remove project {prj.name}"
-                                    prop.children [ svgIcons.trash 16 ]
+                                    prop.children [ Icons.trash 16 ]
                                     prop.onClick (fun _ -> dispatch (OpenDeleteProjectModal prj.id))
                                 ]
                             ]
