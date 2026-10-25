@@ -60,6 +60,14 @@ module Projects =
     let saveProject (id: string) (content: string) : JS.Promise<unit> =
         Core.invoke "rewrite_project_file" (Some(createObj [ "id" ==> id; "content" ==> content ]))
 
+    let deleteProject (id: string) : JS.Promise<unit> =
+        Core.invoke "delete_project" (Some(createObj [ "id" ==> id ]))
+
+    let updateLastOpened (id: string) (lastOpened: System.DateTime) : JS.Promise<unit> =
+        Core.invoke
+            "update_project_last_opened"
+            (Some(createObj [ "id" ==> id; "lastOpened" ==> lastOpened.ToString("O") ]))
+
 /// Transport and process lifetime stay in Rust. Operation IDs are caller-owned
 /// so an in-flight read can be cancelled without knowing its JSON-RPC request ID.
 module Git =

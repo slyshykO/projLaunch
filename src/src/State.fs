@@ -160,15 +160,19 @@ type Msg =
     | OnOpenProjectSuccess of string
     | OnOpenProjectError of exn
 
-    | AddOrUpdateProject of string * string
-    | OnAddOrUpdateProjectSuccess of string
-    | OnAddOrUpdateProjectError of exn
+    | UpdateProjectLastOpened of string * DateTime
+    | OnUpdateProjectLastOpenedSuccess of string
+    | OnUpdateProjectLastOpenedError of exn
     | OpenAddProjectModal
     | CloseProjectEditor
     | OpenEditProjectModal of string
     | SaveProject of ProjectData
     | OnSaveProjectSuccess of ProjectData
     | OnSaveProjectError of exn
+    | OpenDeleteProjectModal of string
+    | CancelProjectDeletion
+    | DeleteProject
+    | OnProjectDeleted of string * Result<unit, exn>
 
     | WindowSave
     | OnWindowSaveSuccess
@@ -207,6 +211,10 @@ type State =
         projectEditor: ProjectData option
         isProjectSaving: bool
         projectSaveError: string option
+        projectDeletion: ProjectData option
+        isProjectDeleting: bool
+        projectDeleteError: string option
+        deletedProjectIds: Set<string>
         randomSalt: string
         appWindowSize: Tauri.Dpi.PhysicalSize option
         appWindowPosition: Tauri.Dpi.PhysicalPosition option
@@ -253,6 +261,10 @@ let init () =
             projectEditor = None
             isProjectSaving = false
             projectSaveError = None
+            projectDeletion = None
+            isProjectDeleting = false
+            projectDeleteError = None
+            deletedProjectIds = Set.empty
             randomSalt = randomSalt
             appWindowSize = None
             appWindowPosition = None
@@ -380,7 +392,9 @@ let rec private updateCore msg state =
     | OpenAddProjectModal
     | OpenEditProjectModal _
     | SaveProject _
-    | AddOrUpdateProject _
+    | UpdateProjectLastOpened _
+    | OpenDeleteProjectModal _
+    | DeleteProject
     | OnOpenProjectSuccess _ when isStorageReadOnly state -> state, Cmd.none
     | Empty -> state, Cmd.none
     | Start ->
@@ -659,7 +673,7 @@ let rec private updateCore msg state =
          else
              Cmd.none)
     | OpenAbout ->
-        if state.projectEditor.IsSome then
+        if state.projectEditor.IsSome || state.projectDeletion.IsSome then
             state, Cmd.none
         else
             { state with isAboutOpen = true }, Cmd.none
@@ -1781,7 +1795,11 @@ let rec private updateCore msg state =
                 FrontendLog.error $"Could not decode project record: {ex}"
 
         // sort by last opened
-        prj <- prj |> List.sortByDescending (fun p -> p.lastOpened)
+        // A list requested before deletion can arrive after its acknowledgement.
+        prj <-
+            prj
+            |> List.filter (fun p -> not (state.deletedProjectIds.Contains p.id))
+            |> List.sortByDescending (fun p -> p.lastOpened)
 
         let newState =
             { state with
@@ -1805,41 +1823,65 @@ let rec private updateCore msg state =
         newState, Cmd.none
 
     | OpenProject id ->
-        let openProjectPromise p =
-            promise {
-                do! AppTauri.Projects.openProject p
-                return id
-            }
+        if
+            state.isProjectDeleting
+            || not (state.projects |> List.exists (fun p -> p.id = id))
+        then
+            state, Cmd.none
+        else
+            let openProjectPromise p =
+                promise {
+                    do! AppTauri.Projects.openProject p
+                    return id
+                }
 
-        state, Cmd.OfPromise.either openProjectPromise id OnOpenProjectSuccess OnOpenProjectError
+            state, Cmd.OfPromise.either openProjectPromise id OnOpenProjectSuccess OnOpenProjectError
 
     | OnOpenProjectSuccess id ->
-        let projects = state.projects
-        // get the project by id
-        let prj = projects |> List.find (fun p -> p.id = id)
-        let prj = { prj with lastOpened = DateTime.Now }
-        let newProjects = projects |> List.map (fun p -> if p.id = id then prj else p)
+        match state.projects |> List.tryFind (fun p -> p.id = id) with
+        | Some project when
+            not (
+                state.isProjectDeleting
+                && (state.projectDeletion |> Option.exists (fun p -> p.id = id))
+            )
+            ->
+            let project =
+                { project with
+                    lastOpened = DateTime.Now
+                }
 
-        let prjJson = ProjectData.toJson prj
+            let projects =
+                state.projects |> List.map (fun p -> if p.id = id then project else p)
 
-        let newState = { state with projects = newProjects }
-        newState, Cmd.ofMsg (AddOrUpdateProject(id, prjJson))
+            { state with projects = projects }, Cmd.ofMsg (UpdateProjectLastOpened(id, project.lastOpened))
+        | _ -> state, Cmd.none
 
     | OnOpenProjectError exn ->
         FrontendLog.error $"Could not open project: {exn}"
         state, Cmd.none
 
-    | AddOrUpdateProject(id, json) ->
-        let addOrUpdateProjectPromise (i, j) =
-            promise {
-                do! AppTauri.Projects.saveProject i j
-                return id
-            }
+    | UpdateProjectLastOpened(id, lastOpened) ->
+        if
+            state.deletedProjectIds.Contains id
+            || (state.isProjectDeleting
+                && (state.projectDeletion |> Option.exists (fun p -> p.id = id)))
+        then
+            state, Cmd.none
+        else
+            let save () =
+                promise {
+                    do! AppTauri.Projects.updateLastOpened id lastOpened
+                    return id
+                }
 
+            state, Cmd.OfPromise.either save () OnUpdateProjectLastOpenedSuccess OnUpdateProjectLastOpenedError
+    | OnUpdateProjectLastOpenedSuccess id ->
         state,
-        Cmd.OfPromise.either addOrUpdateProjectPromise (id, json) OnAddOrUpdateProjectSuccess OnAddOrUpdateProjectError
-    | OnAddOrUpdateProjectSuccess _id -> state, Cmd.ofMsg (GetProjects 0)
-    | OnAddOrUpdateProjectError exn ->
+        if state.deletedProjectIds.Contains id then
+            Cmd.none
+        else
+            Cmd.ofMsg (GetProjects 0)
+    | OnUpdateProjectLastOpenedError exn ->
         let e = sprintf "Error: %A" exn
         FrontendLog.error $"Could not update project: {exn}"
 
@@ -1851,7 +1893,13 @@ let rec private updateCore msg state =
         newState, Cmd.none
 
     | OpenAddProjectModal ->
-        if state.isProjectSaving || state.projectEditor.IsSome || state.isAboutOpen then
+        if
+            state.isProjectSaving
+            || state.projectEditor.IsSome
+            || state.isAboutOpen
+            || state.projectDeletion.IsSome
+            || state.isWindowClosePending
+        then
             state, Cmd.none
         else
             let project =
@@ -1867,7 +1915,12 @@ let rec private updateCore msg state =
             Cmd.none
 
     | OpenEditProjectModal id ->
-        if state.isProjectSaving then
+        if
+            state.isProjectSaving
+            || state.projectDeletion.IsSome
+            || state.isAboutOpen
+            || state.isWindowClosePending
+        then
             state, Cmd.none
         else
             match state.projects |> List.tryFind (fun project -> project.id = id) with
@@ -1948,6 +2001,75 @@ let rec private updateCore msg state =
         },
         Cmd.none
 
+    | OpenDeleteProjectModal id ->
+        if
+            state.projectEditor.IsSome
+            || state.projectDeletion.IsSome
+            || state.isAboutOpen
+            || state.isWindowClosePending
+        then
+            state, Cmd.none
+        else
+            match state.projects |> List.tryFind (fun p -> p.id = id) with
+            | Some project ->
+                { state with
+                    projectDeletion = Some project
+                    projectDeleteError = None
+                },
+                Cmd.none
+            | None -> state, Cmd.none
+
+    | CancelProjectDeletion ->
+        if state.isProjectDeleting then
+            state, Cmd.none
+        else
+            { state with
+                projectDeletion = None
+                projectDeleteError = None
+            },
+            Cmd.none
+
+    | DeleteProject ->
+        match state.projectDeletion with
+        | Some project when not state.isProjectDeleting && not state.isWindowClosePending ->
+            { state with
+                isProjectDeleting = true
+                projectDeleteError = None
+            },
+            Cmd.OfPromise.either
+                AppTauri.Projects.deleteProject
+                project.id
+                (fun () -> OnProjectDeleted(project.id, Ok()))
+                (fun error -> OnProjectDeleted(project.id, Error error))
+        | _ -> state, Cmd.none
+
+    | OnProjectDeleted(id, result) ->
+        if
+            not state.isProjectDeleting
+            || not (state.projectDeletion |> Option.exists (fun p -> p.id = id))
+        then
+            state, Cmd.none
+        else
+            match result with
+            | Error error ->
+                { state with
+                    isProjectDeleting = false
+                    projectDeleteError = Some $"Could not remove project: {error}"
+                    isWindowClosePending = false
+                },
+                Cmd.none
+            | Ok() ->
+                { state with
+                    projects = state.projects |> List.filter (fun p -> p.id <> id)
+                    projectGit = state.projectGit |> Map.remove id
+                    pendingProjectGit = state.pendingProjectGit |> Set.remove id
+                    deletedProjectIds = state.deletedProjectIds |> Set.add id
+                    projectDeletion = None
+                    isProjectDeleting = false
+                    projectDeleteError = None
+                },
+                Cmd.ofMsg ContinueWindowClose
+
     | WindowSave ->
         if state.isWindowClosePending || not (AppTauri.Core.isAvailable ()) then
             state, Cmd.none
@@ -1964,6 +2086,7 @@ let rec private updateCore msg state =
             not state.isWindowClosePending
             || state.workspaceLoading
             || state.workspaceSaving.IsSome
+            || state.isProjectDeleting
         then
             state, Cmd.none
         elif
@@ -1980,7 +2103,8 @@ let rec private updateCore msg state =
 
     | OnWindowSaveSuccess ->
         if
-            state.workspaceSaving.IsSome
+            state.isProjectDeleting
+            || state.workspaceSaving.IsSome
             || (not (isStorageReadOnly state)
                 && state.workspaceReady
                 && state.workspaceSavedRevision < state.workspaceRevision)

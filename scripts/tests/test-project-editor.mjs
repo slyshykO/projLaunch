@@ -48,7 +48,7 @@ for (const remote of [null, { Ssh: { host: 'example.test', username: '' } }, { W
     let state = initialState(original);
     state = step(state, 'OpenEditProjectModal', original.id)[0];
     assert.equal(state.projectEditor.id, original.id);
-    assert.equal(step(state, 'OnAddOrUpdateProjectSuccess', original.id)[0].projectEditor, state.projectEditor,
+    assert.equal(step(state, 'OnUpdateProjectLastOpenedSuccess', original.id)[0].projectEditor, state.projectEditor,
         'Background last-opened save must not close an editor');
 
     const cancelled = step(state, 'CloseProjectEditor');

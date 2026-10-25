@@ -20,6 +20,7 @@ The app currently lets you:
 - view saved projects in a grid sorted by `lastOpened`
 - add a project from the UI with name, description, IDE, and solution/workspace path
 - edit a project using the pencil button at the top right of its card, including SSH/WSL and environment variables
+- remove a project using the trash button beside the pencil, with confirmation; files, Git repositories and open repository tabs are preserved
 - see a Git icon and clean/uncommitted status for each associated local, WSL or SSH repository at the bottom of a card
 - open projects in:
   - VS Code
@@ -159,7 +160,16 @@ and their diffs remain unchanged. Clean repositories omit the extra graph row;
 status failures are displayed separately from history errors. No staging or
 other Git write operations are performed.
 
-When a project is opened, the app updates its `lastOpened` value and rewrites the stored project record.
+When a project is opened, the app updates only its `lastOpened` value. A late
+launch completion cannot recreate a deleted project or overwrite edited fields.
+
+Removing a project deletes its catalog entry from SQLite after confirmation.
+Cancel or Escape keeps it; an error leaves the card and dialog available for
+retry. Local, WSL and SSH entries can be removed without accessing their paths
+or connecting to their servers. Shared repository tabs and subscriptions stay
+active while another card or open tab uses them. Read-only instances cannot
+remove projects. Existing legacy JSON files are preserved and are not reimported
+after deletion. The database schema and workspace JSON format are unchanged.
 
 Git indicators refresh after loading or saving projects and when the app regains
 focus. For a directory or ordinary project file, the containing repository is used.
@@ -595,6 +605,7 @@ Run the project editor's state and IPC regression checks after compiling the fro
 ```powershell
 dotnet fable src -o ./src/bin/fable-js --configuration Debug
 node scripts/tests/test-project-editor.mjs
+node scripts/tests/test-project-deletion.mjs
 node scripts/tests/test-project-git.mjs
 node scripts/tests/test-about-version.mjs
 node scripts/tests/test-git-watching.mjs

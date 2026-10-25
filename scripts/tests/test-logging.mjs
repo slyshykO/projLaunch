@@ -152,7 +152,7 @@ try {
     const failures = [
         ['OnGetProjectsError', 'load failure'],
         ['OnOpenProjectError', 'open failure'],
-        ['OnAddOrUpdateProjectError', 'update failure'],
+        ['OnUpdateProjectLastOpenedError', 'update failure'],
         ['OnWindowSaveError', 'window save failure'],
         ['OnWindowCloseError', 'window close failure'],
     ];

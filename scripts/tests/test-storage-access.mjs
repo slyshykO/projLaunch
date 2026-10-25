@@ -20,7 +20,7 @@ globalThis.window = Object.assign(new EventTarget(), { __TAURI_INTERNALS__: {
         if (command === 'git_open') return Promise.resolve({ repoId: 'fresh-session' });
         if (command === 'git_log') return Promise.resolve({ commits: [] });
         if (command === 'git_status') return Promise.resolve({ entries: [] });
-        if (command === 'save_workspace' || command === 'rewrite_project_file') {
+        if (['save_workspace', 'rewrite_project_file', 'delete_project', 'update_project_last_opened'].includes(command)) {
             assert.equal(access.canWrite, true, 'Read-only window must never attempt database writes');
         }
         return Promise.resolve();
@@ -50,16 +50,22 @@ assert.equal(state.projectEditor, undefined);
 send('OpenEditProjectModal', 'one');
 assert.equal(state.projectEditor, undefined);
 send('SaveProject', savedProject);
-send('AddOrUpdateProject', 'one', JSON.stringify(project));
+send('OpenDeleteProjectModal', 'one');
+assert.equal(state.projectDeletion, undefined);
+send('DeleteProject');
+send('UpdateProjectLastOpened', 'one', new Date());
 send('OpenProject', 'one');
 await tick();
 assert.ok(calls.includes('open_project'), 'IDE launching stays available');
 assert.equal(Array.from(state.projects)[0].lastOpened.getTime(), savedProject.lastOpened.getTime());
 assert.ok(!calls.includes('rewrite_project_file'), 'Opening does not update lastOpened in a reader');
+assert.ok(!calls.includes('update_project_last_opened'));
+assert.ok(!calls.includes('delete_project'));
 const html = renderToStaticMarkup(React.createElement(View, { state, dispatch }));
 assert.match(html, /Read-only database/);
 assert.match(html, /PID 12345/);
 assert.match(html, /disabled="" aria-label="Edit project Example"/);
+assert.match(html, /disabled="" aria-label="Remove project Example"/);
 
 // Tabs/layout stay usable in memory, and closing never waits for impossible saves.
 send('OpenRepositoryTab', { root: 'C:/example', name: 'Example' });

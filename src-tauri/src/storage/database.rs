@@ -196,6 +196,27 @@ impl Database {
         );
         write_project(&self.connection, &sql, &project)
     }
+
+    pub(super) fn delete(&mut self, id: &str) -> Result<()> {
+        self.ensure_writable()?;
+        ensure!(!id.trim().is_empty(), "Project ID must not be empty");
+        // Only the catalog entry is removed. Workspace tabs, legacy import
+        // markers and all files at the project's path are independent of it.
+        self.connection
+            .execute("DELETE FROM projects WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    pub(super) fn update_last_opened(&mut self, id: &str, last_opened: &str) -> Result<()> {
+        self.ensure_writable()?;
+        // An IDE launch may finish after deletion. UPDATE must never recreate
+        // its catalog entry or overwrite fields edited while it was launching.
+        self.connection.execute(
+            "UPDATE projects SET last_opened = ?2 WHERE id = ?1",
+            params![id, last_opened],
+        )?;
+        Ok(())
+    }
 }
 
 impl Drop for Database {

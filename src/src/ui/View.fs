@@ -92,24 +92,39 @@ let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (readOnly: boo
                     prop.classes [ "flex"; "items-start"; "justify-between"; "gap-2" ]
                     prop.children [
                         Daisy.cardTitle [ prop.className "min-w-0 break-words"; prop.text title ]
-                        Html.button [
-                            prop.type' "button"
-                            prop.classes [
-                                "btn"
-                                "btn-xs"
-                                "btn-square"
-                                "btn-ghost"
-                                "shrink-0"
-                                "text-gray-400"
-                                "hover:text-black"
-                                "focus-visible:text-black"
-                                "transition-colors"
+                        Html.div [
+                            prop.className "flex items-center gap-1 shrink-0"
+                            prop.children [
+                                Html.button [
+                                    prop.type' "button"
+                                    prop.classes [
+                                        "btn"
+                                        "btn-xs"
+                                        "btn-square"
+                                        "btn-ghost"
+                                        "shrink-0"
+                                        "text-gray-400"
+                                        "hover:text-black"
+                                        "focus-visible:text-black"
+                                        "transition-colors"
+                                    ]
+                                    prop.title "Edit project"
+                                    prop.disabled readOnly
+                                    prop.ariaLabel $"Edit project {prj.name}"
+                                    prop.children [ svgIcons.edit 16 ]
+                                    prop.onClick (fun _ -> dispatch (OpenEditProjectModal prj.id))
+                                ]
+                                Html.button [
+                                    prop.type' "button"
+                                    prop.className
+                                        "btn btn-xs btn-square btn-ghost text-gray-400 hover:text-error focus-visible:text-error transition-colors"
+                                    prop.title "Remove project"
+                                    prop.disabled readOnly
+                                    prop.ariaLabel $"Remove project {prj.name}"
+                                    prop.children [ svgIcons.trash 16 ]
+                                    prop.onClick (fun _ -> dispatch (OpenDeleteProjectModal prj.id))
+                                ]
                             ]
-                            prop.title "Edit project"
-                            prop.disabled readOnly
-                            prop.ariaLabel $"Edit project {prj.name}"
-                            prop.children [ svgIcons.edit 16 ]
-                            prop.onClick (fun _ -> dispatch (OpenEditProjectModal prj.id))
                         ]
                     ]
                 ]
@@ -426,6 +441,10 @@ let View (state: State) dispatch =
 
             if state.isAboutOpen then
                 AboutDialog state dispatch
+
+            match state.projectDeletion with
+            | Some project -> ProjectDeletion.Dialog project state.isProjectDeleting state.projectDeleteError dispatch
+            | None -> Html.none
 
             Html.main [
                 prop.id "main-view"

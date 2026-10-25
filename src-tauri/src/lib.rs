@@ -138,6 +138,20 @@ async fn rewrite_project_file(
     storage.save(id, content).await
 }
 
+#[tauri::command]
+async fn delete_project(storage: tauri::State<'_, Storage>, id: String) -> Result<(), String> {
+    storage.delete(id).await
+}
+
+#[tauri::command]
+async fn update_project_last_opened(
+    storage: tauri::State<'_, Storage>,
+    id: String,
+    last_opened: String,
+) -> Result<(), String> {
+    storage.update_last_opened(id, last_opened).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -222,6 +236,8 @@ pub fn run() {
             save_workspace,
             open_project,
             rewrite_project_file,
+            delete_project,
+            update_project_last_opened,
             logging::frontend_log,
             git_host::git_hello,
             git_host::git_open,

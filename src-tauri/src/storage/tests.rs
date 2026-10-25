@@ -352,6 +352,113 @@ fn restart_keeps_database_edits_and_never_rereads_legacy_files() {
 }
 
 #[test]
+fn deletion_preserves_files_other_projects_and_workspace_after_restart() {
+    let dir = TempDir::new().unwrap();
+    let repo = dir.path().join("repository");
+    fs::create_dir_all(repo.join(".git")).unwrap();
+    fs::write(repo.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+    fs::write(repo.join("keep.txt"), "working file").unwrap();
+    let id = "one' OR 1=1 --";
+    let mut first = project(id);
+    first["path"] = json!(repo);
+    let mut second = project("two");
+    second["path"] = json!(repo);
+    let source = legacy(dir.path(), "one", &first);
+    legacy(dir.path(), "two", &second);
+    let mut db = Database::open(dir.path()).unwrap();
+    let saved_workspace = workspace(&repo);
+    db.save_workspace(&saved_workspace).unwrap();
+    assert!(db.delete(" ").is_err());
+    assert_eq!(db.list().unwrap().len(), 2);
+    db.delete(id).unwrap();
+    db.delete(id).unwrap(); // Safe to retry after a lost acknowledgement.
+    assert!(db.get(id).is_err());
+    assert_eq!(
+        db.get("two").unwrap(),
+        ProjectData::from_json(&second.to_string()).unwrap()
+    );
+    drop(db);
+
+    let db = Database::open(dir.path()).unwrap();
+    assert_eq!(
+        db.list().unwrap().len(),
+        1,
+        "Legacy import must not restore a deleted card"
+    );
+    assert!(db.get(id).is_err());
+    assert_eq!(
+        serde_json::to_value(db.load_workspace().unwrap().unwrap()).unwrap(),
+        serde_json::to_value(saved_workspace).unwrap()
+    );
+    assert_eq!(fs::read(dir.path().join("projects/one")).unwrap(), source);
+    assert_eq!(
+        fs::read_to_string(repo.join("keep.txt")).unwrap(),
+        "working file"
+    );
+    assert_eq!(
+        fs::read_to_string(repo.join(".git/HEAD")).unwrap(),
+        "ref: refs/heads/main\n"
+    );
+}
+
+#[tokio::test]
+async fn worker_deletes_projects_without_late_launch_updates_recreating_them() {
+    let dir = TempDir::new().unwrap();
+    let storage = Storage::start(Ok(dir.path().to_owned()));
+    let mut record = project("remote");
+    record["remote"] = json!({ "Ssh": { "host": "offline.invalid", "username": "test" } });
+    record["path"] = json!("/unavailable/project");
+    storage
+        .save("remote".into(), record.to_string())
+        .await
+        .unwrap();
+    let opened = "2026-10-25T12:00:00.000Z";
+    storage
+        .update_last_opened("remote".into(), opened.into())
+        .await
+        .unwrap();
+    record["lastOpened"] = json!(opened);
+    assert_eq!(
+        storage.get("remote".into()).await.unwrap(),
+        ProjectData::from_json(&record.to_string()).unwrap()
+    );
+    storage.delete("remote".into()).await.unwrap();
+    storage
+        .update_last_opened("remote".into(), opened.into())
+        .await
+        .unwrap();
+    assert!(storage.list().await.unwrap().is_empty());
+    drop(storage);
+    assert!(
+        Database::open(dir.path())
+            .unwrap()
+            .list()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn failed_deletion_keeps_the_catalog_entry_for_retry() {
+    let dir = TempDir::new().unwrap();
+    let mut db = Database::open(dir.path()).unwrap();
+    db.save("one", &project("one").to_string()).unwrap();
+    db.connection.execute_batch("CREATE TRIGGER block_delete BEFORE DELETE ON projects BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;").unwrap();
+    assert!(
+        db.delete("one")
+            .unwrap_err()
+            .to_string()
+            .contains("fixture failure")
+    );
+    assert_eq!(db.list().unwrap().len(), 1);
+    db.connection
+        .execute_batch("DROP TRIGGER block_delete")
+        .unwrap();
+    db.delete("one").unwrap();
+    assert!(db.list().unwrap().is_empty());
+}
+
+#[test]
 fn malformed_file_aborts_import_and_fixed_file_can_be_retried() {
     let dir = TempDir::new().unwrap();
     let original = legacy(dir.path(), "a-good", &project("good"));
@@ -562,6 +669,7 @@ async fn worker_reports_initialization_error_and_blocks_writes() {
         error
     );
     assert_eq!(storage.get("one".into()).await.unwrap_err(), error);
+    assert_eq!(storage.delete("one".into()).await.unwrap_err(), error);
     drop(storage);
     assert_eq!(count(&raw_database(dir.path()), "projects"), 0);
 }
@@ -584,6 +692,20 @@ fn second_instance_reads_live_updates_but_cannot_write_or_release_owner() {
             .contains("read-only")
     );
     assert!(reader.save_workspace(&workspace(dir.path())).is_err());
+    assert!(
+        reader
+            .delete("one")
+            .unwrap_err()
+            .to_string()
+            .contains("read-only")
+    );
+    assert!(
+        reader
+            .update_last_opened("one", "ignored")
+            .unwrap_err()
+            .to_string()
+            .contains("read-only")
+    );
     assert!(
         reader
             .connection

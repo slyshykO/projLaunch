@@ -21,6 +21,8 @@ enum Request {
     List(Reply<Vec<String>>),
     Get(String, Reply<ProjectData>),
     Save(String, String, Reply<()>),
+    Delete(String, Reply<()>),
+    UpdateLastOpened(String, String, Reply<()>),
     LoadWorkspace(Reply<Option<Workspace>>),
     SaveWorkspace(Workspace, Reply<()>),
     Access(Reply<Access>),
@@ -96,6 +98,12 @@ impl Storage {
                             Request::Save(id, content, reply) => {
                                 let _ = reply.send(run(&mut database, |db| db.save(&id, &content)));
                             }
+                            Request::Delete(id, reply) => {
+                                let _ = reply.send(run(&mut database, |db| db.delete(&id)));
+                            }
+                            Request::UpdateLastOpened(id, last_opened, reply) => {
+                                let _ = reply.send(run(&mut database, |db| db.update_last_opened(&id, &last_opened)));
+                            }
                         }
                     }
                 })
@@ -150,6 +158,19 @@ impl Storage {
 
     pub(crate) async fn save(&self, id: String, content: String) -> Result<(), String> {
         self.request(|reply| Request::Save(id, content, reply))
+            .await
+    }
+
+    pub(crate) async fn delete(&self, id: String) -> Result<(), String> {
+        self.request(|reply| Request::Delete(id, reply)).await
+    }
+
+    pub(crate) async fn update_last_opened(
+        &self,
+        id: String,
+        last_opened: String,
+    ) -> Result<(), String> {
+        self.request(|reply| Request::UpdateLastOpened(id, last_opened, reply))
             .await
     }
 }
