@@ -23,6 +23,12 @@ let private left: obj = jsNative
 [<Import("ChevronRight", "lucide-react")>]
 let private right: obj = jsNative
 
+[<Import("RefreshCw", "lucide-react")>]
+let private refreshCw: obj = jsNative
+
+[<Import("ListPlus", "lucide-react")>]
+let private listPlus: obj = jsNative
+
 [<Import("createElement", "react")>]
 let private createElement (icon: obj, props: obj) : ReactElement = jsNative
 
@@ -47,3 +53,5 @@ let close size = render x size
 let chevronDown size = render down size
 let chevronLeft size = render left size
 let chevronRight size = render right size
+let refresh size = render refreshCw size
+let loadMore size = render listPlus size

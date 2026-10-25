@@ -1,6 +1,6 @@
 [package]
 name = "projlaunch"
-version = "0.5.1+13.gce17524.dirty"
+version = "0.5.1+14.gd215d1f.dirty"
 description = "Project launcher"
 authors = ["Oleksiy Slyshyk <alexslyshyk@gmail.com>"]
 edition = "2024"
@@ -43,9 +43,6 @@ sysinfo = { version = "0.39.6", default-features = false, features = [
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt"] }
 
-
-[profile.dev]
-incremental = true # Compile your binary in smaller steps.
 
 [profile.release]
 codegen-units = 16 # Allows LLVM to perform better optimization.

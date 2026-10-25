@@ -341,10 +341,12 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                         Html.button
                             [
                                 prop.type' "button"
-                                prop.className "btn btn-sm btn-outline shrink-0"
+                                prop.className "btn btn-sm btn-square btn-outline shrink-0"
                                 prop.disabled loading
-                                prop.text "Refresh"
+                                prop.ariaBusy loading
+                                prop.title "Refresh history"
                                 prop.ariaLabel $"Refresh history for {tab.name}"
+                                prop.children [ Icons.refresh 16 ]
                                 prop.onClick (fun _ -> dispatch (RefreshRepositoryHistory tab.id))
                             ]
                     ]
@@ -431,9 +433,12 @@ let private HistoryPanel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                             Html.button
                                 [
                                     prop.type' "button"
-                                    prop.className "btn btn-sm"
+                                    prop.className "btn btn-sm btn-square shrink-0"
                                     prop.disabled loading
-                                    prop.text "Load more"
+                                    prop.ariaBusy loading
+                                    prop.title "Load more commits"
+                                    prop.ariaLabel $"Load more commits for {tab.name}"
+                                    prop.children [ Icons.loadMore 16 ]
                                     prop.onClick (fun _ -> dispatch (LoadMoreCommits tab.id))
                                 ]
                     ]

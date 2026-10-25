@@ -29,8 +29,9 @@ The native menu contains File (Add project, Close repository tab, Exit), View
 Ctrl/Cmd+N. About closes with Close or Escape. Tab navigation supports the arrow,
 Home and End keys. Switching tabs retains each panel's scroll position.
 Repository tabs load commit history from the Git server in the selected local/WSL/SSH endpoint: subject, author,
-commit date, short hash and branch/tag labels. History loads in pages of 100;
-`Load more` appends the next page. `Refresh`, the View menu refresh action and
+commit date, short hash and branch/tag labels. History loads in pages of 100.
+The list-with-plus icon (`Load more commits`) appends the next page. The circular
+arrows icon (`Refresh history`), the View menu refresh action and
 window focus reload the active repository from a fresh snapshot. Failed reads
 keep previously loaded rows visible; Refresh also recovers from expired cursors
 or a restarted server.
