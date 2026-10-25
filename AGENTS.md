@@ -60,6 +60,8 @@ Before committing implementation changes, prefer a standard build entry point th
 
 Version hooks may edit tracked manifests and lockfiles or commit cleanup of stale `.dirty` suffixes; review `git status` afterward and include all resulting project-version changes in the requested commit.
 
+Keep `.cargo/config.toml` local and ignored. It contains machine-specific build workarounds; do not force-add it to Git or apply those settings to other PCs.
+
 ## Coding Style & Naming Conventions
 
 Match surrounding formatting, generally four-space indentation in F#, Rust, and test JavaScript. Use PascalCase F# types/union cases and camelCase values; Rust functions/modules use snake_case. Preserve dependency order in `src/app.fsproj` when adding F# files. Respect `.editorconfig`'s Elmish setting. Git workspace Clippy checks are documented in its README.

@@ -1,6 +1,0 @@
-[build]
-# rustc 1.99 on Windows/ReFS cannot finalize incremental session directories.
-# https://github.com/rust-lang/rust/issues/151181
-# Applies to both Cargo workspaces; keep parallel jobs and Cargo's artifact cache.
-# On an unaffected filesystem/toolchain, CARGO_INCREMENTAL=1 overrides this default.
-incremental = false

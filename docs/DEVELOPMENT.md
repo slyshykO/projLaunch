@@ -109,13 +109,22 @@ exit code and preserve diagnostics from commands whose stdout is captured.
 
 ### Rust Incremental Cache On Windows/ReFS
 
-The repository's `.cargo/config.toml` disables rustc incremental compilation for
-both Cargo workspaces. This works around [Rust issue #151181](https://github.com/rust-lang/rust/issues/151181):
+On affected PCs, a local `.cargo/config.toml` can disable rustc incremental
+compilation for both Cargo workspaces. Keep this machine-specific file ignored;
+do not commit it or impose the workaround on other PCs.
+It works around [Rust issue #151181](https://github.com/rust-lang/rust/issues/151181):
 on Windows/ReFS, finalizing an incremental session can fail with
 `Access is denied. (os error 5)`. It was reproduced here with Rust 1.99.0 on a
 fresh directory on ReFS, using a single rustc invocation and `codegen-units=1`.
 The build helper already waits for the sidecar/frontend build before Cargo
 builds the application; reducing parallel jobs does not address this failure.
+
+Add the following setting to the local `.cargo/config.toml` when needed:
+
+```toml
+[build]
+incremental = false
+```
 
 This setting applies to `build.bat build/run`, npm/Tauri and direct Cargo commands
 started inside the repository. Cargo still skips unchanged packages and reuses
@@ -127,7 +136,7 @@ On an unaffected filesystem or a toolchain verified to contain the
 [upstream fix](https://github.com/rust-lang/rust/pull/162366), incremental compilation
 can be re-enabled for the current PowerShell session with
 `$env:CARGO_INCREMENTAL = '1'`. Remove that override with
-`Remove-Item Env:CARGO_INCREMENTAL` to use the repository default again.
+`Remove-Item Env:CARGO_INCREMENTAL` to use the local Cargo configuration again.
 
 ### Portable Distribution
 
