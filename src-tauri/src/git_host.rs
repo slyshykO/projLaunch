@@ -399,6 +399,8 @@ command!(git_log, LogParams, LogPage, "git.log");
 command!(git_branches, RepoParams, BranchList, "git.branches");
 command!(git_diff_files, DiffParams, Vec<DiffFile>, "git.diffFiles");
 command!(git_diff, PatchParams, Patch, "git.diff");
+command!(git_stage, IndexPathsParams, bool, "git.stage");
+command!(git_unstage, IndexPathsParams, bool, "git.unstage");
 command!(git_cancel, CancelParams, bool, "git.cancel");
 
 #[tauri::command]

@@ -73,6 +73,7 @@ node scripts/tests/test-commit-graph.mjs
 node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-working-tree.mjs
+node scripts/tests/test-index-changes.mjs
 node scripts/tests/test-workspace-state.mjs
 node scripts/tests/test-history-restoration.mjs
 node scripts/tests/test-history-scroll.mjs
@@ -92,6 +93,13 @@ launches, shared tabs/subscriptions and coordination with window closing.
 The Git checks cover refresh races, stale responses, errors/recovery and rendered
 indicators. Rust tests also exercise workspace/solution discovery and real stdio
 status checks; build the Git sidecar first with `npm run build:git-server`.
+Index-change checks cover single/group selection, disabled controls, local/WSL/SSH
+routing, watcher/read races, refresh after success/error, diff migration and
+closing/reopening a tab during a write. Real Git fixtures verify index, worktree
+and HEAD contents for partial changes, deletions, new/binary/literal files,
+unborn HEAD, renames, conflicts, invalid/stale selections and external index locks.
+The opt-in WSL integration test also stages/unstages a Unicode path and verifies
+that its working contents remain intact.
 History checks cover paging, duplicate requests, independent tabs, late replies
 after closing a tab, empty repositories, failed reads and session recovery.
 Commit file checks cover selection races, initial/merge commits, parent changes,

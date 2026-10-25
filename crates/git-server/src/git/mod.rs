@@ -1,6 +1,7 @@
 mod branches;
 mod diff;
 mod history;
+mod index;
 pub mod runner;
 mod status;
 

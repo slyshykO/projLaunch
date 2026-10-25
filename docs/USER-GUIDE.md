@@ -143,11 +143,35 @@ without a parent. Selecting it opens Staged (HEAD â†’ index), Unstaged (index â†
 working tree) and Untracked file groups in the existing file panel. A partially
 staged file can appear in both groups, with a separate diff for each. New files
 show a text preview; binary and truncated results retain their explicit messages.
-Refresh and window focus reload the status and selected working-tree file groups,
-closing any mutable diff so stale contents are not retained. Committed selections
-and their diffs remain unchanged. Clean repositories omit the extra graph row;
-status failures are displayed separately from history errors. No staging or
-other Git write operations are performed.
+Refresh and window focus reload the status and selected working-tree file groups.
+Automatic refresh retains the open diff when its file still exists; explicit
+Refresh changes closes it. Committed selections and their diffs remain unchanged.
+Clean repositories omit the extra graph row; status failures are displayed
+separately from history errors.
+
+Use **Stage** on an Unstaged or Untracked row, or **Unstage** on a Staged row.
+Checkboxes select files independently in each group; **Stage selected** /
+**Unstage selected** applies to that group's checked files. **Stage all** /
+**Unstage all** applies to the displayed group only. Clicking the filename still
+opens its diff. These actions work through the selected local, WSL or SSH endpoint.
+
+Operations affect whole files: staging a partially staged file replaces its
+index contents with the current working version. Unstage resets its index entry
+to HEAD (or removes it before the first commit), preserving working files and
+HEAD. Renames include both paths. Staging a conflict file marks it resolved;
+the panel explicitly indicates this effect. There is no hunk/line staging yet.
+
+While an operation runs, index controls and refresh are disabled for that
+repository. Watcher invalidations are deferred. Afterwards, status and files are
+reloaded and an open diff follows the file to its new group when possible.
+Loaded history pages and scroll position are preserved. Errors remain visible;
+the app refreshes state but never automatically retries the write after a lost
+connection or timeout. Check the refreshed changes before retrying.
+
+Stale selections, index locks and directory selections produce errors rather
+than silently including other files. In particular, replacing a file with a
+directory can require handling that transition outside this whole-file UI.
+Submodule staging updates its recorded commit only, not files inside it.
 
 When a project is opened, the app updates only its `lastOpened` value. A late
 launch completion cannot recreate a deleted project or overwrite edited fields.
@@ -171,7 +195,7 @@ Failed checks are shown as unavailable, never as clean.
 
 ## Current Limitations
 
-- Git views currently support reading and observing repositories; staging, committing and other Git write operations are not available yet.
+- Git supports viewing, observing and whole-file stage/unstage. Commits, branch changes, remote synchronization and partial staging are not implemented yet.
 - Remote launch options are only wired up for VS Code.
 - Remote Git supports x86_64 Linux with glibc (Ubuntu 22.04 or compatible); remote Windows, macOS and ARM64 binaries are not supported.
 - Visual Studio launch paths are currently hard-coded for Windows installs.

@@ -1,7 +1,7 @@
 # ProjLaunch
 
-ProjLaunch is a desktop project launcher and Git repository viewer for Windows.
-Keep your development projects together, open them in your IDE, and inspect local,
+ProjLaunch is a desktop project launcher and Git GUI for Windows.
+Keep your development projects together, open them in your IDE, and work with local,
 WSL and SSH repositories from one interface.
 
 ## Features
@@ -12,11 +12,12 @@ WSL and SSH repositories from one interface.
 - Browse commit history with a graph, branch and tag labels, and navigation to parent commits.
 - Find local and remote branches and inspect their latest commits.
 - View changed files, unified diffs and staged, unstaged or untracked changes.
+- Stage or unstage whole files individually, by selection or by file group.
 - Work with several repositories in separate tabs and resize the file panels.
 - Receive automatic Git updates while keeping your selection and scroll position.
 - Restore tabs, selected commits, open diffs, file-panel sizes and loaded history after restarting.
 
-Git functionality currently covers viewing and monitoring repositories. Staging,
-committing and other Git write operations are not available yet.
+Git functionality currently covers viewing, monitoring and staging changes.
+Creating commits, switching branches and remote synchronization are planned.
 
 [Documentation](docs/README.md) · [Development and plans](AGENTS.md)

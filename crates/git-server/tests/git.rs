@@ -57,6 +57,136 @@ async fn request(client: &Client, method: &str, mut params: Value) -> Value {
     client.call(method, &params).await.unwrap()
 }
 
+async fn change_index(client: &Client, repo: &str, stage: bool, group: &str, paths: &[&str]) {
+    assert_eq!(
+        request(
+            client,
+            if stage { "git.stage" } else { "git.unstage" },
+            json!({"repoId":repo,"target":{"kind":group},"paths":paths})
+        )
+        .await,
+        true
+    );
+}
+
+#[tokio::test]
+async fn index_changes_preserve_worktree_head_and_unselected_partial_changes() {
+    let f = Fixture::new();
+    f.write("partial", "base\n");
+    f.write("deleted", "remove\n");
+    f.write("other", "base\n");
+    let head = f.commit("base");
+    f.write("partial", "index\n");
+    f.git(&["add", "partial"]);
+    f.write("partial", "worktree\n");
+    f.write("other", "unselected\n");
+    f.write("--новый [1].bin", [0, 1, 2, 255]);
+    fs::remove_file(f.path().join("deleted")).unwrap();
+    let (client, repo) = f.connect().await;
+    change_index(&client, &repo, true, "unstaged", &["partial", "deleted"]).await;
+    assert_eq!(f.git(&["show", ":partial"]), "worktree");
+    assert_eq!(f.git(&["show", ":other"]), "base");
+    change_index(&client, &repo, true, "untracked", &["--новый [1].bin"]).await;
+    change_index(
+        &client,
+        &repo,
+        false,
+        "staged",
+        &["partial", "deleted", "--новый [1].bin"],
+    )
+    .await;
+    assert!(f.git(&["diff", "--cached", "--name-only"]).is_empty());
+    assert_eq!(f.git(&["rev-parse", "HEAD"]), head);
+    assert_eq!(fs::read(f.path().join("partial")).unwrap(), b"worktree\n");
+    assert!(!f.path().join("deleted").exists());
+    assert_eq!(
+        fs::read(f.path().join("--новый [1].bin")).unwrap(),
+        [0, 1, 2, 255]
+    );
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn unborn_index_can_stage_and_unstage_selected_literal_files() {
+    let f = Fixture::new();
+    for name in ["one", "--two [x]", "two x"] {
+        f.write(name, "new");
+    }
+    let (client, repo) = f.connect().await;
+    change_index(&client, &repo, true, "untracked", &["one", "--two [x]"]).await;
+    assert_eq!(f.git(&["ls-files"]), "--two [x]\none");
+    change_index(&client, &repo, false, "staged", &["--two [x]"]).await;
+    assert_eq!(f.git(&["ls-files"]), "one");
+    change_index(&client, &repo, false, "staged", &["one"]).await;
+    assert!(f.git(&["ls-files"]).is_empty());
+    assert_eq!(fs::read(f.path().join("one")).unwrap(), b"new");
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn unstage_rename_restores_both_index_paths_without_renaming_working_file() {
+    let f = Fixture::new();
+    f.write("old", "unchanged content\n");
+    f.commit("base");
+    f.git(&["mv", "old", "new"]);
+    let (client, repo) = f.connect().await;
+    change_index(&client, &repo, false, "staged", &["new"]).await;
+    assert_eq!(f.git(&["ls-files"]), "old");
+    assert!(f.git(&["diff", "--cached", "--name-only"]).is_empty());
+    assert!(!f.path().join("old").exists());
+    assert_eq!(
+        fs::read(f.path().join("new")).unwrap(),
+        b"unchanged content\n"
+    );
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn invalid_or_stale_selection_and_index_lock_do_not_stage_other_files() {
+    let f = Fixture::new();
+    f.write("tracked", "base");
+    f.commit("base");
+    f.write("tracked", "changed");
+    f.write("new", "new");
+    let (client, repo) = f.connect().await;
+    for (method, group, paths) in [
+        ("git.stage", "unstaged", vec![]),
+        ("git.stage", "unstaged", vec!["tracked", "stale"]),
+        ("git.stage", "untracked", vec!["../outside"]),
+        ("git.stage", "untracked", vec!["."]),
+        ("git.stage", "untracked", vec!["*"]),
+        ("git.stage", "staged", vec!["tracked"]),
+        ("git.unstage", "unstaged", vec!["tracked"]),
+    ] {
+        assert!(client.call::<_, Value>(method, &json!({"repoId":repo,"operationId":"invalid","target":{"kind":group},"paths":paths})).await.is_err());
+        assert!(f.git(&["diff", "--cached", "--name-only"]).is_empty());
+    }
+    f.write(".git/index.lock", "external lock");
+    assert!(client.call::<_, Value>("git.stage", &json!({"repoId":repo,"operationId":"locked","target":{"kind":"unstaged"},"paths":["tracked"]})).await.is_err());
+    assert_eq!(
+        fs::read(f.path().join(".git/index.lock")).unwrap(),
+        b"external lock"
+    );
+    assert!(f.git(&["diff", "--cached", "--name-only"]).is_empty());
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn file_replaced_by_directory_does_not_stage_unselected_descendants() {
+    let f = Fixture::new();
+    f.write("item", "file");
+    f.commit("base");
+    fs::remove_file(f.path().join("item")).unwrap();
+    fs::create_dir(f.path().join("item")).unwrap();
+    f.write("item/new", "unselected");
+    let (client, repo) = f.connect().await;
+    let result = client.call::<_, Value>("git.stage", &json!({"repoId":repo,"operationId":"directory","target":{"kind":"unstaged"},"paths":["item"]})).await;
+    assert!(result.is_err());
+    assert_eq!(f.git(&["show", ":item"]), "file");
+    assert!(f.git(&["diff", "--cached", "--name-only"]).is_empty());
+    client.shutdown().await;
+}
+
 #[tokio::test]
 async fn client_bounds_a_workspace_burst_below_the_server_request_limit() {
     let fixture = Fixture::new();
@@ -586,6 +716,11 @@ async fn conflict_and_detached_head_are_explicit() {
     assert_eq!(status["entries"][0]["kind"], "conflict");
     assert_eq!(status["entries"][0]["index"], "U");
     assert_eq!(status["entries"][0]["worktree"], "U");
+    fixture.write("conflict", "resolved\n");
+    change_index(&client, &repo, true, "unstaged", &["conflict"]).await;
+    assert!(fixture.git(&["ls-files", "--unmerged"]).is_empty());
+    assert_eq!(fixture.git(&["show", ":conflict"]), "resolved");
+    assert_eq!(fixture.git(&["rev-parse", "HEAD"]), head);
     fixture.git(&["merge", "--abort"]);
     fixture.git(&["checkout", "--detach", &head]);
     let status = request(&client, "git.status", json!({"repoId":repo})).await;

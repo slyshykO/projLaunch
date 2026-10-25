@@ -171,6 +171,23 @@ module Git =
                 "path" ==> path
             ]
 
+    let changeIndex endpoint repoId operationId diffTarget (paths: string array) : JS.Promise<bool> =
+        let command =
+            if diffTarget = GitProtocol.Staged then
+                "git_unstage"
+            else
+                "git_stage"
+
+        invoke
+            endpoint
+            command
+            [
+                "repoId" ==> repoId
+                "operationId" ==> operationId
+                "target" ==> target diffTarget
+                "paths" ==> paths
+            ]
+
     let cancel (endpoint: GitProtocol.Endpoint option) (operationId: string) : JS.Promise<bool> =
         invoke endpoint "git_cancel" [ "operationId" ==> operationId ]
 

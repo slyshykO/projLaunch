@@ -62,10 +62,14 @@ let private FileRow (tab: RepositoryTab) (selection: CommitFiles) target (file: 
             [
                 prop.type' "button"
                 prop.className (
-                    "w-full text-left border-b border-base-300 p-2 text-sm focus-visible:outline-2 focus-visible:outline-primary "
+                    "flex-1 min-w-0 text-left p-2 text-sm focus-visible:outline-2 focus-visible:outline-primary "
                     + if selected then "bg-primary/10" else "hover:bg-base-200/60"
                 )
                 prop.ariaPressed selected
+                prop.disabled (
+                    selection.commit.IsNone
+                    && (tab.indexRequestId.IsSome || selection.requestId.IsSome)
+                )
                 prop.ariaControls $"diff-panel-{tab.id}"
                 prop.onClick (fun _ ->
                     if selection.commit.IsNone then
@@ -75,7 +79,39 @@ let private FileRow (tab: RepositoryTab) (selection: CommitFiles) target (file: 
                 prop.children fileContent
             ]
 
-    Html.li [ prop.key file.path; prop.children [ fileButton ] ]
+    Html.li
+        [
+            prop.key file.path
+            prop.className "flex items-center gap-2 border-b border-base-300"
+            prop.children
+                [
+                    if selection.commit.IsNone then
+                        Html.input
+                            [
+                                prop.type' "checkbox"
+                                prop.className "checkbox checkbox-xs shrink-0"
+                                prop.ariaLabel $"Select {file.path} in {Workspace.targetName target}"
+                                prop.isChecked (Set.contains (target, file.path) tab.checkedFiles)
+                                prop.disabled (not (canChangeIndex tab))
+                                prop.onChange (fun (value: bool) ->
+                                    dispatch (CheckWorkingTreeFile(tab.id, target, file.path, value)))
+                            ]
+                    fileButton
+                    if selection.commit.IsNone then
+                        let action = if target = GitProtocol.Staged then "Unstage" else "Stage"
+
+                        Html.button
+                            [
+                                prop.type' "button"
+                                prop.className "btn btn-xs btn-ghost shrink-0"
+                                prop.ariaLabel $"{action} {file.path}"
+                                prop.title $"{action} whole file: {file.path}"
+                                prop.disabled (not (canChangeIndex tab))
+                                prop.text action
+                                prop.onClick (fun _ -> dispatch (ChangeIndex(tab.id, target, [| file.path |])))
+                            ]
+                ]
+        ]
 
 let ParentLinks tabId (commit: GitProtocol.Commit) dispatch =
     Html.span
@@ -171,10 +207,32 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                     [
                         prop.type' "button"
                         prop.className "btn btn-xs btn-outline mt-2"
-                        prop.disabled tab.history.requestId.IsSome
+                        prop.disabled (tab.history.requestId.IsSome || tab.indexRequestId.IsSome)
                         prop.text "Refresh changes"
                         prop.onClick (fun _ -> dispatch (RefreshRepositoryHistory tab.id))
                     ]
+
+                Html.p
+                    [
+                        prop.className "mt-2 text-xs text-base-content/60"
+                        prop.text "Stage / unstage whole files. Unstage keeps working files intact."
+                    ]
+            if tab.indexRequestId.IsSome then
+                Html.p
+                    [
+                        prop.role "status"
+                        prop.className "mt-2 text-sm"
+                        prop.text "Updating index…"
+                    ]
+            match tab.indexError with
+            | Some error ->
+                Html.p
+                    [
+                        prop.role "alert"
+                        prop.className "mt-2 text-sm text-error whitespace-pre-wrap break-words"
+                        prop.text error
+                    ]
+            | None -> Html.none
         ]
 
     let fileError (error: string) =
@@ -216,7 +274,8 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
 
                 if isLoading then
                     Html.p [ prop.role "status"; prop.text "Loading changed files…" ]
-                else
+
+                if not isLoading || selection.hasLoaded then
                     match selection.error with
                     | Some error -> fileError error
                     | None ->
@@ -239,6 +298,61 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                                             prop.className "font-semibold text-sm mt-4 mb-2"
                                             prop.text (targetLabel target)
                                         ]
+
+                                    let action = if target = GitProtocol.Staged then "Unstage" else "Stage"
+
+                                    let selected =
+                                        files
+                                        |> Array.filter (fun file -> Set.contains (target, file.path) tab.checkedFiles)
+                                        |> Array.map (fun file -> file.path)
+
+                                    Html.div
+                                        [
+                                            prop.className "flex flex-wrap gap-2 mb-2"
+                                            prop.children
+                                                [
+                                                    Html.button
+                                                        [
+                                                            prop.type' "button"
+                                                            prop.className "btn btn-xs btn-outline"
+                                                            prop.disabled (
+                                                                not (canChangeIndex tab) || selected.Length = 0
+                                                            )
+                                                            prop.ariaLabel
+                                                                $"{action} selected in {Workspace.targetName target}"
+                                                            prop.text $"{action} selected ({selected.Length})"
+                                                            prop.onClick (fun _ ->
+                                                                dispatch (ChangeIndex(tab.id, target, selected)))
+                                                        ]
+                                                    Html.button
+                                                        [
+                                                            prop.type' "button"
+                                                            prop.className "btn btn-xs btn-ghost"
+                                                            prop.disabled (not (canChangeIndex tab))
+                                                            prop.ariaLabel
+                                                                $"{action} all in {Workspace.targetName target}"
+                                                            prop.text $"{action} all ({files.Length})"
+                                                            prop.onClick (fun _ ->
+                                                                dispatch (
+                                                                    ChangeIndex(
+                                                                        tab.id,
+                                                                        target,
+                                                                        files |> Array.map (fun file -> file.path)
+                                                                    )
+                                                                ))
+                                                        ]
+                                                ]
+                                        ]
+
+                                    if
+                                        target <> GitProtocol.Staged
+                                        && (files |> Array.exists (fun file -> file.status.StartsWith "U"))
+                                    then
+                                        Html.p
+                                            [
+                                                prop.className "text-xs text-warning mb-2"
+                                                prop.text "Staging conflict files marks them resolved."
+                                            ]
 
                                 let fileRows =
                                     [

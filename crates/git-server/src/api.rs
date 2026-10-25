@@ -36,6 +36,8 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
     let log = session.clone();
     let files = session.clone();
     let patch = session.clone();
+    let stage = session.clone();
+    let unstage = session.clone();
     let subscribe = session.clone();
     let unsubscribe = session.clone();
     JsonRpc::new()
@@ -66,6 +68,8 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                         "git.log",
                         "git.diffFiles",
                         "git.diff",
+                        "git.stage",
+                        "git.unstage",
                         "git.cancel",
                     ]
                     .into_iter()
@@ -194,6 +198,24 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                 }
                 .await
                 .map_err(rpc_error)
+            }
+        })
+        .add("git.stage", move |params: IndexPathsParams| {
+            let session = stage.clone();
+            async move {
+                async {
+                    let operation = session.operation(&params.operation_id)?;
+                    session.repo(&params.repo_id)?.change_index(true, &params.target, &params.paths, &operation.cancel).await
+                }.await.map_err(rpc_error)
+            }
+        })
+        .add("git.unstage", move |params: IndexPathsParams| {
+            let session = unstage.clone();
+            async move {
+                async {
+                    let operation = session.operation(&params.operation_id)?;
+                    session.repo(&params.repo_id)?.change_index(false, &params.target, &params.paths, &operation.cancel).await
+                }.await.map_err(rpc_error)
             }
         })
         .add("repo.subscribe", move |params: SubscribeParams| {

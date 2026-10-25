@@ -235,7 +235,7 @@ impl Repo {
     }
 }
 
-fn validate_path(path: &str) -> Result<()> {
+pub(super) fn validate_path(path: &str) -> Result<()> {
     ensure!(!path.is_empty() && !path.contains('\0'), "Invalid path");
     ensure!(
         Path::new(path)

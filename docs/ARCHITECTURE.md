@@ -44,6 +44,15 @@ repository IDs and cursors belong to one connection and are reopened after a
 reconnect. Git discovery reads directories, VS Code workspaces and solutions in
 the selected endpoint; persistent project/repository bindings are not stored.
 
+Whole-file staging uses typed `git_stage` / `git_unstage` IPC and
+`git.stage` / `git.unstage` RPC. The frontend tracks in-flight writes by endpoint
+and worktree, independently of tab lifetime, and defers watcher refresh until
+completion. The server validates current file-group membership and supplies
+literal NUL-separated paths to one Git command. Git owns index locking;
+mutations are not retried automatically. Both successful and failed writes
+trigger fresh status/files/diff reads. This transient state adds no database
+migration or workspace JSON fields.
+
 Detailed UI behavior, Git subscriptions and workspace restoration are described
 in the [user guide](USER-GUIDE.md). WSL/SSH installation and transport are covered
 in [remote repositories](REMOTE-REPOSITORIES.md).

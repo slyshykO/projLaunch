@@ -247,6 +247,8 @@ pub fn run() {
             git_host::git_branches,
             git_host::git_diff_files,
             git_host::git_diff,
+            git_host::git_stage,
+            git_host::git_unstage,
             git_host::git_cancel,
             git_host::git_disconnect
         ])

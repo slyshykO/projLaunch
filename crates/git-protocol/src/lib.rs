@@ -174,6 +174,16 @@ pub struct DiffParams {
     pub target: DiffTarget,
 }
 
+/// Whole-file index changes. Paths must belong to the selected current diff.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct IndexPathsParams {
+    pub repo_id: String,
+    pub operation_id: String,
+    pub target: DiffTarget,
+    pub paths: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PatchParams {

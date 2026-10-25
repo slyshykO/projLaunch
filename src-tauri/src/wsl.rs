@@ -248,6 +248,44 @@ mod tests {
                 .is_some_and(|text| text.contains("+after")),
             "Wrong WSL diff"
         );
+        for (method, target, staged) in [
+            ("git.stage", DiffTarget::Unstaged, true),
+            ("git.unstage", DiffTarget::Staged, false),
+        ] {
+            let changed: bool = client
+                .call(
+                    method,
+                    &IndexPathsParams {
+                        repo_id: repo.repo_id.clone(),
+                        operation_id: method.into(),
+                        target,
+                        paths: vec!["hello світ.txt".into()],
+                    },
+                )
+                .await?;
+            ensure!(changed, "WSL index change was not acknowledged");
+            let status: Status = client
+                .call(
+                    "git.status",
+                    &RepoParams {
+                        repo_id: repo.repo_id.clone(),
+                        operation_id: "verify-index".into(),
+                    },
+                )
+                .await?;
+            ensure!(
+                status.entries.len() == 1
+                    && status.entries[0].index == if staged { "M" } else { "." }
+                    && status.entries[0].worktree == if staged { "." } else { "M" },
+                "Wrong WSL index/worktree state"
+            );
+        }
+        shell(
+            distro,
+            "test \"$(cat \"$1/hello світ.txt\")\" = after",
+            &[&root],
+        )
+        .await?;
         let mut events = client.events();
         let _: bool = client
             .call(

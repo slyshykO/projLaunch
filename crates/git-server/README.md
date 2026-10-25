@@ -252,6 +252,29 @@ link target. Working-tree/index reads reflect live files; refresh if they change
 between listing and selection. Conflict paths use Git's combined conflict patch;
 the separate conflict status remains available in `git.status`.
 
+## Whole-file index changes
+
+Additive protocol v1 capabilities `git.stage` and `git.unstage` accept
+`{ "repoId": "...", "operationId": "...", "target": { "kind": "unstaged" }, "paths": ["file.txt"] }`
+and return `true` after Git succeeds. Stage accepts `unstaged` or `untracked`;
+unstage requires `staged`. The caller must reopen the repository after reconnect
+and refresh status/file lists after either success or error. Never retry writes
+automatically: timeout/disconnect can leave an unknown outcome.
+
+Each request selects 1–10000 paths from the current diff. The server validates
+membership before writing and resolves rename sources itself. Paths are literal,
+NUL-separated stdin, with one Git/index-lock transaction per selection:
+`git add --all --pathspec-from-file=- --pathspec-file-nul` or the path form of
+`git reset --quiet --pathspec-from-file=- --pathspec-file-nul`. Unstage changes
+only the index, works with unborn HEAD and preserves HEAD/worktree. Stage uses
+the current working contents, including configured clean filters; staging an
+unmerged path marks it resolved. Submodule directories stage their gitlink only.
+Directory expansion into other changed paths is rejected. No shell, `--force`,
+`--hard`, worktree restoration or automatic index-lock removal is involved.
+
+See the official [git-add](https://git-scm.com/docs/git-add) and
+[git-reset](https://git-scm.com/docs/git-reset) pathspec documentation.
+
 ## Repository subscriptions
 
 `repo.subscribe` is an additive protocol v1 capability, available over stdio and

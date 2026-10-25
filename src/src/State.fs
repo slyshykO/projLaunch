@@ -73,6 +73,9 @@ type RepositoryTab =
         historyInvalidated: bool
         statusInvalidated: bool
         autoRefreshing: bool
+        checkedFiles: Set<GitProtocol.DiffTarget * string>
+        indexRequestId: string option
+        indexError: string option
     }
 
 type Msg =
@@ -114,6 +117,15 @@ type Msg =
         Result<GitProtocol.BranchList, string>
     | SelectWorkingTree of string
     | SelectWorkingTreeFile of string * GitProtocol.DiffTarget * string
+    | CheckWorkingTreeFile of string * GitProtocol.DiffTarget * string * bool
+    | ChangeIndex of string * GitProtocol.DiffTarget * string array
+    | OnIndexChanged of
+        GitProtocol.Endpoint option *
+        string *
+        string *
+        GitProtocol.DiffTarget *
+        string array *
+        Result<bool, exn>
     | SelectRepositoryCommit of tabId: string * oid: string
     | NavigateToParent of tabId: string * oid: string
     | NavigateToBranch of tabId: string * refName: string
@@ -208,6 +220,7 @@ type State =
         projectGit: Map<string, ProjectGitCheck>
         pendingProjectGit: Set<string>
         gitWatchErrors: Map<string, string>
+        pendingIndexChanges: Map<string, string>
         projectEditor: ProjectData option
         isProjectSaving: bool
         projectSaveError: string option
@@ -258,6 +271,7 @@ let init () =
             projectGit = Map.empty
             pendingProjectGit = Set.empty
             gitWatchErrors = Map.empty
+            pendingIndexChanges = Map.empty
             projectEditor = None
             isProjectSaving = false
             projectSaveError = None
@@ -296,6 +310,9 @@ let private newRepositoryTab endpoint root name =
         historyInvalidated = false
         statusInvalidated = false
         autoRefreshing = false
+        checkedFiles = Set.empty
+        indexRequestId = None
+        indexError = None
         history =
             {
                 repoId = None
@@ -306,6 +323,18 @@ let private newRepositoryTab endpoint root name =
                 error = None
             }
     }
+
+/// Writes are serialized in the UI per endpoint/worktree, including closed/reopened tabs.
+let canChangeIndex (tab: RepositoryTab) =
+    tab.indexRequestId.IsNone
+    && tab.history.requestId.IsNone
+    && not tab.statusInvalidated
+    && (tab.selection
+        |> Option.exists (fun selection ->
+            selection.commit.IsNone
+            && selection.hasLoaded
+            && selection.requestId.IsNone
+            && selection.error.IsNone))
 
 /// One observation per endpoint/worktree, shared by cards and open tabs.
 let watchedRepositories (state: State) =
@@ -625,7 +654,12 @@ let rec private updateCore msg state =
             else
                 Cmd.none
         | None ->
-            let tab = newRepositoryTab repository.endpoint repository.root repository.name
+            let tab =
+                { newRepositoryTab repository.endpoint repository.root repository.name with
+                    indexRequestId =
+                        state.pendingIndexChanges
+                        |> Map.tryFind (GitProtocol.repositoryKey repository.endpoint repository.root)
+                }
 
             { state with
                 repositoryTabs = state.repositoryTabs @ [ tab ]
@@ -679,6 +713,168 @@ let rec private updateCore msg state =
             { state with isAboutOpen = true }, Cmd.none
     | CloseAbout -> { state with isAboutOpen = false }, Cmd.none
 
+    | CheckWorkingTreeFile(id, target, path, checked') ->
+        let tabs =
+            state.repositoryTabs
+            |> List.map (fun tab ->
+                if
+                    tab.id = id
+                    && canChangeIndex tab
+                    && (tab.selection.Value.groups
+                        |> Array.exists (fun (group, files) ->
+                            group = target && (files |> Array.exists (fun file -> file.path = path))))
+                then
+                    { tab with
+                        checkedFiles = (if checked' then Set.add else Set.remove) (target, path) tab.checkedFiles
+                    }
+                else
+                    tab)
+
+        { state with repositoryTabs = tabs }, Cmd.none
+
+    | ChangeIndex(id, target, paths) ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when canChangeIndex tab && not state.isWindowClosePending ->
+            let key = GitProtocol.repositoryKey tab.endpoint tab.root
+
+            let files =
+                tab.selection.Value.groups
+                |> Array.tryFind (fun (group, _) -> group = target)
+                |> Option.map snd
+                |> Option.defaultValue [||]
+
+            let paths = Array.distinct paths
+
+            if
+                paths.Length = 0
+                || Map.containsKey key state.pendingIndexChanges
+                || (paths
+                    |> Array.exists (fun path -> files |> Array.exists (fun file -> file.path = path) |> not))
+            then
+                state, Cmd.none
+            else
+                let requestId = Guid.NewGuid().ToString()
+
+                let write () =
+                    promise {
+                        let! repository =
+                            AppTauri.Git.openRepository tab.endpoint tab.root $"index-{requestId}-open"
+
+                        return!
+                            AppTauri.Git.changeIndex
+                                tab.endpoint
+                                repository.repoId
+                                $"index-{requestId}-write"
+                                target
+                                paths
+                    }
+
+                let tabs =
+                    state.repositoryTabs
+                    |> List.map (fun item ->
+                        if GitProtocol.repositoryKey item.endpoint item.root = key then
+                            { item with
+                                indexRequestId = Some requestId
+                                indexError = None
+                                selection =
+                                    item.selection
+                                    |> Option.map (fun selection ->
+                                        if selection.commit.IsNone then
+                                            { selection with
+                                                diff =
+                                                    selection.diff
+                                                    |> Option.map (fun diff -> { diff with requestId = None })
+                                            }
+                                        else
+                                            selection)
+                            }
+                        else
+                            item)
+
+                { state with
+                    pendingIndexChanges = Map.add key requestId state.pendingIndexChanges
+                    repositoryTabs = tabs
+                },
+                Cmd.OfPromise.either
+                    write
+                    ()
+                    (fun result -> OnIndexChanged(tab.endpoint, tab.root, requestId, target, paths, Ok result))
+                    (fun error -> OnIndexChanged(tab.endpoint, tab.root, requestId, target, paths, Error error))
+        | _ -> state, Cmd.none
+
+    | OnIndexChanged(endpoint, root, requestId, target, paths, result) ->
+        let key = GitProtocol.repositoryKey endpoint root
+
+        if Map.tryFind key state.pendingIndexChanges <> Some requestId then
+            state, Cmd.none
+        else
+            let tabs =
+                state.repositoryTabs
+                |> List.map (fun tab ->
+                    if GitProtocol.repositoryKey tab.endpoint tab.root <> key then
+                        tab
+                    else
+                        let diff =
+                            tab.selection
+                            |> Option.filter (fun selection -> selection.commit.IsNone)
+                            |> Option.bind (fun selection -> selection.diff)
+
+                        let restore =
+                            diff
+                            |> Option.map (fun diff ->
+                                let nextTarget =
+                                    if
+                                        result = Ok true
+                                        && diff.target = target
+                                        && Array.contains diff.file.path paths
+                                    then
+                                        if target = GitProtocol.Staged then
+                                            GitProtocol.Unstaged
+                                        else
+                                            GitProtocol.Staged
+                                    else
+                                        diff.target
+
+                                ({
+                                    target = Workspace.targetName nextTarget
+                                    path = diff.file.path
+                                }
+                                : Workspace.File))
+
+                        { tab with
+                            indexRequestId = None
+                            indexError =
+                                match result with
+                                | Ok true -> None
+                                | Ok false ->
+                                    Some
+                                        "Git did not confirm the operation. Check the refreshed changes before retrying."
+                                | Error error -> Some $"{error}\nCheck the refreshed changes before retrying."
+                            checkedFiles = if result = Ok true then Set.empty else tab.checkedFiles
+                            restoreFile = restore
+                            statusInvalidated = true
+                            selection =
+                                tab.selection
+                                |> Option.map (fun selection ->
+                                    if selection.commit.IsNone then
+                                        { selection with requestId = None }
+                                    else
+                                        selection)
+                        })
+
+            { state with
+                pendingIndexChanges = Map.remove key state.pendingIndexChanges
+                repositoryTabs = tabs
+            },
+            Cmd.batch
+                [
+                    Cmd.ofMsg (GitChanged(endpoint, root, false, true))
+                    // Explicit refresh also works when this tab is inactive or newly reopened.
+                    for tab in tabs do
+                        if GitProtocol.repositoryKey tab.endpoint tab.root = key then
+                            Cmd.ofMsg (RefreshWatchedRepository tab.id)
+                ]
+
     | SelectWorkingTree id ->
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
         | Some tab when tab.history.requestId.IsNone ->
@@ -702,6 +898,7 @@ let rec private updateCore msg state =
                             { item with
                                 selection = Some selection
                                 restoreFile = None
+                                checkedFiles = Set.empty
                             }
                         else
                             item)
@@ -925,6 +1122,7 @@ let rec private updateCore msg state =
             match tab.selection with
             | Some selection when
                 selection.requestId.IsNone
+                && (selection.commit.IsSome || tab.indexRequestId.IsNone)
                 && (selection.commit
                     |> Option.forall (fun commit -> commit.parents.Length <= 1 || selection.parent.IsSome))
                 ->
@@ -1012,12 +1210,22 @@ let rec private updateCore msg state =
 
                                 Workspace.fileTarget saved file
                                 |> Option.bind (fun target ->
-                                    if
+                                    let matching =
                                         groups
-                                        |> Array.exists (fun (group, files) ->
-                                            group = target
-                                            && (files |> Array.exists (fun entry -> entry.path = file.path)))
-                                    then
+                                        |> Array.filter (fun (_, files) ->
+                                            files |> Array.exists (fun entry -> entry.path = file.path))
+
+                                    let chosen =
+                                        matching
+                                        |> Array.tryFind (fun (group, _) -> group = target)
+                                        |> Option.orElseWith (fun () ->
+                                            if selection.commit.IsNone then
+                                                Array.tryHead matching
+                                            else
+                                                None)
+
+                                    match chosen with
+                                    | Some(target, _) ->
                                         restore <-
                                             Cmd.ofMsg (
                                                 if selection.commit.IsSome then
@@ -1026,12 +1234,20 @@ let rec private updateCore msg state =
                                                     SelectWorkingTreeFile(id, target, file.path)
                                             )
 
-                                        Some file
-                                    else
-                                        None))
+                                        Some
+                                            { file with
+                                                target = Workspace.targetName target
+                                            }
+                                    | None -> None))
 
                         { tab with
                             restoreFile = pending
+                            checkedFiles =
+                                tab.checkedFiles
+                                |> Set.filter (fun (target, path) ->
+                                    groups
+                                    |> Array.exists (fun (group, files) ->
+                                        group = target && (files |> Array.exists (fun file -> file.path = path))))
                             selection =
                                 Some
                                     { selection with
@@ -1057,7 +1273,11 @@ let rec private updateCore msg state =
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
         | Some tab ->
             match tab.selection with
-            | Some selection when selection.hasLoaded && selection.requestId.IsNone ->
+            | Some selection when
+                selection.hasLoaded
+                && selection.requestId.IsNone
+                && (selection.commit.IsSome || tab.indexRequestId.IsNone)
+                ->
                 let requested =
                     match msg with
                     | SelectCommitFile(_, path) ->
@@ -1308,6 +1528,7 @@ let rec private updateCore msg state =
                             && (tab.historyInvalidated || tab.statusInvalidated)
                             && (tab.history.hasLoaded || tab.history.error.IsSome)
                             && tab.history.requestId.IsNone
+                            && tab.indexRequestId.IsNone
                             && not tab.restoringHistory
                             && tab.commitNavigation.IsNone
                             && (tab.selection
@@ -1334,6 +1555,7 @@ let rec private updateCore msg state =
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
         | Some tab when
             tab.history.requestId.IsNone
+            && tab.indexRequestId.IsNone
             && (not append || (tab.history.repoId.IsSome && tab.history.nextCursor.IsSome))
             ->
             let requestId = Guid.NewGuid().ToString()
@@ -1452,16 +1674,17 @@ let rec private updateCore msg state =
                                 statusInvalidated = if append then item.statusInvalidated else false
                                 restoreFile =
                                     if automatic then
-                                        item.selection
-                                        |> Option.filter (fun selection -> selection.commit.IsNone)
-                                        |> Option.bind (fun selection -> selection.diff)
-                                        |> Option.map (fun diff ->
-                                            ({
-                                                target = Workspace.targetName diff.target
-                                                path = diff.file.path
-                                            }
-                                            : Workspace.File))
-                                        |> Option.orElse item.restoreFile
+                                        item.restoreFile
+                                        |> Option.orElseWith (fun () ->
+                                            item.selection
+                                            |> Option.filter (fun selection -> selection.commit.IsNone)
+                                            |> Option.bind (fun selection -> selection.diff)
+                                            |> Option.map (fun diff ->
+                                                ({
+                                                    target = Workspace.targetName diff.target
+                                                    path = diff.file.path
+                                                }
+                                                : Workspace.File)))
                                     else
                                         item.restoreFile
                                 branchesError = if append then item.branchesError else None
