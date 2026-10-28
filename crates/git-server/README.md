@@ -317,10 +317,12 @@ and 64 KiB stderr cap. A timeout, cancellation or output limit kills and waits f
 the child. Patch truncation also stops and reaps its child. Client requests have
 a 90-second deadline; expiry closes the connection. Stream writes have 5 seconds.
 
-Each connection holds up to 128 repositories and 128 cursors. History is limited
-to 1024 distinct starting OIDs. The captured OIDs are passed through Git's stdin
-to avoid Windows command-line limits while keeping pagination stable. These are
-explicit errors/refresh conditions, never silent partial results.
+Each connection holds up to 128 repositories and 128 cursors. History has no
+separate cap on distinct starting OIDs. The captured OIDs are passed through Git's
+stdin to avoid Windows command-line limits while keeping pagination stable.
+The ordinary Git output cap still applies when collecting refs, and command
+timeouts and cancellation still apply to history loading. Exceeding resource
+bounds produces explicit errors/refresh conditions, never silent partial results.
 
 No Git mutation methods or standalone TLS/authentication layer are
 implemented; SSH transport uses OpenSSH authentication and encryption. The prototype HTTP/WS

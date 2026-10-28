@@ -1,14 +1,8 @@
 use super::{Repo, line, runner::args};
 use anyhow::{Context, Result, ensure};
 use git_protocol::{Commit, LogPage};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-    time::Instant,
-};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 use tokio_util::sync::CancellationToken;
-
-const MAX_HISTORY_ROOTS: usize = 1024;
 
 pub struct History {
     pub repo_id: String,
@@ -70,16 +64,7 @@ impl Repo {
         if let Some(head) = self.head(cancel).await? {
             refs.entry(head).or_default().push("HEAD".into());
         }
-        let roots: Vec<_> = refs
-            .keys()
-            .cloned()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect();
-        ensure!(
-            roots.len() <= MAX_HISTORY_ROOTS,
-            "Too many history roots (limit {MAX_HISTORY_ROOTS} in protocol v1)"
-        );
+        let roots = refs.keys().cloned().collect();
         Ok(Arc::new(History {
             repo_id: self.info.repo_id.clone(),
             created: Instant::now(),

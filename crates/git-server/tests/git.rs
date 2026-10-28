@@ -574,12 +574,12 @@ async fn history_snapshot_survives_new_commits_and_branch_movement() {
 }
 
 #[tokio::test]
-async fn history_accepts_1024_distinct_roots_and_rejects_1025() {
+async fn history_paginates_more_than_1024_distinct_roots() {
     let fixture = Fixture::new();
-    // Fast-import creates independent tips in one process. 1024 SHA-1 roots
-    // exceed Windows' command-line limit when passed as individual arguments.
+    // Fast-import creates independent tips in one process. 2048 SHA-1 roots
+    // exceed both the former root cap and Windows' command-line limit.
     let mut input = String::new();
-    for index in 0..1024 {
+    for index in 0..2048 {
         let message = format!("root {index}");
         input.push_str(&format!(
             "commit refs/heads/root-{index}\ncommitter Test <test@example.invalid> 1700000000 +0000\ndata {}\n{message}\n\n",
@@ -606,7 +606,7 @@ async fn history_accepts_1024_distinct_roots_and_rejects_1025() {
         .lines()
         .map(str::to_owned)
         .collect();
-    assert_eq!(expected.len(), 1024);
+    assert_eq!(expected.len(), 2048);
 
     let (client, repo) = fixture.connect().await;
     let mut cursor = Value::Null;
@@ -631,22 +631,6 @@ async fn history_accepts_1024_distinct_roots_and_rejects_1025() {
     }
     assert_eq!(seen, expected);
 
-    let tree = fixture.git(&["rev-parse", "HEAD^{tree}"]);
-    let extra = fixture.git(&["commit-tree", &tree, "-m", "root 1025"]);
-    fixture.git(&["update-ref", "refs/heads/extra", &extra]);
-    let error = client
-        .call::<_, Value>(
-            "git.log",
-            &json!({"repoId":repo,"operationId":"too-many-roots"}),
-        )
-        .await
-        .unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("Too many history roots (limit 1024 in protocol v1)"),
-        "{error}"
-    );
     client.shutdown().await;
 }
 
