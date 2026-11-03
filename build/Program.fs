@@ -51,7 +51,7 @@ module Help =
         Print.println "  build         Build the app in debug mode (default)"
         Print.println "                --release also builds both Git servers and creates the release ZIP"
         Print.println "  run           Build and run the app (--release for release mode)"
-        Print.println "  publish       Build a Windows release ZIP with Windows/Linux Git servers"
+        Print.println "  publish       Build a release archive (Windows: ZIP with both Git servers via WSL; Linux: tar.gz with the native server)"
         Print.println "                --wsl-distro NAME selects the Linux build distribution"
         Print.println "  set-version X.Y.Z  Increase the release version, commit and tag vX.Y.Z"
         Print.println "  version       Print the current Git version without changing files"
@@ -253,8 +253,8 @@ module Build =
         Publish.run (fun () -> buildApplication true) distribution
 
     let build isRelease =
-        // Release packaging (Windows app + Linux server via WSL) only makes sense on Windows;
-        // elsewhere build a plain native release with the native Git server sidecar.
+        // Windows release packaging also builds the Linux server via WSL; on Linux only the
+        // native server is built, so a plain native release build is used.
         if isRelease && Config.isWindows then
             publish None
         else
