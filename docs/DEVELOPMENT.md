@@ -51,6 +51,11 @@ Notes:
 - `npm run start` is a lighter watch/serve variant.
 - `npm run build` compiles the frontend into `dist/`.
 
+`src/index.css` excludes daisyUI's unused `join` styles. Scanning the Feliz.DaisyUI
+bindings otherwise includes them, and their nested `@scope` selectors trigger
+two CSS optimizer warnings with the current dependencies. Revisit this exclusion
+before adding a `join` component to the UI.
+
 ## Build And Maintenance
 
 The repo also includes a custom Windows helper:
