@@ -94,6 +94,14 @@ module BuildUtils =
 
             Print.println ""
 
+            // `sh -c` takes the whole command line as one argument; extra arguments would
+            // become $0/$1 and be dropped. cmd.exe /C accepts the arguments as-is.
+            let runArgs =
+                match List.ofSeq runArgs with
+                | flag :: rest when not Config.isWindows && flag = Config.shellCmdArg () && not rest.IsEmpty ->
+                    [ flag; String.Join(" ", rest) ]
+                | args -> args
+
             let processInfo = ProcessStartInfo(cmd, runArgs)
 
             let oldPath =
@@ -109,16 +117,17 @@ module BuildUtils =
             processInfo.UseShellExecute <- false
 
             use proc = new Process(StartInfo = processInfo)
+            let started = DateTime.Now
             proc.Start() |> ignore
             proc.WaitForExit()
 
             if proc.ExitCode <> 0 then
                 Print.printRed "FAILED "
-                Print.println $"in {(DateTime.Now - proc.StartTime).TotalSeconds} s"
+                Print.println $"in {(DateTime.Now - started).TotalSeconds} s"
                 AppResult.Failure
             else
                 Print.printGreen "Ok "
-                Print.println $"in {(DateTime.Now - proc.StartTime).TotalSeconds} s"
+                Print.println $"in {(DateTime.Now - started).TotalSeconds} s"
                 AppResult.Success
         with ex ->
             Print.printlnColor ConsoleColor.Red $"{ex.Message}"
@@ -244,7 +253,12 @@ module Build =
         Publish.run (fun () -> buildApplication true) distribution
 
     let build isRelease =
-        if isRelease then publish None else buildApplication false
+        // Release packaging (Windows app + Linux server via WSL) only makes sense on Windows;
+        // elsewhere build a plain native release with the native Git server sidecar.
+        if isRelease && Config.isWindows then
+            publish None
+        else
+            buildApplication isRelease
 
     let run isRelease =
         let buildResult = build isRelease

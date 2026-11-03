@@ -72,6 +72,7 @@ module private Internal =
         visitProject projectFilePath
         addExisting (Path.Combine(projectDir, "scripts", "genhashes.fsx"))
         addExisting (Path.Combine(projectDir, "..", "build.bat"))
+        addExisting (Path.Combine(projectDir, "..", "build.sh"))
         inputs |> Seq.sort |> Seq.toList
 
 let private fileHash (filePath: string) =
