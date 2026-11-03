@@ -51,7 +51,10 @@ module Help =
         Print.println "  build         Build the app in debug mode (default)"
         Print.println "                --release also builds both Git servers and creates the release ZIP"
         Print.println "  run           Build and run the app (--release for release mode)"
-        Print.println "  publish       Build a release archive (Windows: ZIP with both Git servers via WSL; Linux: tar.gz with the native server)"
+
+        Print.println
+            "  publish       Build a release archive (Windows: ZIP with both Git servers via WSL; Linux: tar.gz with the native server)"
+
         Print.println "                --wsl-distro NAME selects the Linux build distribution"
         Print.println "  set-version X.Y.Z  Increase the release version, commit and tag vX.Y.Z"
         Print.println "  version       Print the current Git version without changing files"
