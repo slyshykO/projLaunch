@@ -154,6 +154,10 @@ The GUI first looks for its platform's server in `binaries/` next to itself.
 Legacy adjacent-server and source-checkout paths remain fallback locations.
 The Linux server is deployed automatically for WSL and SSH endpoints; local Windows
 repositories use the Windows server. This is a Windows GUI distribution, not a Linux GUI build.
+On Linux, `publish` creates `build/dist/projLaunch-<version>-linux-x64.tar.gz` containing
+`projLaunch`, `projLaunch.png`, the native server and `install-desktop.sh`. After extracting,
+run `./install-desktop.sh` to write `~/.local/share/applications/projlaunch.desktop` with
+absolute paths (so the menu and dock show the icon); `--remove` deletes it.
 The destination Windows system still needs WebView2 Runtime and Git on PATH.
 The archive contains only the GUI and two servers, without symbols or user data.
 It replaces the previous archive of the same version only after both builds and

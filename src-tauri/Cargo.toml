@@ -1,6 +1,6 @@
 [package]
 name = "projlaunch"
-version = "0.5.1+25.gead2913.dirty"
+version = "0.5.1+26.g02a07bc.dirty"
 description = "Project launcher"
 authors = ["Oleksiy Slyshyk <alexslyshyk@gmail.com>"]
 edition = "2024"
@@ -19,7 +19,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 anyhow = "1"
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["image-png"] }
 tauri-plugin-opener = "2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

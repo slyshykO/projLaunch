@@ -60,15 +60,43 @@ let createArchive projectRoot =
         if File.Exists temporary then
             File.Delete temporary
 
+/// Installer shipped in the Linux archive: writes a .desktop entry with absolute paths for the
+/// extracted location, so the launcher and dock show the app icon. Uninstall with --remove.
+let private linuxInstallScript =
+    String.Join(
+        "\n",
+        [
+            "#!/bin/sh"
+            "# Registers projLaunch in the desktop application menu (current user only)."
+            "set -e"
+            "dir=$(cd \"$(dirname \"$0\")\" && pwd)"
+            "target=\"${XDG_DATA_HOME:-$HOME/.local/share}/applications/projlaunch.desktop\""
+            "if [ \"$1\" = \"--remove\" ]; then rm -f \"$target\"; echo \"Removed $target\"; exit 0; fi"
+            "mkdir -p \"$(dirname \"$target\")\""
+            "cat > \"$target\" <<EOF"
+            "[Desktop Entry]"
+            "Type=Application"
+            "Name=Project Launcher"
+            "Comment=Project launcher and Git client"
+            "Exec=\"$dir/projLaunch\""
+            "Icon=$dir/projLaunch.png"
+            "Terminal=false"
+            "Categories=Development;"
+            "StartupWMClass=projlaunch"
+            "EOF"
+            "chmod +x \"$target\""
+            "command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database \"$(dirname \"$target\")\" || true"
+            "echo \"Installed $target\""
+            ""
+        ]
+    )
+
 /// Linux x64 portable archive: the GUI plus the native Git server only (no WSL, no Windows server).
 let createLinuxArchive projectRoot =
     // Regex instead of JsonDocument: the trimmed Linux helper cannot load System.IO.Pipelines.
     let version =
         let m =
-            Regex.Match(
-                File.ReadAllText(Path.Combine(projectRoot, "package.json")),
-                "\"version\"\\s*:\\s*\"([^\"]+)\""
-            )
+            Regex.Match(File.ReadAllText(Path.Combine(projectRoot, "package.json")), "\"version\"\\s*:\\s*\"([^\"]+)\"")
 
         if m.Success then
             m.Groups[1].Value
@@ -82,6 +110,7 @@ let createLinuxArchive projectRoot =
         [
             Path.Combine(projectRoot, "src-tauri", "target", "release", "projlaunch"), "projLaunch"
             Path.Combine(projectRoot, "src-tauri", "binaries", linuxServer), $"binaries/{linuxServer}"
+            Path.Combine(projectRoot, "src-tauri", "icons", "128x128@2x.png"), "projLaunch.png"
         ]
 
     for source, _ in files do
@@ -97,13 +126,30 @@ let createLinuxArchive projectRoot =
     try
         for source, entryName in files do
             let destination = Path.Combine(staging, entryName)
+
             Directory.CreateDirectory(Path.GetDirectoryName destination |> Option.ofObj |> Option.get)
             |> ignore
 
             File.Copy(source, destination)
 
+        let installer = Path.Combine(staging, "install-desktop.sh")
+        File.WriteAllText(installer, linuxInstallScript)
+
+        File.SetUnixFileMode(
+            installer,
+            UnixFileMode.UserRead
+            ||| UnixFileMode.UserWrite
+            ||| UnixFileMode.UserExecute
+            ||| UnixFileMode.GroupRead
+            ||| UnixFileMode.GroupExecute
+            ||| UnixFileMode.OtherRead
+            ||| UnixFileMode.OtherExecute
+        )
+
         // tar keeps the executable bits that ZipArchive would drop.
-        let startInfo = Diagnostics.ProcessStartInfo("tar", [ "-czf"; temporary; "-C"; staging; "." ])
+        let startInfo =
+            Diagnostics.ProcessStartInfo("tar", [ "-czf"; temporary; "-C"; staging; "." ])
+
         startInfo.UseShellExecute <- false
         use proc = Diagnostics.Process.Start startInfo
 
@@ -149,29 +195,29 @@ let run buildApplication distribution =
             runLinux buildApplication
         else
 
-        if
-            not (OperatingSystem.IsWindows())
-            || RuntimeInformation.OSArchitecture <> Architecture.X64
-        then
-            failwith "Publishing requires Windows x64 (with WSL) or Linux x64"
+            if
+                not (OperatingSystem.IsWindows())
+                || RuntimeInformation.OSArchitecture <> Architecture.X64
+            then
+                failwith "Publishing requires Windows x64 (with WSL) or Linux x64"
 
-        // Publishing uses the standard Tauri output path; do not accidentally package an old build.
-        checkCargoOverrides ()
+            // Publishing uses the standard Tauri output path; do not accidentally package an old build.
+            checkCargoOverrides ()
 
-        let target = Environment.GetEnvironmentVariable "TAURI_ENV_TARGET_TRIPLE"
+            let target = Environment.GetEnvironmentVariable "TAURI_ENV_TARGET_TRIPLE"
 
-        if not (String.IsNullOrWhiteSpace target) && target <> "x86_64-pc-windows-msvc" then
-            failwith "Publishing requires the x86_64-pc-windows-msvc Tauri target"
+            if not (String.IsNullOrWhiteSpace target) && target <> "x86_64-pc-windows-msvc" then
+                failwith "Publishing requires the x86_64-pc-windows-msvc Tauri target"
 
-        // Fail early if WSL/toolchains are unavailable. The app build also builds the native sidecar.
-        if GitServer.build true (GitServer.Ubuntu22 distribution) <> 0 then
-            1
-        elif buildApplication () <> 0 then
-            1
-        else
-            let archive = createArchive Versioning.projectRoot
-            Print.printlnGreen $"Release archive: {archive}"
-            0
+            // Fail early if WSL/toolchains are unavailable. The app build also builds the native sidecar.
+            if GitServer.build true (GitServer.Ubuntu22 distribution) <> 0 then
+                1
+            elif buildApplication () <> 0 then
+                1
+            else
+                let archive = createArchive Versioning.projectRoot
+                Print.printlnGreen $"Release archive: {archive}"
+                0
     with ex ->
         Print.printlnRed $"Publish failed: {ex.Message}"
         1
