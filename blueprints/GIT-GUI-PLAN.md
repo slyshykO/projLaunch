@@ -201,27 +201,3 @@ Load more после последней страницы. `git diff --check` с 
 **Ограничения.** Продолжают действовать общий лимит вывода Git 8 МиБ (включая
 чтение списка refs), таймаут команд, отмена и ограничения числа cursors.
 Очень большие репозитории всё ещё могут упираться в эти ограничения ресурсов.
-
-### Отключение генератора Serde на Linux — выполнено 04.11.2026
-
-**Решение и результат.** В `src/app.fsproj` для Linux по умолчанию задано
-`SerdeJsonSkipGeneration=true`: генератор Serde.FS.Json требует .NET 9 и мешал
-загрузке проекта Ionide на машине с .NET 10/11 без runtime roll-forward.
-Приложение использует ручные Thoth.Json codecs, поэтому генерация ему не нужна.
-Пакеты и атрибуты Serde сохранены; Windows/macOS и отдельные Serde probes
-не изменены. Явное значение свойства имеет приоритет над Linux default.
-Поведение и настройка описаны в `docs/DEVELOPMENT.md`.
-
-**Проверки.** После `npm run gen:version` прошли design-time `Compile` для
-`src/app.fsproj` (`net10.0`, `DesignTimeBuild=true`, `SkipCompilerExecution=true`,
-`ProvideCommandLineArgs=true`) и полная Fable Debug-компиляция с `--noCache`;
-оба запуска выполнены без `DOTNET_ROLL_FORWARD`. MSBuild подтвердил default
-`true` также для `net11.0` и сохранение явного override `false`.
-`node scripts/tests/test-project-editor.mjs` прошёл, включая сериализацию
-local/SSH/WSL проектов и переменных окружения. `git diff --check` с `cr-at-eol`
-прошёл; отслеживаемые manifests/lockfiles генерацией версии не изменены.
-
-**Ограничения.** Исправление убирает запуск Serde-генератора только у приложения.
-Build helper по-прежнему запускает `dotnet fsi` через `PATH`, поэтому правильный
-SDK нужен в окружении VS Code независимо от `FSharp.dotnetRoot`.
-Интерактивная загрузка Ionide после изменения не проверялась.

@@ -153,13 +153,16 @@ let createLinuxArchive projectRoot =
         startInfo.UseShellExecute <- false
         use proc = Diagnostics.Process.Start startInfo
 
-        proc.WaitForExit()
+        match proc with
+        | null -> failwith "Failed to start tar"
+        | proc ->
+            proc.WaitForExit()
 
-        if proc.ExitCode <> 0 then
-            failwith $"tar failed with exit code {proc.ExitCode}"
+            if proc.ExitCode <> 0 then
+                failwith $"tar failed with exit code {proc.ExitCode}"
 
-        File.Move(temporary, archivePath, true)
-        archivePath
+            File.Move(temporary, archivePath, true)
+            archivePath
     finally
         if File.Exists temporary then
             File.Delete temporary

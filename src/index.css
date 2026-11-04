@@ -3,7 +3,10 @@
 @source './bin/fable-js/fable_modules/Feliz.DaisyUI.5.4.0/DaisyUI.fs';
 @source './bin/fable-js/fable_modules/Feliz.DaisyUI.5.4.0/Modifiers.fs';
 
-@plugin "daisyui";
+@plugin "daisyui" {
+  /* Unused by the app; its @scope rules currently trigger CSS optimizer warnings. */
+  exclude: join;
+}
 
 .commit-history-table .commit-refs-cell {
   width: 176px;

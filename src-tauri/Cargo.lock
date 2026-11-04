@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "git-client"
-version = "0.5.1+26.g02a07bc"
+version = "0.5.1+30.g9024dd5"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -1359,7 +1359,7 @@ dependencies = [
 
 [[package]]
 name = "git-discovery"
-version = "0.5.1+26.g02a07bc"
+version = "0.5.1+30.g9024dd5"
 dependencies = [
  "anyhow",
  "jsonc-parser",
@@ -1371,7 +1371,7 @@ dependencies = [
 
 [[package]]
 name = "git-protocol"
-version = "0.5.1+26.g02a07bc"
+version = "0.5.1+30.g9024dd5"
 dependencies = [
  "serde",
 ]
@@ -1497,15 +1497,6 @@ name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
-
-[[package]]
-name = "hashbrown"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
-dependencies = [
- "foldhash",
-]
 
 [[package]]
 name = "hashbrown"
@@ -2854,7 +2845,7 @@ dependencies = [
 
 [[package]]
 name = "projlaunch"
-version = "0.5.1+26.g02a07bc"
+version = "0.5.1+30.g9024dd5"
 dependencies = [
  "anyhow",
  "fs-err",
@@ -3024,11 +3015,10 @@ dependencies = [
 
 [[package]]
 name = "rsqlite-vfs"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c51c9ae4df8a7fba42103df5c621fa3c37eccf3a3c650879e90fc48b11cc192c"
+checksum = "353b74f9810d5b085b6c42c9d86a5f0fdb795553235cdd48753b32e3809d18a7"
 dependencies = [
- "hashbrown 0.16.1",
  "thiserror 2.0.21",
 ]
 
@@ -3466,14 +3456,12 @@ dependencies = [
 
 [[package]]
 name = "sqlite-wasm-rs"
-version = "0.5.5"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc3efc0da82635d7e1ced0053bbbfa8c7ab9645d0bf36ceb4f7127bb85315d75"
+checksum = "36bd8e29bf08189a005b2df1df99823aa0861cabe9044e5f31ed54ca292ee618"
 dependencies = [
  "cc",
- "js-sys",
  "rsqlite-vfs",
- "wasm-bindgen",
 ]
 
 [[package]]
