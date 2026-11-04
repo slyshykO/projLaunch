@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <LangVersion>10</LangVersion>
+    <!-- The app uses hand-written Thoth.Json codecs; avoid the net9.0 generator on Linux. -->
+    <SerdeJsonSkipGeneration Condition="'$(SerdeJsonSkipGeneration)' == '' and $([MSBuild]::IsOSPlatform('Linux'))">true</SerdeJsonSkipGeneration>
   </PropertyGroup>
   <ItemGroup>
     <None Include="index.html" />

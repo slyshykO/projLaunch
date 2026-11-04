@@ -21,6 +21,15 @@ The .NET projects target both `net10.0` and `net11.0`. The local tool manifest p
 Paket `12.0.0-alpha001`, which adds .NET 11 framework support; Paket 11.0.1 cannot
 restore `net11.0` projects. Run `dotnet tool restore` after pulling tool updates.
 
+On Linux, `src/app.fsproj` disables the Serde.FS.Json generator by default using
+`SerdeJsonSkipGeneration`. The app uses hand-written Thoth.Json codecs, so its
+serialization behavior is unchanged and loading the app in Ionide does not need
+the generator's .NET 9 runtime. The Serde packages and attributes remain available;
+Windows/macOS and the standalone Serde probes retain their existing behavior.
+Pass `-p:SerdeJsonSkipGeneration=false` to MSBuild to explicitly enable generation.
+Ionide's build commands still need the SDK selected by `global.json` on `PATH`;
+`FSharp.dotnetRoot` alone does not change `PATH` for child commands.
+
 ## Development
 
 Install/restore dependencies as needed:
