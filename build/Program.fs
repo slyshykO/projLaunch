@@ -256,9 +256,7 @@ module Build =
         Publish.run (fun () -> buildApplication true) distribution
 
     let build isRelease =
-        // Windows release packaging also builds the Linux server via WSL; on Linux only the
-        // native server is built, so a plain native release build is used.
-        if isRelease && Config.isWindows then
+        if isRelease then
             publish None
         else
             buildApplication isRelease
