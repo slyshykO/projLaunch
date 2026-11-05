@@ -3,8 +3,19 @@ module Print
 module private Internal =
     let lockObj = System.Threading.Lock()
 
-    let IsColorEnabled () =
-        Gapotchenko.FX.Console.ConsoleTraits.IsColorEnabled
+    let isColorEnabled () =
+        not System.Console.IsOutputRedirected
+        && System.String.IsNullOrEmpty(System.Environment.GetEnvironmentVariable "NO_COLOR")
+        && not (
+            System.String.Equals(
+                System.Environment.GetEnvironmentVariable "TERM",
+                "dumb",
+                System.StringComparison.OrdinalIgnoreCase
+            )
+        )
+
+    let IsColorEnabled () = isColorEnabled ()
+
 
 let print (str: string) =
     lock Internal.lockObj (fun () ->
