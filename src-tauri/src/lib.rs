@@ -185,7 +185,14 @@ pub fn run() {
                 .item(&refresh)
                 .build()?;
             let about = MenuItemBuilder::with_id("about", "About ProjLaunch…").build(app)?;
-            let help_menu = SubmenuBuilder::new(app, "Help").item(&about).build()?;
+            let help_menu = SubmenuBuilder::new(app, "Help").item(&about);
+            #[cfg(debug_assertions)]
+            let help_menu = {
+                let debug_about =
+                    MenuItemBuilder::with_id("debug-about", "DebugAbout…").build(app)?;
+                help_menu.item(&debug_about)
+            };
+            let help_menu = help_menu.build()?;
             let menu = MenuBuilder::new(app);
             #[cfg(target_os = "macos")]
             let menu = menu.item(

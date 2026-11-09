@@ -180,136 +180,78 @@ let private Projects
         ]
     ]
 
+let private detailRow (label: string) value =
+    Html.tr [
+        Html.th [
+            prop.scope "row"
+            prop.className "w-fit whitespace-nowrap p-2 text-left font-medium align-top"
+            prop.text label
+        ]
+        Html.td [ prop.className "p-2 break-all"; prop.children [ value ] ]
+    ]
+
+let private detailsTable (rows: ReactElement list) =
+    Daisy.table [
+        prop.className "text-sm table-auto w-full"
+        prop.children [ Html.tbody rows ]
+    ]
+
 [<ReactMemoComponent>]
-let private About
-    (appVersion: string)
-    (tauriVersion: string)
+let private About (tauriVersion: string) =
+    detailsTable [
+        detailRow "Version" (Html.text (Version.version ()))
+        detailRow "Tauri Ver" (Html.text tauriVersion)
+        detailRow "React Ver" (Html.text (ReactVersion.reactVersion ()))
+        detailRow
+            "Git repository"
+            (Html.a [
+                prop.className "link link-primary"
+                prop.href "https://github.com/slyshykO/projLaunch"
+                prop.target "_blank"
+                prop.rel "noopener noreferrer"
+                prop.text "https://github.com/slyshykO/projLaunch"
+            ])
+    ]
+
+[<ReactMemoComponent>]
+let private DebugAbout
     (appDataDir: string)
     (appConfigDir: string)
     (appWindowSize: Tauri.Dpi.PhysicalSize option)
     (appWindowPosition: Tauri.Dpi.PhysicalPosition option)
-    (currentTime: System.DateTime)
-    (randomSalt: string)
+    (currentTime: DateTime)
     =
-    Html.div [
-        prop.classes [ "text-sm" ]
-        prop.id $"about-{randomSalt}"
-        prop.children [
-            Html.h1 [
-                prop.id "about-title"
-                prop.classes [ "text-xl"; "font-semibold"; "mb-4" ]
-                prop.children [ Html.text "About" ]
-            ]
-            Daisy.table [
-                prop.classes [ "text-sm"; "table-auto"; "w-full"; "break-all"; "p-1" ]
-                prop.children [
-                    Html.tbody [
-                        Html.tr [
-                            prop.classes [ "w-fit"; "whitespace-nowrap" ]
-                            prop.children [
-                                Html.td [
-                                    prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
-                                    prop.children [ Html.text "Version" ]
-                                ]
-                                Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                                Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text (Version.version ()) ] ]
-                            ]
-                        ]
-                        Html.tr [
-                            Html.td [
-                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
-                                prop.children [ Html.text "Tauri Ver" ]
-                            ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text tauriVersion ] ]
-                        ]
-                        Html.tr [
-                            Html.td [
-                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
-                                prop.children [ Html.text "React Ver" ]
-                            ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                            Html.td [
-                                prop.classes [ "p-1" ]
-                                prop.children [ Html.text (ReactVersion.reactVersion ()) ]
-                            ]
-                        ]
-                        Html.tr [
-                            Html.td [
-                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
-                                prop.children [ Html.text "Data dir" ]
-                            ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text appDataDir ] ]
-                        ]
-                        Html.tr [
-                            Html.td [
-                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
-                                prop.children [ Html.text "Config dir" ]
-                            ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text appConfigDir ] ]
-                        ]
-                        Html.tr [
-                            Html.td [
-                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
-                                prop.children [ Html.text "Window size" ]
-                            ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                            Html.td [
-                                prop.classes [ "p-1" ]
-                                prop.children [
-                                    Html.text (
-                                        match appWindowSize with
-                                        | Some size -> sprintf "%.1f x %.1f" size.width size.height
-                                        | None -> "N/A"
-                                    )
-                                ]
-                            ]
-                        ]
-                        Html.tr [
-                            Html.td [
-                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
-                                prop.children [ Html.text "Window position" ]
-                            ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                            Html.td [
-                                prop.classes [ "p-1" ]
-                                prop.children [
-                                    Html.text (
-                                        match appWindowPosition with
-                                        | Some pos -> sprintf "%.1f x %.1f" pos.x pos.y
-                                        | None -> "N/A"
-                                    )
-                                ]
-                            ]
-                        ]
-                        Html.tr [
-                            Html.td [
-                                prop.classes [ "w-fit"; "whitespace-nowrap"; "p-1" ]
-                                prop.children [ Html.text "Current time" ]
-                            ]
-                            Html.td [ prop.classes [ "p-1" ]; prop.children [ Html.text ":" ] ]
-                            Html.td [
-                                prop.classes [ "p-1" ]
-                                prop.children [ Html.text (sprintf "%A" currentTime) ]
-                            ]
-                        ]
-                    ]
-                ]
-            ]
-
-        ]
-
+    detailsTable [
+        detailRow "Data dir" (Html.text appDataDir)
+        detailRow "Config dir" (Html.text appConfigDir)
+        detailRow
+            "Window size"
+            (Html.text (
+                match appWindowSize with
+                | Some size -> sprintf "%.1f x %.1f" size.width size.height
+                | None -> "N/A"
+            ))
+        detailRow
+            "Window position"
+            (Html.text (
+                match appWindowPosition with
+                | Some pos -> sprintf "%.1f x %.1f" pos.x pos.y
+                | None -> "N/A"
+            ))
+        detailRow "Current time" (Html.text (sprintf "%A" currentTime))
     ]
 
 [<ReactComponent>]
-let private AboutDialog (state: State) (dispatch: Msg -> unit) =
+let private InfoDialog (dialogId: string) (title: string) (content: ReactElement) (onClose: unit -> unit) =
+    let closeButton = React.useRef<Browser.Types.HTMLElement option> None
+
     React.useEffectOnce (fun () ->
         let modal =
-            Browser.Dom.document.getElementById "about-dialog" :?> Browser.HTMLDialogElement
+            Browser.Dom.document.getElementById dialogId :?> Browser.HTMLDialogElement
 
         modal.showModal ()
+        // React autofocus runs before the dialog is visible; focus again after opening.
+        closeButton.current |> Option.iter (fun button -> button.focus ())
 
         { new IDisposable with
             member _.Dispose() =
@@ -318,25 +260,22 @@ let private AboutDialog (state: State) (dispatch: Msg -> unit) =
         })
 
     Html.dialog [
-        prop.id "about-dialog"
+        prop.id dialogId
         prop.className "modal"
-        prop.ariaLabelledBy "about-title"
+        prop.ariaLabelledBy $"{dialogId}-title"
         prop.onCancel (fun event ->
             event.preventDefault ()
-            dispatch CloseAbout)
+            onClose ())
         prop.children [
             Html.div [
                 prop.className "modal-box w-11/12 max-w-2xl"
                 prop.children [
-                    About
-                        state.appVersion
-                        state.tauriVersion
-                        state.appDataDir
-                        state.appConfigDir
-                        state.appWindowSize
-                        state.appWindowPosition
-                        state.currentTime
-                        state.randomSalt
+                    Html.h1 [
+                        prop.id $"{dialogId}-title"
+                        prop.className "text-xl font-semibold mb-4"
+                        prop.text title
+                    ]
+                    content
                     Html.div [
                         prop.className "modal-action"
                         prop.children [
@@ -344,8 +283,9 @@ let private AboutDialog (state: State) (dispatch: Msg -> unit) =
                                 prop.type' "button"
                                 prop.className "btn btn-sm"
                                 prop.autoFocus true
+                                prop.ref closeButton
                                 prop.text "Close"
-                                prop.onClick (fun _ -> dispatch CloseAbout)
+                                prop.onClick (fun _ -> onClose ())
                             ]
                         ]
                     ]
@@ -353,6 +293,18 @@ let private AboutDialog (state: State) (dispatch: Msg -> unit) =
             ]
         ]
     ]
+
+[<ReactComponent>]
+let private AboutDialog (state: State) (dispatch: Msg -> unit) =
+    InfoDialog "about-dialog" "About" (About state.tauriVersion) (fun () -> dispatch CloseAbout)
+
+[<ReactComponent>]
+let private DebugAboutDialog (state: State) (dispatch: Msg -> unit) =
+    InfoDialog
+        "debug-about-dialog"
+        "DebugAbout"
+        (DebugAbout state.appDataDir state.appConfigDir state.appWindowSize state.appWindowPosition state.currentTime)
+        (fun () -> dispatch CloseDebugAbout)
 
 [<ReactComponent>]
 let View (state: State) dispatch =
@@ -441,6 +393,9 @@ let View (state: State) dispatch =
 
             if state.isAboutOpen then
                 AboutDialog state dispatch
+
+            if state.isDebugAboutOpen then
+                DebugAboutDialog state dispatch
 
             match state.projectDeletion with
             | Some project -> ProjectDeletion.Dialog project state.isProjectDeleting state.projectDeleteError dispatch

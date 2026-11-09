@@ -123,15 +123,15 @@ const listener = onActions()(message => actions.push(names[message.tag]));
 await flush();
 finishActions();
 await flush();
-for (const payload of ['projects', 'refresh', 'close-tab', 'about', 'unknown']) {
+for (const payload of ['projects', 'refresh', 'close-tab', 'about', 'debug-about', 'unknown']) {
     menuHandler({ payload });
 }
-assert.deepEqual(actions, ['ShowProjects', 'RefreshGitStatuses', 'CloseActiveTab', 'OpenAbout']);
+assert.deepEqual(actions, ['ShowProjects', 'RefreshGitStatuses', 'CloseActiveTab', 'OpenAbout', 'OpenDebugAbout']);
 listener.Dispose();
 await flush();
 assert.ok(unlistened);
 menuHandler({ payload: 'about' });
-assert.equal(actions.length, 4);
+assert.equal(actions.length, 5);
 unlistened = false;
 const pendingActions = onActions()(() => assert.fail('Disposed menu listener must not dispatch'));
 pendingActions.Dispose();
@@ -140,3 +140,20 @@ finishActions();
 await flush();
 assert.ok(unlistened);
 console.log('PASS: desktop menu actions and asynchronous listener cleanup.');
+
+let dialogState = init()[0];
+[dialogState] = update(Msg.OpenDebugAbout, dialogState);
+assert.equal(dialogState.isDebugAboutOpen, true);
+for (const message of [Msg.OpenAbout, Msg.OpenAddProjectModal]) {
+    const [unchanged] = update(message, dialogState);
+    assert.equal(unchanged, dialogState, 'DebugAbout must prevent overlapping dialogs');
+}
+[dialogState] = update(Msg.CloseDebugAbout, dialogState);
+assert.equal(dialogState.isDebugAboutOpen, false);
+[dialogState] = update(Msg.OpenAbout, dialogState);
+assert.equal(dialogState.isAboutOpen, true);
+assert.equal(update(Msg.OpenDebugAbout, dialogState)[0], dialogState);
+[dialogState] = update(Msg.CloseAbout, dialogState);
+[dialogState] = update(Msg.OpenAddProjectModal, dialogState);
+assert.equal(update(Msg.OpenDebugAbout, dialogState)[0], dialogState);
+console.log('PASS: About and DebugAbout opening, closing, and modal exclusion.');

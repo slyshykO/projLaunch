@@ -42,7 +42,7 @@ assert.equal(state.repositoryTabs, tabsBeforeAbout);
 assert.equal(step(state, 'OpenAddProjectModal')[0], state, 'Do not stack native dialogs');
 const aboutHtml = renderToStaticMarkup(React.createElement(View, { state, dispatch() {} }));
 assert.match(aboutHtml, /<dialog[^>]+id="about-dialog"/);
-assert.match(aboutHtml, /aria-labelledby="about-title"/);
+assert.match(aboutHtml, /aria-labelledby="about-dialog-title"/);
 state = step(state, 'CloseAbout')[0];
 assert.equal(state.isAboutOpen, false);
 state = step(state, 'OpenAddProjectModal')[0];

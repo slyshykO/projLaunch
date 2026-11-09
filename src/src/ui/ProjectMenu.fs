@@ -82,6 +82,7 @@ let onActions () =
                             | "refresh" -> dispatch RefreshGitStatuses
                             | "close-tab" -> dispatch CloseActiveTab
                             | "about" -> dispatch OpenAbout
+                            | "debug-about" -> dispatch OpenDebugAbout
                             | _ -> ())
 
                 if disposed then

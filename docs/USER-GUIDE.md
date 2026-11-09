@@ -22,11 +22,14 @@ The app currently lets you:
 - persist window state between launches
 - work in desktop tabs: a permanent Projects tab and closable repository tabs
 - open a repository tab by clicking its Git indicator; shared roots in the same endpoint reuse the same tab
-- inspect app/runtime details in the `Help → About ProjLaunch` dialog
+- inspect app/runtime versions and open the HTTPS Git repository link in `Help → About ProjLaunch`
 
 The native menu contains File (Add project, Close repository tab, Exit), View
 (Projects, Refresh Git status), and Help (About). Add project also supports
-Ctrl/Cmd+N. About closes with Close or Escape. Tab navigation supports the arrow,
+Ctrl/Cmd+N. DEBUG builds also include `Help → DebugAbout`, showing Data dir,
+Config dir, Window size, Window position, and Current time. Both dialogs close
+with Close or Escape. Close receives focus when either dialog opens, so Enter
+also closes it immediately. Tab navigation supports the arrow,
 Home and End keys. Switching tabs retains each panel's scroll position.
 Repository tabs load commit history from the Git server in the selected local/WSL/SSH endpoint: subject, author,
 commit date, short hash and branch/tag labels. History loads in pages of 100.

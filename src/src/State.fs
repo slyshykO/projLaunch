@@ -144,6 +144,8 @@ type Msg =
     | OnCommitDiff of tabId: string * requestId: string * Result<GitProtocol.Patch, exn>
     | OpenAbout
     | CloseAbout
+    | OpenDebugAbout
+    | CloseDebugAbout
 
     | GetDataDir
     | OnGetDataDir of string
@@ -209,6 +211,7 @@ type State =
         repositoryTabs: RepositoryTab list
         activeRepositoryTab: string option
         isAboutOpen: bool
+        isDebugAboutOpen: bool
         currentTime: DateTime
         signIn: option<SignIn>
         appVersion: string
@@ -260,6 +263,7 @@ let init () =
             repositoryTabs = []
             activeRepositoryTab = None
             isAboutOpen = false
+            isDebugAboutOpen = false
             currentTime = DateTime.Now
             signIn = None
             appVersion = ""
@@ -707,11 +711,27 @@ let rec private updateCore msg state =
          else
              Cmd.none)
     | OpenAbout ->
-        if state.projectEditor.IsSome || state.projectDeletion.IsSome then
+        if
+            state.projectEditor.IsSome
+            || state.projectDeletion.IsSome
+            || state.isDebugAboutOpen
+            || state.isWindowClosePending
+        then
             state, Cmd.none
         else
             { state with isAboutOpen = true }, Cmd.none
     | CloseAbout -> { state with isAboutOpen = false }, Cmd.none
+    | OpenDebugAbout ->
+        if
+            state.projectEditor.IsSome
+            || state.projectDeletion.IsSome
+            || state.isAboutOpen
+            || state.isWindowClosePending
+        then
+            state, Cmd.none
+        else
+            { state with isDebugAboutOpen = true }, Cmd.none
+    | CloseDebugAbout -> { state with isDebugAboutOpen = false }, Cmd.none
 
     | CheckWorkingTreeFile(id, target, path, checked') ->
         let tabs =
@@ -2120,6 +2140,7 @@ let rec private updateCore msg state =
             state.isProjectSaving
             || state.projectEditor.IsSome
             || state.isAboutOpen
+            || state.isDebugAboutOpen
             || state.projectDeletion.IsSome
             || state.isWindowClosePending
         then
@@ -2142,6 +2163,7 @@ let rec private updateCore msg state =
             state.isProjectSaving
             || state.projectDeletion.IsSome
             || state.isAboutOpen
+            || state.isDebugAboutOpen
             || state.isWindowClosePending
         then
             state, Cmd.none
@@ -2229,6 +2251,7 @@ let rec private updateCore msg state =
             state.projectEditor.IsSome
             || state.projectDeletion.IsSome
             || state.isAboutOpen
+            || state.isDebugAboutOpen
             || state.isWindowClosePending
         then
             state, Cmd.none
