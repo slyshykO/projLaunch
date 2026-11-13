@@ -24,7 +24,7 @@ struct Identity {
 }
 
 fn inspect(pid: u32) -> Option<Identity> {
-    let mut system = System::new();
+    let mut system = System::new().ok()?;
     let process_id = Pid::from_u32(pid);
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[process_id]),
