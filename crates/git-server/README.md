@@ -190,6 +190,7 @@ notifications have no side effects. Batch requests return `-32005`.
 | `git.diffFiles` | `repoId`, `operationId`, `target` | paths, rename source and status |
 | `git.diff` | `repoId`, `operationId`, `target`, `path` | text, binary/truncated/untracked flags |
 | `git.commit` | `repoId`, `operationId`, `message`, `expectedHead`, `expectedBranch` | `{ "oid": "..." }` |
+| `git.generateCommitMessage` | `repoId`, `operationId`, `agent` (`codex`/`claude`) | `{ "message": "...", "scope": "staged" or "all" }` |
 | `git.cancel` | `operationId` | whether an active operation was found |
 
 `operationId` is a caller-generated unique string (1–128 bytes), independent of
@@ -299,6 +300,36 @@ the normal 30-second command timeout, disconnect or a failed post-commit HEAD
 read can leave a created commit without a successful response. Git owns locks;
 the server never deletes an existing lock file. Hooks and signing run on the
 endpoint and must work without an interactive editor/terminal.
+
+## AI commit message generation
+
+`git.generateCommitMessage` is an additive v1 capability. It reuses normal diff
+rules (`--no-ext-diff`, `--no-textconv`): staged changes take precedence; otherwise
+tracked working changes and untracked previews form the input. It rejects an empty
+or oversized context (256 KiB total; untracked text retains the preview limit),
+summarizes binary files and never silently truncates text. The prompt explicitly
+states the staged/all rule and treats filenames and contents as untrusted data.
+
+The selected CLI runs on the server endpoint in a temporary directory with prompt
+stdin, bounded output, cancellation and a 120-second process timeout. At most two
+agents run concurrently per server. The full RPC has a 150-second timeout; this
+method gets a 180-second client deadline, leaving normal RPC deadlines unchanged.
+Codex uses `exec --ignore-user-config --ignore-rules --ephemeral --sandbox read-only`,
+disabled shell/apps/delegation/hooks/search, and `--output-last-message`.
+Claude uses `--print --output-format json --tools "" --strict-mcp-config`, disabled
+slash commands/hooks and no session persistence. Credentials remain in the CLI's
+endpoint environment. No authentication or API keys are stored in project data.
+
+Agent stderr is continuously drained: only its final 64 KiB is retained for
+failure diagnostics, with an explicit omission marker if earlier output was
+dropped. Verbose progress or echoed prompts do not abort generation. Stdout and
+final-message limits remain enforced; ordinary Git stderr keeps its hard limit.
+
+Only nonempty final messages of at most 65536 UTF-8 bytes are accepted. A second
+diff snapshot comparison rejects repository changes during generation. Errors and
+cancellation leave Git state untouched; generation never calls stage or commit.
+Clients must still reject late results after draft edits, tab changes or changes
+to the selected project/agent. Update old sidecars to use this capability.
 
 ## Repository subscriptions
 

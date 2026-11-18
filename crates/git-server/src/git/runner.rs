@@ -8,6 +8,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 pub const OUTPUT_LIMIT: usize = 8 * 1024 * 1024;
+const STDERR_LIMIT: usize = 65536;
 
 #[derive(Debug)]
 pub struct Output {
@@ -20,6 +21,7 @@ pub struct Output {
 pub struct GitRunner {
     slots: Arc<Semaphore>,
     pub timeout: Duration,
+    retain_stderr_tail: bool,
 }
 
 impl Default for GitRunner {
@@ -27,11 +29,19 @@ impl Default for GitRunner {
         Self {
             slots: Arc::new(Semaphore::new(8)),
             timeout: Duration::from_secs(30),
+            retain_stderr_tail: false,
         }
     }
 }
 
 impl GitRunner {
+    /// Agent CLIs can echo large prompts and progress to stderr. Drain the stream
+    /// without aborting, retaining bounded final diagnostics for failed runs.
+    pub(crate) fn with_stderr_tail(mut self) -> Self {
+        self.retain_stderr_tail = true;
+        self
+    }
+
     pub async fn run(
         &self,
         root: &Path,
@@ -124,7 +134,7 @@ impl GitRunner {
         command
     }
 
-    async fn execute(
+    pub(crate) async fn execute(
         &self,
         mut command: Command,
         input: Option<&[u8]>,
@@ -133,6 +143,11 @@ impl GitRunner {
         truncate: bool,
         allow_failure: bool,
     ) -> Result<Output> {
+        let process_name = if self.retain_stderr_tail {
+            "Agent"
+        } else {
+            "Git"
+        };
         let directory = command
             .as_std()
             .get_current_dir()
@@ -141,7 +156,7 @@ impl GitRunner {
             .to_string();
         let mut child = command.spawn().with_context(|| {
             format!(
-                "Cannot start Git in '{directory}'; check Git on PATH and the working directory"
+                "Cannot start {process_name} in '{directory}'; check the executable on PATH and the working directory"
             )
         })?;
         let mut stdout = child.stdout.take().unwrap();
@@ -151,11 +166,11 @@ impl GitRunner {
         let mut input_error = None;
         let write_input = async move {
             if let Some(input) = input {
-                let mut stdin = stdin.context("Git stdin is not piped")?;
+                let mut stdin = stdin.context("Command stdin is not piped")?;
                 stdin
                     .write_all(input)
                     .await
-                    .context("Cannot write Git stdin")?;
+                    .context("Cannot write command stdin")?;
                 // Dropping the pipe signals EOF so Git can finish reading revisions.
             }
             Ok::<_, anyhow::Error>(())
@@ -163,6 +178,7 @@ impl GitRunner {
         tokio::pin!(write_input);
         let mut bytes = Vec::new();
         let mut errors = Vec::new();
+        let mut errors_truncated = false;
         let mut out = [0u8; 8192];
         let mut err = [0u8; 4096];
         let (mut out_done, mut err_done) = (false, false);
@@ -173,7 +189,7 @@ impl GitRunner {
                 tokio::select! {
                     biased;
                     _ = cancel.cancelled() => bail!("Operation cancelled"),
-                    _ = &mut deadline => bail!("Git command timed out"),
+                    _ = &mut deadline => bail!("{process_name} command timed out"),
                     result = &mut write_input, if !input_done => {
                         match result {
                             Err(error) if error.downcast_ref::<std::io::Error>()
@@ -193,15 +209,22 @@ impl GitRunner {
                         bytes.extend_from_slice(&out[..n.min(room)]);
                         if n > room {
                             if truncate { return Ok(true); }
-                            bail!("Git output exceeds {limit} bytes; narrow the request");
+                            bail!("{process_name} output exceeds {limit} bytes; narrow the request");
                         }
                     },
                     n = stderr.read(&mut err), if !err_done => {
                         let n = n?;
                         err_done = n == 0;
-                        let room = 65536usize.saturating_sub(errors.len());
-                        errors.extend_from_slice(&err[..n.min(room)]);
-                        if n > room { bail!("Git stderr exceeds 65536 bytes"); }
+                        if self.retain_stderr_tail {
+                            let overflow = (errors.len() + n).saturating_sub(STDERR_LIMIT);
+                            errors.drain(..overflow);
+                            errors.extend_from_slice(&err[..n]);
+                            errors_truncated |= overflow > 0;
+                        } else {
+                            let room = STDERR_LIMIT.saturating_sub(errors.len());
+                            errors.extend_from_slice(&err[..n.min(room)]);
+                            if n > room { bail!("Git stderr exceeds {STDERR_LIMIT} bytes"); }
+                        }
                     },
                 }
             }
@@ -227,15 +250,20 @@ impl GitRunner {
             },
             _ = &mut deadline => {
                 let _ = child.start_kill(); let _ = child.wait().await;
-                bail!("Git command timed out");
+                bail!("{process_name} command timed out");
             },
             status = child.wait() => status?,
         };
         if !status.success() && !truncated && !allow_failure {
             bail!(
-                "Git failed ({}) in '{}': {}",
+                "{process_name} failed ({}) in '{}': {}{}",
                 status,
                 directory,
+                if errors_truncated {
+                    "[Earlier stderr omitted; showing last 65536 bytes]\n"
+                } else {
+                    ""
+                },
                 String::from_utf8_lossy(&errors).trim()
             );
         }
@@ -387,6 +415,45 @@ mod tests {
                 .contains("cancelled")
         );
         assert_stopped(&marker).await;
+    }
+
+    #[tokio::test]
+    async fn diagnostic_tail_preserves_timeout_and_cancellation() {
+        for cancelled in [false, true] {
+            let dir = tempfile::TempDir::new().unwrap();
+            let marker = dir.path().join("heartbeat");
+            let token = CancellationToken::new();
+            let child_token = token.clone();
+            let command = fixture(&marker, "stderr");
+            let mut runner = GitRunner::default().with_stderr_tail();
+            runner.timeout = Duration::from_millis(500);
+            let task = tokio::spawn(async move {
+                runner
+                    .execute(command, None, &child_token, 8192, false, false)
+                    .await
+            });
+            if cancelled {
+                // Allow more than 64 KiB of stderr before requesting cancellation.
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    while !fs::metadata(&marker).is_ok_and(|m| m.len() >= 12) {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                })
+                .await
+                .unwrap();
+                token.cancel();
+            }
+            let error = task.await.unwrap().unwrap_err().to_string();
+            assert!(
+                error.contains(if cancelled {
+                    "Operation cancelled"
+                } else {
+                    "timed out"
+                }),
+                "{error}"
+            );
+            assert_stopped(&marker).await;
+        }
     }
 
     #[tokio::test]

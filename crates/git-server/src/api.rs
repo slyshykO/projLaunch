@@ -39,6 +39,7 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
     let stage = session.clone();
     let unstage = session.clone();
     let commit = session.clone();
+    let generate_message = session.clone();
     let subscribe = session.clone();
     let unsubscribe = session.clone();
     JsonRpc::new()
@@ -72,6 +73,7 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                         "git.stage",
                         "git.unstage",
                         "git.commit",
+                        "git.generateCommitMessage",
                         "git.cancel",
                     ]
                     .into_iter()
@@ -226,6 +228,16 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                 async {
                     let operation = session.operation(&params.operation_id)?;
                     session.repo(&params.repo_id)?.commit(&params, &operation.cancel).await
+                }.await.map_err(rpc_error)
+            }
+        })
+        .add("git.generateCommitMessage", move |params: GenerateCommitMessageParams| {
+            let session = generate_message.clone();
+            async move {
+                async {
+                    let operation = session.operation(&params.operation_id)?;
+                    tokio::time::timeout(std::time::Duration::from_secs(150), session.repo(&params.repo_id)?.generate_commit_message(params.agent, &operation.cancel))
+                        .await.map_err(|_| anyhow::anyhow!("Commit message generation timed out"))?
                 }.await.map_err(rpc_error)
             }
         })

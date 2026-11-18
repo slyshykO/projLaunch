@@ -402,6 +402,12 @@ command!(git_diff, PatchParams, Patch, "git.diff");
 command!(git_stage, IndexPathsParams, bool, "git.stage");
 command!(git_unstage, IndexPathsParams, bool, "git.unstage");
 command!(git_commit, CommitParams, CommitResult, "git.commit");
+command!(
+    git_generate_commit_message,
+    GenerateCommitMessageParams,
+    GeneratedCommitMessage,
+    "git.generateCommitMessage"
+);
 command!(git_cancel, CancelParams, bool, "git.cancel");
 
 #[tauri::command]
@@ -512,6 +518,7 @@ mod tests {
             ide: "vscode".into(),
             last_opened: "2026-10-19T00:00:00Z".into(),
             environment: Default::default(),
+            commit_agent: None,
             remote: None,
         }
     }

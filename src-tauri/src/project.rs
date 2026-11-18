@@ -21,6 +21,12 @@ pub(crate) struct ProjectData {
     pub environment: HashMap<String, String>,
     #[serde(default, deserialize_with = "deserialize_remote")]
     pub remote: Option<Remote>,
+    #[serde(
+        default,
+        rename = "commitAgent",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub commit_agent: Option<git_protocol::CommitAgent>,
 }
 
 impl ProjectData {

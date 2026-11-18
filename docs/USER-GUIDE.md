@@ -208,6 +208,44 @@ hooks can change the index after review; the commit uses the index Git sees when
 it executes. Amend, empty commits and integration-operation continuation are not
 available in this form.
 
+### AI commit messages
+
+In **Edit project → Commit message agent**, select **Codex** or **Claude** and
+save. Existing projects default to **None**. Install a current version of the
+chosen CLI and sign in on the repository's endpoint: this computer for local
+repositories, the distribution for WSL, or the host for SSH. The executable
+(`codex` or `claude`) must be on the Git server process's PATH.
+
+In **Uncommitted changes**, click **Generate with Codex/Claude**. If there are
+staged files, only their staged diff is sent to the agent. Otherwise, all tracked
+working changes and untracked text files are included. Binary files are described
+without their contents. Generation fills the editable message field; review it,
+stage the intended changes and click **Commit staged** yourself. Generation never
+stages files or creates a commit. The selected CLI sends the diff to its configured
+AI service using its endpoint authentication.
+
+Opening a repository from a project card uses that project's agent. If a shared
+or restored repository belongs to multiple projects, the form lets you choose
+whose settings to use. **Project settings** opens the selected project's editor.
+Repositories without a matching saved project require a project association before
+generation is available.
+
+Use **Cancel generation** to stop waiting and request cancellation. Closing the
+tab also requests cancellation. Existing text stays intact on failure or cancellation.
+You may type while generation runs; a result never replaces edits made in the
+meantime. Changes to the repository or selected agent also invalidate old results.
+Stage/Unstage and Commit wait until generation finishes or is cancelled.
+
+Generation uses the CLI's default model and supports a 256 KiB diff context;
+oversized diffs or untracked text previews produce an error asking you to stage a
+smaller set, rather than silently generating from a truncated diff. Agent execution
+is limited to two minutes and two concurrent requests per Git server. Codex runs
+with user configuration/rules ignored and a read-only sandbox; Claude runs with
+tools and MCP servers disabled. Both receive the prepared snapshot in an isolated
+temporary directory, with a prompt that prohibits tools and repository changes.
+Install recent CLIs supporting these flags; authentication errors and
+unsupported options appear in the form.
+
 When a project is opened, the app updates only its `lastOpened` value. A late
 launch completion cannot recreate a deleted project or overwrite edited fields.
 

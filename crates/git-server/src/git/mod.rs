@@ -3,6 +3,7 @@ mod commit;
 mod diff;
 mod history;
 mod index;
+mod message;
 pub mod runner;
 mod status;
 

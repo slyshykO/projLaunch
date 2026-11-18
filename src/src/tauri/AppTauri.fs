@@ -209,6 +209,17 @@ module Git =
     let cancel (endpoint: GitProtocol.Endpoint option) (operationId: string) : JS.Promise<bool> =
         invoke endpoint "git_cancel" [ "operationId" ==> operationId ]
 
+    let generateCommitMessage
+        endpoint
+        repoId
+        operationId
+        (agent: string)
+        : JS.Promise<GitProtocol.GeneratedCommitMessage> =
+        invoke
+            endpoint
+            "git_generate_commit_message"
+            [ "repoId" ==> repoId; "operationId" ==> operationId; "agent" ==> agent ]
+
     /// Invalidates all repoIds and history cursors belonging to this connection.
     let disconnect () : JS.Promise<unit> = Core.invoke "git_disconnect" None
 

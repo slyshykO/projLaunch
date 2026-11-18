@@ -38,6 +38,7 @@ const fixture = remote => ({
     id: 'existing-project', name: 'Original', description: 'Description',
     path: 'C:\\Projects\\Original', ide: 'vscode',
     lastOpened: '2026-10-18T12:34:56.000Z', remote,
+    commitAgent: 'claude',
     environment: { EXTRA: 'значення=1', EMPTY: '', MULTILINE: 'one\ntwo' },
 });
 const baseState = init()[0];
@@ -73,6 +74,7 @@ for (const remote of [null, { Ssh: { host: 'example.test', username: '' } }, { W
     assert.equal(saved.project.lastOpened, latest.lastOpened);
     assert.deepEqual(saved.project.remote, remote);
     assert.deepEqual(saved.project.environment, original.environment);
+    assert.equal(saved.project.commitAgent, original.commitAgent);
     assert.equal(Array.from(state.projects).length, 1, 'Editing must not create a second card');
     assert.equal(Array.from(state.projects)[0].name, 'Renamed');
     assert.equal(state.projectEditor, undefined);

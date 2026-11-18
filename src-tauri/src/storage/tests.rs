@@ -36,6 +36,55 @@ fn workspace(root: &Path) -> crate::workspace::Workspace {
     })).unwrap()
 }
 
+fn insert_legacy_project(connection: &Connection, project: &ProjectData) {
+    connection.execute(
+        "INSERT INTO projects (id, name, last_opened, description, path, ide, environment_json, remote_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        rusqlite::params![project.id, project.name, project.last_opened, project.description, project.path, project.ide,
+            serde_json::to_string(&project.environment).unwrap(), serde_json::to_string(&project.remote).unwrap()],
+    ).unwrap();
+}
+
+#[test]
+fn commit_agent_migrates_legacy_projects_and_persists_selection() {
+    let dir = TempDir::new().unwrap();
+    let raw = raw_database(dir.path());
+    for migration in [
+        include_str!("../../migrations/0001_projects.sql"),
+        include_str!("../../migrations/0002_workspace.sql"),
+        include_str!("../../migrations/0003_database_owner.sql"),
+    ] {
+        raw.execute_batch(migration).unwrap();
+    }
+    raw.pragma_update(None, "user_version", 3).unwrap();
+    let legacy = ProjectData::from_json(&project("one").to_string()).unwrap();
+    insert_legacy_project(&raw, &legacy);
+    drop(raw);
+    let mut db = Database::open(dir.path()).unwrap();
+    assert_eq!(db.get("one").unwrap(), legacy);
+    for agent in ["codex", "claude"] {
+        let mut value = project("one");
+        value["commitAgent"] = json!(agent);
+        db.save("one", &value.to_string()).unwrap();
+        drop(db);
+        db = Database::open(dir.path()).unwrap();
+        assert_eq!(
+            serde_json::to_value(db.get("one").unwrap()).unwrap()["commitAgent"],
+            agent
+        );
+        db.update_last_opened("one", "2026-11-18T12:00:00Z")
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(db.get("one").unwrap()).unwrap()["commitAgent"],
+            agent
+        );
+    }
+    let mut invalid = project("one");
+    invalid["commitAgent"] = json!("arbitrary-command");
+    assert!(db.save("one", &invalid.to_string()).is_err());
+    db.save("one", &project("one").to_string()).unwrap();
+    assert!(db.get("one").unwrap().commit_agent.is_none());
+}
+
 #[test]
 fn workspace_migration_preserves_v1_projects_and_import_marker() {
     let dir = TempDir::new().unwrap();
@@ -48,11 +97,10 @@ fn workspace_migration_preserves_v1_projects_and_import_marker() {
         [IMPORT_NAME],
     )
     .unwrap();
-    super::database::insert(
+    insert_legacy_project(
         &raw,
         &ProjectData::from_json(&project("one").to_string()).unwrap(),
-    )
-    .unwrap();
+    );
     drop(raw);
     let db = Database::open(dir.path()).unwrap();
     assert!(db.load_workspace().unwrap().is_none());
@@ -738,11 +786,10 @@ fn ownership_migration_preserves_v2_projects_and_workspace() {
         [IMPORT_NAME],
     )
     .unwrap();
-    super::database::insert(
+    insert_legacy_project(
         &raw,
         &ProjectData::from_json(&project("one").to_string()).unwrap(),
-    )
-    .unwrap();
+    );
     let saved = workspace(dir.path());
     raw.execute(
         "INSERT INTO workspace_state VALUES (1, ?1)",

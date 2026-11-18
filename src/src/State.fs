@@ -63,6 +63,14 @@ let private emptyCommitDraft =
         outcome = None
     }
 
+type CommitGeneration =
+    {
+        requestId: string
+        projectId: string
+        agent: string
+        invalidated: bool
+    }
+
 type RepositoryTab =
     {
         endpoint: GitProtocol.Endpoint option
@@ -91,6 +99,11 @@ type RepositoryTab =
         gitWriteRequestId: string option
         indexError: string option
         commitDraft: CommitDraft
+        commitProjects: ProjectData list
+        commitProjectId: string option
+        commitGeneration: CommitGeneration option
+        generationError: string option
+        generatedScope: string option
     }
 
 type Msg =
@@ -110,6 +123,7 @@ type Msg =
     | ResizeRepositoryPanels of string * bool * float
     | ShowProjects
     | OpenRepositoryTab of GitProtocol.RepositoryStatus
+    | OpenProjectRepositoryTab of string * GitProtocol.RepositoryStatus
     | SelectRepositoryTab of string
     | CloseRepositoryTab of string
     | CloseActiveTab
@@ -136,6 +150,11 @@ type Msg =
     | ChangeIndex of string * GitProtocol.DiffTarget * string array
     | EditCommitMessage of string * string
     | CreateCommit of string
+    | SelectCommitProject of string * string
+    | GenerateCommitMessage of string
+    | OnCommitGenerationOpened of string * string * Result<GitProtocol.Repository, exn>
+    | CancelCommitGeneration of string
+    | OnCommitMessageGenerated of string * string * Result<GitProtocol.GeneratedCommitMessage, exn>
     | OnCommitCreated of GitProtocol.Endpoint option * string * string * Result<GitProtocol.CommitResult, exn>
     | OnIndexChanged of
         GitProtocol.Endpoint option *
@@ -338,6 +357,11 @@ let private newRepositoryTab endpoint root name =
         gitWriteRequestId = None
         indexError = None
         commitDraft = emptyCommitDraft
+        commitProjects = []
+        commitProjectId = None
+        commitGeneration = None
+        generationError = None
+        generatedScope = None
         history =
             {
                 repoId = None
@@ -352,6 +376,7 @@ let private newRepositoryTab endpoint root name =
 /// Writes are serialized in the UI per endpoint/worktree, including closed/reopened tabs.
 let canChangeIndex (tab: RepositoryTab) =
     tab.gitWriteRequestId.IsNone
+    && tab.commitGeneration.IsNone
     && tab.history.requestId.IsNone
     && not tab.statusInvalidated
     && (tab.selection
@@ -378,6 +403,89 @@ let canCreateCommit (tab: RepositoryTab) =
         |> Option.exists (function
             | Ok status -> status.entries |> Array.forall (fun entry -> entry.kind <> "conflict")
             | Error _ -> false))
+
+let selectedCommitProject (tab: RepositoryTab) =
+    tab.commitProjects
+    |> List.tryFind (fun project -> Some project.id = tab.commitProjectId)
+
+let commitAgent (tab: RepositoryTab) =
+    selectedCommitProject tab
+    |> Option.bind (fun project -> project.commitAgent)
+    |> Option.filter (fun agent -> agent = "codex" || agent = "claude")
+
+let canGenerateCommitMessage (tab: RepositoryTab) =
+    canChangeIndex tab
+    && (commitAgent tab |> Option.isSome)
+    && not tab.historyInvalidated
+    && (tab.selection |> Option.exists (fun selection -> selection.files.Length > 0))
+
+let private syncCommitProjects (state: State) =
+    let mutable changed = false
+
+    let tabs =
+        state.repositoryTabs
+        |> List.map (fun tab ->
+            let projects =
+                state.projects
+                |> List.filter (fun project ->
+                    state.projectGit
+                    |> Map.tryFind project.id
+                    |> Option.exists (fun check ->
+                        check.path = project.path
+                        && check.remote = project.remote
+                        && (check.watchRoots
+                            |> Array.exists (fun (endpoint, root) ->
+                                GitProtocol.repositoryKey endpoint root =
+                                    GitProtocol.repositoryKey tab.endpoint tab.root))))
+
+            let selected =
+                if projects |> List.exists (fun project -> Some project.id = tab.commitProjectId) then
+                    tab.commitProjectId
+                else
+                    match projects with
+                    | [ project ] -> Some project.id
+                    | _ -> None
+
+            let next =
+                { tab with
+                    commitProjects = projects
+                    commitProjectId = selected
+                }
+
+            let generation =
+                next.commitGeneration
+                |> Option.map (fun generation ->
+                    { generation with
+                        invalidated =
+                            generation.invalidated
+                            || selected <> Some generation.projectId
+                            || commitAgent next <> Some generation.agent
+                    })
+
+            if
+                projects = tab.commitProjects
+                && selected = tab.commitProjectId
+                && generation = tab.commitGeneration
+            then
+                tab
+            else
+                changed <- true
+
+                { next with
+                    commitGeneration = generation
+                })
+
+    if changed then
+        { state with repositoryTabs = tabs }
+    else
+        state
+
+let private changeTab id change (state: State) =
+    { state with
+        repositoryTabs =
+            state.repositoryTabs
+            |> List.map (fun tab -> if tab.id = id then change tab else tab)
+    }
 
 let private setCommitDraft key draft (state: State) =
     { state with
@@ -691,6 +799,18 @@ let rec private updateCore msg state =
             activeRepositoryTab = None
         },
         Cmd.none
+    | OpenProjectRepositoryTab(projectId, repository) ->
+        let next, command = updateCore (OpenRepositoryTab repository) state
+
+        changeTab
+            next.activeRepositoryTab.Value
+            (fun tab ->
+                { tab with
+                    commitProjectId = Some projectId
+                })
+            next,
+        command
+
     | OpenRepositoryTab repository ->
         match
             state.repositoryTabs
@@ -744,6 +864,7 @@ let rec private updateCore msg state =
          |> Option.map (CloseRepositoryTab >> Cmd.ofMsg)
          |> Option.defaultValue Cmd.none)
     | CloseRepositoryTab id ->
+        let _, cancel = updateCore (CancelCommitGeneration id) state
         let remaining = state.repositoryTabs |> List.filter (fun tab -> tab.id <> id)
 
         let active =
@@ -759,12 +880,14 @@ let rec private updateCore msg state =
             repositoryTabs = remaining
             activeRepositoryTab = active
         },
-        (if active <> state.activeRepositoryTab then
-             active
-             |> Option.map (SelectRepositoryTab >> Cmd.ofMsg)
-             |> Option.defaultValue Cmd.none
-         else
-             Cmd.none)
+        Cmd.batch
+            [
+                cancel
+                if active <> state.activeRepositoryTab then
+                    active
+                    |> Option.map (SelectRepositoryTab >> Cmd.ofMsg)
+                    |> Option.defaultValue Cmd.none
+            ]
     | OpenAbout ->
         if
             state.projectEditor.IsSome
@@ -807,18 +930,164 @@ let rec private updateCore msg state =
 
         { state with repositoryTabs = tabs }, Cmd.none
 
+    | SelectCommitProject(id, projectId) ->
+        changeTab
+            id
+            (fun tab ->
+                if tab.commitGeneration.IsNone then
+                    { tab with
+                        commitProjectId = Some projectId
+                        generationError = None
+                        generatedScope = None
+                    }
+                else
+                    tab)
+            state,
+        Cmd.none
+
+    | GenerateCommitMessage id ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when canGenerateCommitMessage tab && not state.isWindowClosePending ->
+            let requestId = Guid.NewGuid().ToString()
+            let project = (selectedCommitProject tab).Value
+            let agent = (commitAgent tab).Value
+
+            let generation =
+                {
+                    requestId = requestId
+                    projectId = project.id
+                    agent = agent
+                    invalidated = false
+                }
+
+            let openRepository () =
+                AppTauri.Git.openRepository tab.endpoint tab.root $"message-{requestId}-open"
+
+            changeTab
+                id
+                (fun tab ->
+                    { tab with
+                        commitGeneration = Some generation
+                        generationError = None
+                        generatedScope = None
+                    })
+                state,
+            Cmd.OfPromise.either
+                openRepository
+                ()
+                (fun result -> OnCommitGenerationOpened(id, requestId, Ok result))
+                (fun error -> OnCommitGenerationOpened(id, requestId, Error error))
+        | _ -> state, Cmd.none
+
+    | OnCommitGenerationOpened(id, requestId, result) ->
+        match
+            state.repositoryTabs
+            |> List.tryFind (fun tab ->
+                tab.id = id
+                && (tab.commitGeneration
+                    |> Option.exists (fun generation -> generation.requestId = requestId)))
+        with
+        | Some tab ->
+            match result with
+            | Ok repository when not tab.commitGeneration.Value.invalidated ->
+                let generate () =
+                    AppTauri.Git.generateCommitMessage
+                        tab.endpoint
+                        repository.repoId
+                        $"message-{requestId}"
+                        tab.commitGeneration.Value.agent
+
+                state,
+                Cmd.OfPromise.either
+                    generate
+                    ()
+                    (fun generated -> OnCommitMessageGenerated(id, requestId, Ok generated))
+                    (fun error -> OnCommitMessageGenerated(id, requestId, Error error))
+            | Error error -> updateCore (OnCommitMessageGenerated(id, requestId, Error error)) state
+            | _ ->
+                updateCore
+                    (OnCommitMessageGenerated(id, requestId, Error(Exception "Generation no longer applies")))
+                    state
+        | _ -> state, Cmd.none
+
+    | CancelCommitGeneration id ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when tab.commitGeneration.IsSome ->
+            let operationId = $"message-{tab.commitGeneration.Value.requestId}"
+
+            changeTab id (fun tab -> { tab with commitGeneration = None }) state,
+            Cmd.OfPromise.either (AppTauri.Git.cancel tab.endpoint) operationId (fun _ -> Empty) (fun _ -> Empty)
+        | _ -> state, Cmd.none
+
+    | OnCommitMessageGenerated(id, requestId, result) ->
+        match
+            state.repositoryTabs
+            |> List.tryFind (fun tab ->
+                tab.id = id
+                && (tab.commitGeneration
+                    |> Option.exists (fun generation -> generation.requestId = requestId)))
+        with
+        | Some tab ->
+            let accepted = not tab.commitGeneration.Value.invalidated
+
+            let next =
+                match result with
+                | Ok generated when accepted ->
+                    setCommitDraft
+                        (GitProtocol.repositoryKey tab.endpoint tab.root)
+                        { tab.commitDraft with
+                            message = generated.message
+                            outcome = None
+                        }
+                        state
+                | _ -> state
+
+            changeTab
+                id
+                (fun tab ->
+                    { tab with
+                        commitGeneration = None
+                        generationError =
+                            if not accepted then
+                                Some
+                                    "Message, changes or project settings changed during generation. Generate again to use the latest version."
+                            else
+                                match result with
+                                | Error error -> Some(string error)
+                                | Ok _ -> None
+                        generatedScope =
+                            match result with
+                            | Ok generated when accepted -> Some generated.scope
+                            | _ -> None
+                    })
+                next,
+            Cmd.none
+        | _ -> state, Cmd.none
+
     | EditCommitMessage(id, message) ->
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
         | Some tab when tab.commitDraft.requestId.IsNone && not state.isWindowClosePending ->
             let key = GitProtocol.repositoryKey tab.endpoint tab.root
 
-            setCommitDraft
-                key
-                { tab.commitDraft with
-                    message = message
-                    outcome = None
-                }
-                state,
+            let next =
+                setCommitDraft
+                    key
+                    { tab.commitDraft with
+                        message = message
+                        outcome = None
+                    }
+                    state
+
+            changeTab
+                id
+                (fun tab ->
+                    { tab with
+                        generatedScope = None
+                        commitGeneration =
+                            tab.commitGeneration
+                            |> Option.map (fun generation -> { generation with invalidated = true })
+                    })
+                next,
             Cmd.none
         | _ -> state, Cmd.none
 
@@ -1720,6 +1989,12 @@ let rec private updateCore msg state =
                         { tab with
                             historyInvalidated = tab.historyInvalidated || history
                             statusInvalidated = tab.statusInvalidated || workingTree || history
+                            commitGeneration =
+                                tab.commitGeneration
+                                |> Option.map (fun generation ->
+                                    { generation with
+                                        invalidated = generation.invalidated || workingTree || history
+                                    })
                         }
                     else
                         tab)
@@ -2650,6 +2925,7 @@ let update msg state =
         | _ -> state
 
     let next, command = updateCore msg prepared
+    let next = syncCommitProjects next
 
     match msg with
     | OnWorkspaceLoaded _ -> next, command

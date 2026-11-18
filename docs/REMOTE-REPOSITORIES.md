@@ -66,3 +66,14 @@ no root privileges, Rust toolchain or separately installed Git-server service.
 RPC travels over SSH stdin/stdout, without an additional listening port. Each
 host/username pair has a separate connection, and repository discovery runs on
 the remote system. SSH host/user information is saved with tabs and their layouts.
+
+## AI commit messages
+
+The project's commit-message agent runs on the repository endpoint. For WSL,
+install and authenticate `codex` or `claude` inside the selected distribution.
+For SSH, do so on the selected remote host. Ensure the CLI is available on the
+PATH seen by the non-interactive Git server process, not only an interactive shell.
+Local credentials or installations are not forwarded to remote endpoints.
+The Git server sends a staged-only diff, or all working changes when nothing is
+staged, to the selected CLI. See [AI commit messages](USER-GUIDE.md#ai-commit-messages)
+for settings, scope and limits.

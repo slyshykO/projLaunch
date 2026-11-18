@@ -80,6 +80,166 @@ async fn commit_params(client: &Client, repo: &str, message: &str) -> Value {
     })
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn agent_messages_use_staged_or_all_diffs_without_mutating_repository() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    f.write("partial", "base\n");
+    let head = f.commit("Base");
+    f.write("partial", "staged-version\n");
+    f.git(&["add", "partial"]);
+    f.write("partial", "working-version\n");
+    f.write("new file", "untracked-version\n");
+    f.write("binary.bin", [0, 1, 255]);
+    let index = f.git(&["write-tree"]);
+    let bin = TempDir::new().unwrap();
+    let capture = bin.path().join("prompt");
+    let mode = bin.path().join("mode");
+    let script = r#"#!/bin/sh
+cat > "$PROJLAUNCH_TEST_PROMPT"
+printf '%s\n' "$@" > "$PROJLAUNCH_TEST_ARGS"
+# Reproduce a CLI echoing a large prompt/progress stream before its final result.
+printf 'diagnostic-prefix-to-discard\n' >&2
+head -c 196608 /dev/zero | tr '\000' x >&2
+printf '\n' >&2
+case "$(cat "$PROJLAUNCH_TEST_MODE")" in
+    fail) echo 'Sign in to the agent first' >&2; exit 1 ;;
+    slow) exec sleep 20 ;;
+    invalid) printf '{"result":"","is_error":false}'; exit 0 ;;
+    change) printf 'external-change\n' > "$PROJLAUNCH_TEST_REPO/partial" ;;
+esac
+if [ "$1" = exec ]; then
+    while [ "$1" != --output-last-message ]; do shift; done
+    shift
+    printf 'Describe staged changes\n\nGenerated body\n' > "$1"
+else
+    printf '{"result":"Describe all changes","is_error":false}'
+fi
+"#;
+    for name in ["codex", "claude"] {
+        let path = bin.path().join(name);
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    fs::write(&mode, "ok").unwrap();
+    let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_project-launch-git-server"));
+    let path = std::env::join_paths(
+        std::iter::once(bin.path().to_path_buf())
+            .chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    command
+        .arg("stdio")
+        .env("PATH", path)
+        .env("PROJLAUNCH_TEST_PROMPT", &capture)
+        .env("PROJLAUNCH_TEST_ARGS", bin.path().join("args"))
+        .env("PROJLAUNCH_TEST_MODE", &mode)
+        .env("PROJLAUNCH_TEST_REPO", f.path());
+    let client = Client::connect_command(command).await.unwrap();
+    let repo = request(&client, "repo.open", json!({"path":f.path()})).await;
+    let params = json!({"repoId":repo["repoId"],"agent":"codex"});
+    let generated = request(&client, "git.generateCommitMessage", params.clone()).await;
+    assert_eq!(generated["scope"], "staged");
+    assert_eq!(
+        generated["message"],
+        "Describe staged changes\n\nGenerated body"
+    );
+    let prompt = fs::read_to_string(&capture).unwrap();
+    assert!(prompt.contains("staged-version"));
+    assert!(!prompt.contains("working-version"));
+    assert!(!prompt.contains("untracked-version"));
+    assert!(prompt.contains("ONLY their staged diff") && prompt.contains("ALL working changes"));
+    let args = fs::read_to_string(bin.path().join("args")).unwrap();
+    assert!(args.contains("--sandbox\nread-only") && args.contains("--ignore-user-config"));
+    assert_eq!(f.git(&["write-tree"]), index);
+    assert_eq!(f.git(&["rev-parse", "HEAD"]), head);
+    assert_eq!(
+        fs::read_to_string(f.path().join("partial")).unwrap(),
+        "working-version\n"
+    );
+    f.git(&["reset", "--", "partial"]);
+    let params = json!({"repoId":repo["repoId"],"agent":"claude"});
+    let generated = request(&client, "git.generateCommitMessage", params.clone()).await;
+    assert_eq!(generated["scope"], "all");
+    assert_eq!(generated["message"], "Describe all changes");
+    let prompt = fs::read_to_string(&capture).unwrap();
+    assert!(prompt.contains("working-version") && prompt.contains("untracked-version"));
+    assert!(prompt.contains("Binary file; contents omitted"));
+    assert!(!prompt.contains("staged-version"));
+    assert!(
+        fs::read_to_string(bin.path().join("args"))
+            .unwrap()
+            .contains("--tools\n\n--strict-mcp-config")
+    );
+    for mode_value in ["fail", "invalid"] {
+        fs::write(&mode, mode_value).unwrap();
+        let mut params = params.clone();
+        params["operationId"] = json!(mode_value);
+        let error = client
+            .call::<_, Value>("git.generateCommitMessage", &params)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(if mode_value == "fail" {
+                "Sign in to the agent first"
+            } else {
+                "empty or invalid"
+            }),
+            "{error}"
+        );
+        if mode_value == "fail" {
+            assert!(error.contains("Earlier stderr omitted"), "{error}");
+            assert!(!error.contains("diagnostic-prefix-to-discard"));
+            assert!(
+                error.len() < 66000,
+                "Diagnostic memory/output must stay bounded"
+            );
+        }
+    }
+    fs::write(&mode, "change").unwrap();
+    let error = client
+        .call::<_, Value>(
+            "git.generateCommitMessage",
+            &json!({"repoId":repo["repoId"],"agent":"claude","operationId":"change"}),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("changed during generation"), "{error}");
+    fs::remove_file(&capture).unwrap();
+    fs::write(&mode, "slow").unwrap();
+    let operation = async {
+        client
+            .call::<_, Value>(
+                "git.generateCommitMessage",
+                &json!({"repoId":repo["repoId"],"agent":"claude","operationId":"slow"}),
+            )
+            .await
+    };
+    let cancel = async {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while !capture.exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        // Change content while the agent is running, then cancel without losing Git state.
+        f.write("partial", "changed-again\n");
+        client
+            .call::<_, bool>("git.cancel", &json!({"operationId":"slow"}))
+            .await
+            .unwrap();
+    };
+    let (result, _) = tokio::join!(operation, cancel);
+    assert!(result.unwrap_err().to_string().contains("cancelled"));
+    assert_eq!(f.git(&["rev-parse", "HEAD"]), head);
+    assert!(f.git(&["diff", "--cached", "--name-only"]).is_empty());
+    client.shutdown().await;
+}
+
 #[tokio::test]
 async fn commit_records_entire_index_and_preserves_unstaged_and_untracked_files() {
     let f = Fixture::new();

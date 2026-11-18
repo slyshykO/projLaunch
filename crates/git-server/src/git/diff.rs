@@ -6,7 +6,7 @@ use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 
 impl Repo {
-    async fn diff_args(
+    pub(super) async fn diff_args(
         &self,
         target: &DiffTarget,
         cancel: &CancellationToken,
@@ -175,7 +175,7 @@ impl Repo {
         })
     }
 
-    async fn preview(&self, path: &str, cancel: &CancellationToken) -> Result<Patch> {
+    pub(super) async fn preview(&self, path: &str, cancel: &CancellationToken) -> Result<Patch> {
         let full = self.root.join(path);
         let metadata = tokio::fs::symlink_metadata(&full)
             .await

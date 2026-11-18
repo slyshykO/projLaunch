@@ -73,6 +73,7 @@ node scripts/tests/test-commit-graph.mjs
 node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-commit-diff.mjs
 node scripts/tests/test-create-commit.mjs
+node scripts/tests/test-generate-commit-message.mjs
 node scripts/tests/test-working-tree.mjs
 node scripts/tests/test-index-changes.mjs
 node scripts/tests/test-workspace-state.mjs
@@ -107,6 +108,16 @@ drafts and errors across tab closure. Real Git/RPC tests verify exact commit tre
 parents and messages, unborn/detached HEAD, partial/untracked changes, stale HEAD
 and branch, operation markers, index locks, identity, hooks and signing failures.
 The runner also tests stderr preservation when Git exits before reading stdin.
+AI generation tests run fake Codex/Claude executables through real Git RPC and
+verify staged-only/all-change input, binary summaries, unchanged index/HEAD/worktree,
+agent failures, invalid output, concurrent repository changes and cancellation.
+No model account or live service is used.
+Agent fixtures emit over 64 KiB of stderr on both success and failure, verifying
+continued execution, bounded diagnostic tails and preserved final error text.
+Runner tests retain timeout/cancellation and strict Git stderr-limit coverage.
+Frontend tests cover project/endpoint selection, editable results, cancelled opens,
+stale responses, and settings changes;
+storage tests cover schema v3→v4 migration and agent persistence across restarts.
 If the environment places a `.git` entry directly in `/tmp`, use a separate
 temporary root, for example `TMPDIR=/var/tmp`, for Rust tests; discovery fixtures
 otherwise see that ancestor as an extra repository.

@@ -25,6 +25,10 @@ pub(super) fn apply(connection: &mut Connection) -> Result<()> {
         tx.execute_batch(include_str!("../../migrations/0003_database_owner.sql"))
             .context("Cannot create database ownership schema")?;
     }
+    if version < 4 {
+        tx.execute_batch(include_str!("../../migrations/0004_commit_agent.sql"))
+            .context("Cannot add project commit agent setting")?;
+    }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
     Ok(())

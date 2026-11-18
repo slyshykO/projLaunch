@@ -63,6 +63,21 @@ without a shell or pathspec, preserving Git identity, hooks, signing and locks.
 Integration-operation markers are checked in the actual worktree Git directory.
 The HEAD/branch comparison is a preflight check, not a lock against external clients.
 
+AI message generation uses `git_generate_commit_message` IPC and the additive
+`git.generateCommitMessage` RPC capability. The Git server collects the staged diff
+or, when staging is empty, the working diff plus untracked previews. It starts
+Codex/Claude on that endpoint, sends the bounded snapshot over stdin, and returns
+`message` and `scope`. A second snapshot check rejects changed input. Cancellation,
+timeouts and output limits use the existing child-process runner. No repository
+write is performed. Frontend request IDs, draft edits, watcher invalidations and
+project-agent changes guard application of the result.
+
+SQLite schema v4 adds `commit_agent_json` with JSON `null` as the legacy
+default. Project JSON accepts optional `commitAgent` (`codex` or `claude`); unknown
+agents are rejected by Rust's enum. Workspace JSON stays at v3: project association
+for generation is resolved from current project discovery results and is not a
+new persistent repository binding.
+
 Detailed UI behavior, Git subscriptions and workspace restoration are described
 in the [user guide](USER-GUIDE.md). WSL/SSH installation and transport are covered
 in [remote repositories](REMOTE-REPOSITORIES.md).
@@ -141,6 +156,7 @@ Each record includes:
 - `ide`
 - `environment`
 - `remote`
+- optional `commitAgent` (`codex`, `claude`, or null)
 
 `remote` supports either:
 

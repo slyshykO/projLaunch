@@ -11,13 +11,12 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, Row, params};
 use crate::project::ProjectData;
 use crate::workspace::Workspace;
 
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
-const COLUMNS: &str =
-    "id, name, last_opened, description, path, ide, environment_json, remote_json";
+const COLUMNS: &str = "id, name, last_opened, description, path, ide, environment_json, remote_json, commit_agent_json";
 const INSERT: &str = "INSERT INTO projects
-    (id, name, last_opened, description, path, ide, environment_json, remote_json)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)";
+    (id, name, last_opened, description, path, ide, environment_json, remote_json, commit_agent_json)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
 
 pub(super) struct Database {
     pub(super) connection: Connection,
@@ -192,7 +191,7 @@ impl Database {
              name = excluded.name, last_opened = excluded.last_opened,
              description = excluded.description, path = excluded.path,
              ide = excluded.ide, environment_json = excluded.environment_json,
-             remote_json = excluded.remote_json"
+             remote_json = excluded.remote_json, commit_agent_json = excluded.commit_agent_json"
         );
         write_project(&self.connection, &sql, &project)
     }
@@ -244,6 +243,7 @@ fn write_project(connection: &Connection, sql: &str, project: &ProjectData) -> R
             project.ide,
             serde_json::to_string(&project.environment)?,
             serde_json::to_string(&project.remote)?,
+            serde_json::to_string(&project.commit_agent)?,
         ],
     )?;
     Ok(())
@@ -273,5 +273,6 @@ fn read_project(row: &Row<'_>) -> rusqlite::Result<ProjectData> {
         ide: row.get(5)?,
         environment: json_column(row, 6)?,
         remote: json_column(row, 7)?,
+        commit_agent: json_column(row, 8)?,
     })
 }

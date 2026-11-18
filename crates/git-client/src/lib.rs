@@ -223,7 +223,12 @@ impl Client {
                 .map_err(anyhow::Error::msg)?;
             Ok(serde_json::from_value(value)?)
         };
-        match tokio::time::timeout(Duration::from_secs(90), operation).await {
+        let timeout = if method == "git.generateCommitMessage" {
+            180
+        } else {
+            90
+        };
+        match tokio::time::timeout(Duration::from_secs(timeout), operation).await {
             Ok(result) => result,
             Err(_) => {
                 self.stop.cancel();

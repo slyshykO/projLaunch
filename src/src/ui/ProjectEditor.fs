@@ -299,6 +299,36 @@ let Dialog (initial: ProjectData) (isNew: bool) (isSaving: bool) (saveError: str
             input "project-path" "Solution / workspace / directory" draft.path true (fun value ->
                 setDraft { draft with path = value })
             launchSettings
+            Html.div
+                [
+                    prop.children
+                        [
+                            fieldLabel "project-commit-agent" "Commit message agent"
+                            Html.select
+                                [
+                                    prop.id "project-commit-agent"
+                                    prop.className "select select-sm w-full"
+                                    prop.value (draft.commitAgent |> Option.defaultValue "")
+                                    prop.onChange (fun (value: string) ->
+                                        setDraft
+                                            { draft with
+                                                commitAgent = if value = "" then None else Some value
+                                            })
+                                    prop.children
+                                        [
+                                            Html.option [ prop.value ""; prop.text "None" ]
+                                            Html.option [ prop.value "codex"; prop.text "Codex" ]
+                                            Html.option [ prop.value "claude"; prop.text "Claude" ]
+                                        ]
+                                ]
+                            Html.p
+                                [
+                                    prop.className "text-xs text-base-content/60 mt-1"
+                                    prop.text
+                                        "Install and sign in to the agent CLI on the repository endpoint (local, WSL or SSH)."
+                                ]
+                        ]
+                ]
             yield! remoteFields
             environmentSection
         ]

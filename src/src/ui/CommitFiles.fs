@@ -184,6 +184,103 @@ let private CommitComposer (tab: RepositoryTab) dispatch =
                             prop.disabled tab.commitDraft.requestId.IsSome
                             prop.onChange (fun (value: string) -> dispatch (EditCommitMessage(tab.id, value)))
                         ]
+                    Html.div
+                        [
+                            prop.className "flex flex-wrap items-center gap-2"
+                            prop.children
+                                [
+                                    if tab.commitProjects.Length > 1 then
+                                        Html.select
+                                            [
+                                                prop.className "select select-xs max-w-full"
+                                                prop.ariaLabel "Project settings for commit message"
+                                                prop.value (tab.commitProjectId |> Option.defaultValue "")
+                                                prop.disabled tab.commitGeneration.IsSome
+                                                prop.onChange (fun (value: string) ->
+                                                    dispatch (SelectCommitProject(tab.id, value)))
+                                                prop.children
+                                                    [
+                                                        Html.option
+                                                            [ prop.value ""; prop.text "Choose project settings" ]
+                                                        for project in tab.commitProjects do
+                                                            Html.option
+                                                                [
+                                                                    prop.key project.id
+                                                                    prop.value project.id
+                                                                    prop.text project.name
+                                                                ]
+                                                    ]
+                                            ]
+                                    Html.button
+                                        [
+                                            prop.type' "button"
+                                            prop.className "btn btn-sm btn-outline"
+                                            prop.disabled (not (canGenerateCommitMessage tab))
+                                            prop.ariaBusy tab.commitGeneration.IsSome
+                                            prop.text (
+                                                match tab.commitGeneration, commitAgent tab with
+                                                | Some _, _ -> "Generating…"
+                                                | None, Some "codex" -> "Generate with Codex"
+                                                | None, Some "claude" -> "Generate with Claude"
+                                                | _ -> "Generate message"
+                                            )
+                                            prop.onClick (fun _ -> dispatch (GenerateCommitMessage tab.id))
+                                        ]
+                                    match selectedCommitProject tab with
+                                    | Some project ->
+                                        Html.button
+                                            [
+                                                prop.type' "button"
+                                                prop.className "btn btn-sm btn-ghost"
+                                                prop.text "Project settings"
+                                                prop.onClick (fun _ -> dispatch (OpenEditProjectModal project.id))
+                                            ]
+                                    | None -> Html.none
+                                    if tab.commitGeneration.IsSome then
+                                        Html.button
+                                            [
+                                                prop.type' "button"
+                                                prop.className "btn btn-sm btn-ghost"
+                                                prop.text "Cancel generation"
+                                                prop.onClick (fun _ -> dispatch (CancelCommitGeneration tab.id))
+                                            ]
+                                ]
+                        ]
+                    Html.p
+                        [
+                            prop.className "text-xs text-base-content/60"
+                            prop.text (
+                                if (commitAgent tab).IsNone then
+                                    "Choose Codex or Claude in the project's settings to generate messages."
+                                elif stagedFileCount tab > 0 then
+                                    "Generate from staged changes only. Review the message before committing."
+                                else
+                                    "Generate from all working changes, including untracked files. Stage changes before committing."
+                            )
+                        ]
+                    match tab.generationError with
+                    | Some error ->
+                        Html.p
+                            [
+                                prop.role "alert"
+                                prop.className "text-sm text-error whitespace-pre-wrap break-words"
+                                prop.text error
+                            ]
+                    | None -> Html.none
+                    match tab.generatedScope with
+                    | Some scope ->
+                        Html.p
+                            [
+                                prop.role "status"
+                                prop.className "text-xs text-success"
+                                prop.text (
+                                    if scope = "staged" then
+                                        "Message generated from staged changes."
+                                    else
+                                        "Message generated from all working changes. Review the files you stage before committing."
+                                )
+                            ]
+                    | None -> Html.none
                     Html.button
                         [
                             prop.type' "button"

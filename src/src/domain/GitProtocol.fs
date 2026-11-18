@@ -137,6 +137,8 @@ type LogPage =
 
 type CommitResult = { oid: string }
 
+type GeneratedCommitMessage = { message: string; scope: string }
+
 type DiffTarget =
     | Unstaged
     | Staged

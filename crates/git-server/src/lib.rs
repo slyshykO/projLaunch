@@ -7,6 +7,7 @@ pub fn server_info() -> git_protocol::ServerInfo {
 }
 
 pub mod api;
+mod commit_agent;
 pub mod git;
 #[cfg(feature = "network")]
 pub mod network;

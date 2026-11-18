@@ -10,7 +10,7 @@ open state
 let pageTheme _state = theme.light
 
 [<ReactMemoComponent>]
-let private ProjectGitIndicators (check: ProjectGitCheck option) (dispatch: Msg -> unit) =
+let private ProjectGitIndicators (projectId: string) (check: ProjectGitCheck option) (dispatch: Msg -> unit) =
     let note text title =
         Html.span [
             prop.className "text-xs text-base-content/60"
@@ -56,7 +56,7 @@ let private ProjectGitIndicators (check: ProjectGitCheck option) (dispatch: Msg 
                             prop.key repo.root
                             prop.title $"Open repository\n{details}"
                             prop.ariaLabel $"Open repository {repo.name}: {label}. {details}"
-                            prop.onClick (fun _ -> dispatch (OpenRepositoryTab repo))
+                            prop.onClick (fun _ -> dispatch (OpenProjectRepositoryTab(projectId, repo)))
                             prop.className
                                 "flex items-center gap-1.5 rounded border border-base-300 px-2 py-1 text-xs min-w-0 hover:bg-base-300 focus-visible:outline-2 focus-visible:outline-primary cursor-pointer"
                             prop.children [
@@ -148,7 +148,7 @@ let Project (prj: ProjectData) (gitCheck: ProjectGitCheck option) (readOnly: boo
                         )
                     ]
                 ]
-                ProjectGitIndicators gitCheck dispatch
+                ProjectGitIndicators prj.id gitCheck dispatch
             ]
         ]
     ]

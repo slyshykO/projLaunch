@@ -201,6 +201,29 @@ pub struct CommitResult {
     pub oid: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CommitAgent {
+    Codex,
+    Claude,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GenerateCommitMessageParams {
+    pub repo_id: String,
+    pub operation_id: String,
+    pub agent: CommitAgent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneratedCommitMessage {
+    pub message: String,
+    /// "staged" or "all"; all includes untracked text previews.
+    pub scope: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PatchParams {

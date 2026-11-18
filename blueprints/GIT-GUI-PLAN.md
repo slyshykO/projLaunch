@@ -17,6 +17,8 @@
 Новые результаты по этому направлению записываются только в данный план.
 
 Текущее состояние плана: выполнены stage/unstage целых файлов и создание коммитов.
+Создание коммитов дополнено генерацией сообщения через Codex/Claude с выбором
+агента в настройках проекта и запуском на endpoint репозитория.
 Следующий предложенный этап — работа с ветками; его реализация ещё не начата.
 
 ## Отправная точка
@@ -66,6 +68,107 @@ stage/unstage. Нажатие на ветку по-прежнему выбира
 интерфейс к созданию коммитов. Последующие этапы начинать по выбранной задаче пользователя.
 
 ## Реализация, решения и результаты
+
+### Генерация сообщения коммита через Codex/Claude — выполнена 18.11.2026
+
+**Согласованный состав.** Пользователь запросил выбор Codex/Claude в настройках
+проекта и правило prompt: при наличии Staged описывать только подготовленные
+изменения, иначе использовать весь diff. Отдельно выбрано выполнение агента
+на endpoint репозитория: local, внутри WSL или на SSH-host.
+
+**Поведение.** Edit project содержит Commit message agent: None / Codex / Claude.
+В Uncommitted changes появились Generate with Codex/Claude, Cancel generation
+и переход к Project settings. Результат заполняет редактируемое сообщение;
+stage и commit выполняются пользователем отдельно. Prompt явно содержит правило
+Staged/all; сервер сам собирает подходящий snapshot. При отсутствии Staged
+включены tracked diff и untracked text previews; бинарные файлы обозначены
+без передачи их содержимого. При ошибке или отмене прежнее сообщение сохраняется.
+
+Открытие через карточку выбирает настройки соответствующего проекта. Для общего
+или восстановленного repo с несколькими проектами доступен явный выбор проекта.
+Используются текущие discovery roots с endpoint identity; постоянные repository
+bindings не добавлялись. Смена проекта/агента, ручное редактирование сообщения,
+watcher invalidation и закрытие вкладки защищены request-generation guards.
+Отмена до завершения repo.open не запускает агента; после старта отправляется
+`git.cancel`. Закрытие вкладки тоже запрашивает отмену. Во время генерации
+Stage/Unstage и Commit заблокированы. На сервере после ответа агента повторно
+сравнивается diff, поэтому изменение snapshot обнаруживается и без watcher.
+
+**Хранение и протокол.** Опциональное project JSON поле `commitAgent` хранит
+`codex`/`claude`; Rust enum отвергает произвольные программы. SQLite migration
+0004 добавляет `commit_agent_json` с исходным JSON null. Старые проекты получают
+None; настройка сохраняется после перезапуска и обновления lastOpened. Workspace
+JSON остаётся v3. Добавлены typed IPC `git_generate_commit_message` и additive v1
+RPC `git.generateCommitMessage`, принимающий repoId/operationId/agent и возвращающий
+message/scope. Frontend работает только через `AppTauri.Git`.
+
+**Выполнение.** Используются установленные и авторизованные CLI из PATH endpoint.
+Они запускаются без shell в отдельном временном каталоге с prompt через stdin.
+Codex exec использует read-only sandbox, ignored user config/rules, отключённые
+shell/apps/delegation/hooks/search и файл final message. Claude print использует
+JSON result, отключённые tools/MCP/slash commands/hooks и no-session-persistence.
+Авторизация остаётся в окружении CLI; приложение не хранит ключи. `tempfile`, ранее
+тестовая зависимость сервера, перенесён в runtime dependencies для временного
+каталога/final-message файла. Сохраняется общий runner с отменой, ограничением
+вывода и завершением child process. Лимиты: context 256 KiB (без молчаливого
+обрезания текста), сообщение 65536 UTF-8 bytes, 2 concurrent agents/server,
+120 секунд на CLI, 150 секунд на RPC и 180 секунд client deadline только для
+этого метода. Общие Git deadline не изменены.
+
+**Проверки.** Стандартный `npm run build` (release sidecar + Fable/Vite) и Fable
+Debug прошли; все 25 frontend regression-скриптов прошли. Новый сценарий проверяет
+настройки общего repo, local/WSL/SSH routing, заполнение сообщения без commit,
+ручные изменения/поздние ответы, watcher/settings invalidation, ошибки, cancel,
+закрытие вкладки и отмену во время открытия repo. Rust Git workspace: 41 тест
+прошёл, включая реальные Git/RPC со fake Codex/Claude executables: staged-only
+и all input, binary summaries, сохранение index/HEAD/worktree, отказ агента,
+пустой результат, изменение repo во время генерации и отмена. Native: 46 тестов
+прошли, 2 штатно пропущены; проверены migration v3→v4, legacy default, сохранение
+обоих агентов после рестарта и запрет неизвестных значений. Rust-прогоны используют
+TMPDIR=/var/tmp из-за служебного /tmp/.git; единичный Text file busy в тесте
+packaged sidecar исчез при повторном прогоне после сборки. Git workspace Clippy
+с `-D warnings`, Fantomas, cargo fmt и diff whitespace check прошли.
+Build hooks синхронизировали семь manifests/lockfiles до
+`0.5.2+17.gc910d4d.dirty`; версии сохранены вместе с изменениями.
+README, user guide, architecture/testing/remote guides и server API обновлены.
+
+**Ограничения.** Live model API, действительная авторизация Codex/Claude,
+Windows launcher и настоящий запуск генерации на WSL/SSH вручную не проверялись;
+тесты используют локальные изолированные fake CLI и endpoint IPC stubs.
+Нужны актуальные CLI с используемыми флагами, настроенная авторизация и PATH
+неинтерактивного endpoint процесса. Выбор модели, кастомный prompt, использование
+repository-local agent instructions, автоматические stage/commit и сохранение
+draft между перезапусками не входят в задачу. Отмена после старта best-effort;
+поздний ответ в любом случае не применяется. All-diff сообщение нужно проверить
+после выбора файлов для Staged, если в коммит включается только часть изменений.
+
+### Исправление переполнения stderr агента — выполнено 18.11.2026
+
+**Причина.** При реальном запуске Codex генерация завершалась ошибкой
+`Git stderr exceeds 65536 bytes`: общий GitRunner считал диагностический поток
+агента ограниченным потоком ошибок Git и убивал процесс после 64 KiB.
+
+**Изменение.** Для Codex/Claude включён отдельный режим чтения stderr:
+поток полностью дренируется, в памяти хранится только последний фрагмент до
+64 KiB. При ненулевом exit code показывается конец диагностики с отметкой
+об отброшенном начале; длинный progress/prompt echo больше не прерывает
+успешную генерацию. Лимиты stdout/final message, timeout и cancellation остаются;
+обычные Git-команды сохраняют прежний жёсткий stderr limit. Ошибки агента теперь
+называют Agent вместо Git, а общий wrapper больше не предлагает переустановку
+и авторизацию независимо от фактической причины отказа.
+
+**Проверки.** `cargo test --manifest-path crates/Cargo.toml -p git-server --locked`:
+35 тестов прошли. Fake Codex/Claude RPC fixture теперь выдаёт 192 KiB stderr
+перед успешным результатом и перед ошибкой; проверены сохранение последней
+ошибки, ограниченный размер диагностики и отсутствие отброшенного префикса.
+Новый runner-тест проверяет timeout/cancel после превышения 64 KiB;
+существующая проверка строгого stderr limit для Git тоже прошла.
+Git workspace Clippy `--all-targets --all-features --locked -- -D warnings`,
+`cargo fmt`, `npm run gen:version` и `npm run build` прошли. Release Linux sidecar
+пересобран; версия остаётся `0.5.2+17.gc910d4d.dirty`. Ранее накопленные изменения
+функции и manifests/lockfiles сохранены. Реальный model API не вызывался;
+проверки используют изолированные CLI fixtures. Для применения нужно перезапустить
+desktop/Git server, использующий обновлённый sidecar.
 
 ### Этап 2. Создание коммитов — выполнен 18.11.2026
 

@@ -62,6 +62,7 @@ type ProjectData =
         ide: string
         environment: Map<string, string>
         remote: Remote option
+        commitAgent: string option
     }
 
     static member Default() =
@@ -74,6 +75,7 @@ type ProjectData =
             ide = ""
             environment = Map.empty
             remote = None
+            commitAgent = None
         }
 
 let private environmentEncoder (environment: Map<string, string>) =
@@ -90,6 +92,8 @@ let private projectDataEncoder (pd: ProjectData) =
             "ide", Encode.string pd.ide
             "environment", environmentEncoder pd.environment
             "remote", Encode.option remoteEncoder pd.remote
+            if pd.commitAgent.IsSome then
+                "commitAgent", Encode.string pd.commitAgent.Value
         ]
 
 let private projectDataDecoder: Decoder<ProjectData> =
@@ -103,6 +107,7 @@ let private projectDataDecoder: Decoder<ProjectData> =
             ide = get.Required.Field "ide" Decode.string
             environment = get.Required.Field "environment" (Decode.dict Decode.string)
             remote = get.Optional.Field "remote" remoteDecoder
+            commitAgent = get.Optional.Field "commitAgent" Decode.string
         })
 
 type ProjectData with
