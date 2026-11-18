@@ -69,6 +69,227 @@ async fn change_index(client: &Client, repo: &str, stage: bool, group: &str, pat
     );
 }
 
+async fn commit_params(client: &Client, repo: &str, message: &str) -> Value {
+    let status = request(client, "git.status", json!({"repoId":repo})).await;
+    json!({
+        "repoId": repo,
+        "operationId": uuid::Uuid::new_v4().to_string(),
+        "message": message,
+        "expectedHead": status["head"],
+        "expectedBranch": status["branch"],
+    })
+}
+
+#[tokio::test]
+async fn commit_records_entire_index_and_preserves_unstaged_and_untracked_files() {
+    let f = Fixture::new();
+    f.write("partial", "base\n");
+    f.write("removed", "gone\n");
+    f.write("original", "rename\n");
+    let parent = f.commit("base");
+    f.write("partial", "staged\n");
+    f.git(&["add", "partial"]);
+    f.write("partial", "unstaged\n");
+    f.git(&["rm", "removed"]);
+    f.git(&["mv", "original", "renamed"]);
+    f.write("--новый [1].bin", [0, 1, 255]);
+    f.git(&["add", "--", "--новый [1].bin"]);
+    f.write("untracked", "leave alone");
+    let index = f.git(&["write-tree"]);
+    let (client, repo) = f.connect().await;
+    let message = "Unicode коммит\n\n# literal comment\n--amend $(no-shell) `literal`\n";
+    let params = commit_params(&client, &repo, message).await;
+    let result: Value = client.call("git.commit", &params).await.unwrap();
+    assert_eq!(result["oid"], f.git(&["rev-parse", "HEAD"]));
+    assert_eq!(f.git(&["rev-parse", "HEAD^"]), parent);
+    assert_eq!(f.git(&["rev-parse", "HEAD^{tree}"]), index);
+    assert_eq!(f.git(&["show", "HEAD:partial"]), "staged");
+    assert_eq!(f.git(&["log", "-1", "--format=%B"]), message.trim());
+    assert_eq!(
+        f.git(&["log", "-1", "--format=%an <%ae>"]),
+        "Тест Author <test@example.invalid>"
+    );
+    assert_eq!(
+        fs::read_to_string(f.path().join("partial")).unwrap(),
+        "unstaged\n"
+    );
+    assert_eq!(
+        fs::read_to_string(f.path().join("untracked")).unwrap(),
+        "leave alone"
+    );
+    assert_eq!(f.git(&["write-tree"]), index);
+    assert!(f.git(&["diff", "--cached", "--name-only"]).is_empty());
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn commit_supports_unborn_and_detached_head() {
+    let f = Fixture::new();
+    f.write("first", "one");
+    f.git(&["add", "first"]);
+    let (client, repo) = f.connect().await;
+    let params = commit_params(&client, &repo, "First").await;
+    assert!(params["expectedHead"].is_null());
+    let first: Value = client.call("git.commit", &params).await.unwrap();
+    assert_eq!(f.git(&["log", "-1", "--format=%P"]), "");
+    f.git(&["checkout", "--detach"]);
+    f.write("first", "two");
+    f.git(&["add", "first"]);
+    let params = commit_params(&client, &repo, "Detached").await;
+    assert!(params["expectedBranch"].is_null());
+    let detached: Value = client.call("git.commit", &params).await.unwrap();
+    assert_ne!(first["oid"], detached["oid"]);
+    assert_eq!(first["oid"], f.git(&["rev-parse", "main"]));
+    assert_eq!(first["oid"], f.git(&["rev-parse", "HEAD^"]));
+    assert_eq!(detached["oid"], f.git(&["rev-parse", "HEAD"]));
+    client.shutdown().await;
+}
+
+#[tokio::test]
+async fn commit_rejects_invalid_message_empty_index_stale_head_and_busy_repository() {
+    let f = Fixture::new();
+    f.write("file", "base");
+    let head = f.commit("Base");
+    let (client, repo) = f.connect().await;
+    let params = commit_params(&client, &repo, "Nothing").await;
+    let error = client
+        .call::<_, Value>("git.commit", &params)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("No staged changes"), "{error}");
+    f.write("file", "next");
+    f.git(&["add", "file"]);
+    let index = f.git(&["write-tree"]);
+    for message in [
+        " \n\t".to_string(),
+        "nul\0message".to_string(),
+        "я".repeat(32769),
+    ] {
+        let params = commit_params(&client, &repo, &message).await;
+        let error = client
+            .call::<_, Value>("git.commit", &params)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Commit message"), "{error}");
+    }
+    let params = commit_params(&client, &repo, "Stale branch").await;
+    f.git(&["checkout", "-b", "other"]);
+    let error = client
+        .call::<_, Value>("git.commit", &params)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("HEAD or branch changed"), "{error}");
+    let mut params = commit_params(&client, &repo, "Stale HEAD").await;
+    params["expectedHead"] = json!("0".repeat(40));
+    assert!(
+        client
+            .call::<_, Value>("git.commit", &params)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("HEAD or branch changed")
+    );
+    for marker in [
+        "MERGE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "REVERT_HEAD",
+        "rebase-merge",
+        "rebase-apply",
+        "sequencer",
+        "index.lock",
+    ] {
+        f.write(&format!(".git/{marker}"), &head);
+        let params = commit_params(&client, &repo, "Blocked").await;
+        let error = client
+            .call::<_, Value>("git.commit", &params)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(marker), "{error}");
+        assert_eq!(
+            fs::read_to_string(f.path().join(format!(".git/{marker}"))).unwrap(),
+            head
+        );
+        fs::remove_file(f.path().join(format!(".git/{marker}"))).unwrap();
+    }
+    assert_eq!(f.git(&["rev-parse", "HEAD"]), head);
+    assert_eq!(f.git(&["write-tree"]), index);
+    assert_eq!(fs::read_to_string(f.path().join("file")).unwrap(), "next");
+    client.shutdown().await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn commit_honors_hooks_identity_and_signing_failures() {
+    use std::os::unix::fs::PermissionsExt;
+    let f = Fixture::new();
+    f.write("file", "base");
+    let head = f.commit("Base");
+    f.write("file", "next");
+    f.git(&["add", "file"]);
+    let index = f.git(&["write-tree"]);
+    let (client, repo) = f.connect().await;
+    f.git(&["config", "core.hooksPath", ".git/hooks"]);
+    for hook in ["pre-commit", "commit-msg"] {
+        let name = format!(".git/hooks/{hook}");
+        f.write(&name, "#!/bin/sh\necho rejected-by-hook >&2\nexit 1\n");
+        fs::set_permissions(f.path().join(&name), fs::Permissions::from_mode(0o755)).unwrap();
+        let params = commit_params(&client, &repo, "Rejected").await;
+        let error = client
+            .call::<_, Value>("git.commit", &params)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("rejected-by-hook"), "{error}");
+        fs::remove_file(f.path().join(&name)).unwrap();
+    }
+    f.git(&["config", "user.name", ""]);
+    let params = commit_params(&client, &repo, "Identity").await;
+    assert!(
+        client
+            .call::<_, Value>("git.commit", &params)
+            .await
+            .is_err()
+    );
+    f.git(&["config", "user.name", "Author"]);
+    f.git(&["config", "commit.gpgsign", "true"]);
+    f.git(&["config", "gpg.format", "openpgp"]);
+    f.git(&[
+        "config",
+        "gpg.program",
+        "/nonexistent-projlaunch-test-signer",
+    ]);
+    let params = commit_params(&client, &repo, "Signing").await;
+    assert!(
+        client
+            .call::<_, Value>("git.commit", &params)
+            .await
+            .is_err()
+    );
+    assert_eq!(f.git(&["rev-parse", "HEAD"]), head);
+    assert_eq!(f.git(&["write-tree"]), index);
+    f.git(&["config", "commit.gpgsign", "false"]);
+    f.write(
+        ".git/hooks/commit-msg",
+        "#!/bin/sh\nprintf '\\nHook trailer\\n' >> \"$1\"\n",
+    );
+    fs::set_permissions(
+        f.path().join(".git/hooks/commit-msg"),
+        fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    let params = commit_params(&client, &repo, "Accepted").await;
+    let _: Value = client.call("git.commit", &params).await.unwrap();
+    assert_eq!(
+        f.git(&["log", "-1", "--format=%B"]),
+        "Accepted\n\nHook trailer"
+    );
+    client.shutdown().await;
+}
+
 #[tokio::test]
 async fn index_changes_preserve_worktree_head_and_unselected_partial_changes() {
     let f = Fixture::new();
@@ -700,6 +921,18 @@ async fn conflict_and_detached_head_are_explicit() {
     assert_eq!(status["entries"][0]["kind"], "conflict");
     assert_eq!(status["entries"][0]["index"], "U");
     assert_eq!(status["entries"][0]["worktree"], "U");
+    let params = commit_params(&client, &repo, "Do not commit conflicts").await;
+    let merge_head = fs::read(fixture.path().join(".git/MERGE_HEAD")).unwrap();
+    fs::remove_file(fixture.path().join(".git/MERGE_HEAD")).unwrap();
+    // An unmerged index can exist without an integration-operation marker.
+    let error = client
+        .call::<_, Value>("git.commit", &params)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("Resolve all conflicts"), "{error}");
+    assert_eq!(fixture.git(&["rev-parse", "HEAD"]), head);
+    fixture.write(".git/MERGE_HEAD", merge_head);
     fixture.write("conflict", "resolved\n");
     change_index(&client, &repo, true, "unstaged", &["conflict"]).await;
     assert!(fixture.git(&["ls-files", "--unmerged"]).is_empty());

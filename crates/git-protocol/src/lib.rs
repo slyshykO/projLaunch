@@ -184,6 +184,23 @@ pub struct IndexPathsParams {
     pub paths: Vec<String>,
 }
 
+/// Creates an ordinary commit from the entire index at the reviewed HEAD/branch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CommitParams {
+    pub repo_id: String,
+    pub operation_id: String,
+    pub message: String,
+    pub expected_head: Option<String>,
+    pub expected_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitResult {
+    pub oid: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PatchParams {

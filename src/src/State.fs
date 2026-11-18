@@ -49,6 +49,20 @@ type CommitFiles =
         diff: CommitDiff option
     }
 
+type CommitDraft =
+    {
+        message: string
+        requestId: string option
+        outcome: Result<GitProtocol.CommitResult, string> option
+    }
+
+let private emptyCommitDraft =
+    {
+        message = ""
+        requestId = None
+        outcome = None
+    }
+
 type RepositoryTab =
     {
         endpoint: GitProtocol.Endpoint option
@@ -74,8 +88,9 @@ type RepositoryTab =
         statusInvalidated: bool
         autoRefreshing: bool
         checkedFiles: Set<GitProtocol.DiffTarget * string>
-        indexRequestId: string option
+        gitWriteRequestId: string option
         indexError: string option
+        commitDraft: CommitDraft
     }
 
 type Msg =
@@ -119,6 +134,9 @@ type Msg =
     | SelectWorkingTreeFile of string * GitProtocol.DiffTarget * string
     | CheckWorkingTreeFile of string * GitProtocol.DiffTarget * string * bool
     | ChangeIndex of string * GitProtocol.DiffTarget * string array
+    | EditCommitMessage of string * string
+    | CreateCommit of string
+    | OnCommitCreated of GitProtocol.Endpoint option * string * string * Result<GitProtocol.CommitResult, exn>
     | OnIndexChanged of
         GitProtocol.Endpoint option *
         string *
@@ -223,7 +241,8 @@ type State =
         projectGit: Map<string, ProjectGitCheck>
         pendingProjectGit: Set<string>
         gitWatchErrors: Map<string, string>
-        pendingIndexChanges: Map<string, string>
+        pendingGitWrites: Map<string, string>
+        commitDrafts: Map<string, CommitDraft>
         projectEditor: ProjectData option
         isProjectSaving: bool
         projectSaveError: string option
@@ -275,7 +294,8 @@ let init () =
             projectGit = Map.empty
             pendingProjectGit = Set.empty
             gitWatchErrors = Map.empty
-            pendingIndexChanges = Map.empty
+            pendingGitWrites = Map.empty
+            commitDrafts = Map.empty
             projectEditor = None
             isProjectSaving = false
             projectSaveError = None
@@ -315,8 +335,9 @@ let private newRepositoryTab endpoint root name =
         statusInvalidated = false
         autoRefreshing = false
         checkedFiles = Set.empty
-        indexRequestId = None
+        gitWriteRequestId = None
         indexError = None
+        commitDraft = emptyCommitDraft
         history =
             {
                 repoId = None
@@ -330,7 +351,7 @@ let private newRepositoryTab endpoint root name =
 
 /// Writes are serialized in the UI per endpoint/worktree, including closed/reopened tabs.
 let canChangeIndex (tab: RepositoryTab) =
-    tab.indexRequestId.IsNone
+    tab.gitWriteRequestId.IsNone
     && tab.history.requestId.IsNone
     && not tab.statusInvalidated
     && (tab.selection
@@ -339,6 +360,36 @@ let canChangeIndex (tab: RepositoryTab) =
             && selection.hasLoaded
             && selection.requestId.IsNone
             && selection.error.IsNone))
+
+let stagedFileCount (tab: RepositoryTab) =
+    tab.selection
+    |> Option.map (fun selection ->
+        selection.groups
+        |> Array.sumBy (fun (target, files) -> if target = GitProtocol.Staged then files.Length else 0))
+    |> Option.defaultValue 0
+
+let canCreateCommit (tab: RepositoryTab) =
+    canChangeIndex tab
+    && not tab.historyInvalidated
+    && stagedFileCount tab > 0
+    && not (String.IsNullOrWhiteSpace tab.commitDraft.message)
+    && not (tab.commitDraft.message.Contains '\000')
+    && (tab.workingTree
+        |> Option.exists (function
+            | Ok status -> status.entries |> Array.forall (fun entry -> entry.kind <> "conflict")
+            | Error _ -> false))
+
+let private setCommitDraft key draft (state: State) =
+    { state with
+        commitDrafts = Map.add key draft state.commitDrafts
+        repositoryTabs =
+            state.repositoryTabs
+            |> List.map (fun tab ->
+                if GitProtocol.repositoryKey tab.endpoint tab.root = key then
+                    { tab with commitDraft = draft }
+                else
+                    tab)
+    }
 
 /// One observation per endpoint/worktree, shared by cards and open tabs.
 let watchedRepositories (state: State) =
@@ -660,8 +711,12 @@ let rec private updateCore msg state =
         | None ->
             let tab =
                 { newRepositoryTab repository.endpoint repository.root repository.name with
-                    indexRequestId =
-                        state.pendingIndexChanges
+                    commitDraft =
+                        state.commitDrafts
+                        |> Map.tryFind (GitProtocol.repositoryKey repository.endpoint repository.root)
+                        |> Option.defaultValue emptyCommitDraft
+                    gitWriteRequestId =
+                        state.pendingGitWrites
                         |> Map.tryFind (GitProtocol.repositoryKey repository.endpoint repository.root)
                 }
 
@@ -752,6 +807,152 @@ let rec private updateCore msg state =
 
         { state with repositoryTabs = tabs }, Cmd.none
 
+    | EditCommitMessage(id, message) ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when tab.commitDraft.requestId.IsNone && not state.isWindowClosePending ->
+            let key = GitProtocol.repositoryKey tab.endpoint tab.root
+
+            setCommitDraft
+                key
+                { tab.commitDraft with
+                    message = message
+                    outcome = None
+                }
+                state,
+            Cmd.none
+        | _ -> state, Cmd.none
+
+    | CreateCommit id ->
+        match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
+        | Some tab when canCreateCommit tab && not state.isWindowClosePending ->
+            let key = GitProtocol.repositoryKey tab.endpoint tab.root
+
+            if Map.containsKey key state.pendingGitWrites then
+                state, Cmd.none
+            else
+                let requestId = Guid.NewGuid().ToString()
+
+                let draft =
+                    { tab.commitDraft with
+                        requestId = Some requestId
+                        outcome = None
+                    }
+
+                let next = setCommitDraft key draft state
+
+                let write () =
+                    promise {
+                        let! repository =
+                            AppTauri.Git.openRepository tab.endpoint tab.root $"commit-{requestId}-open"
+
+                        let status =
+                            match tab.workingTree with
+                            | Some(Ok status) -> status
+                            | _ -> failwith "Status unavailable"
+
+                        return!
+                            AppTauri.Git.commit
+                                tab.endpoint
+                                repository.repoId
+                                $"commit-{requestId}-write"
+                                draft.message
+                                status
+                    }
+
+                { next with
+                    pendingGitWrites = Map.add key requestId next.pendingGitWrites
+                    repositoryTabs =
+                        next.repositoryTabs
+                        |> List.map (fun item ->
+                            if GitProtocol.repositoryKey item.endpoint item.root = key then
+                                { item with
+                                    gitWriteRequestId = Some requestId
+                                    indexError = None
+                                    selection =
+                                        item.selection
+                                        |> Option.map (fun selection ->
+                                            if selection.commit.IsNone then
+                                                { selection with
+                                                    requestId = None
+                                                    diff =
+                                                        selection.diff
+                                                        |> Option.map (fun diff -> { diff with requestId = None })
+                                                }
+                                            else
+                                                selection)
+                                }
+                            else
+                                item)
+                },
+                Cmd.OfPromise.either
+                    write
+                    ()
+                    (fun result -> OnCommitCreated(tab.endpoint, tab.root, requestId, Ok result))
+                    (fun error -> OnCommitCreated(tab.endpoint, tab.root, requestId, Error error))
+        | _ -> state, Cmd.none
+
+    | OnCommitCreated(endpoint, root, requestId, result) ->
+        let key = GitProtocol.repositoryKey endpoint root
+
+        match Map.tryFind key state.commitDrafts with
+        | Some draft when
+            draft.requestId = Some requestId
+            && Map.tryFind key state.pendingGitWrites = Some requestId
+            ->
+            let draft =
+                { draft with
+                    requestId = None
+                    message =
+                        match result with
+                        | Ok _ -> ""
+                        | Error _ -> draft.message
+                    outcome =
+                        Some(
+                            result
+                            |> Result.mapError (fun error ->
+                                $"{error}\nThe commit may have completed. Review refreshed history and changes before retrying.")
+                        )
+                }
+
+            let next = setCommitDraft key draft state
+
+            let tabs =
+                next.repositoryTabs
+                |> List.map (fun tab ->
+                    if GitProtocol.repositoryKey tab.endpoint tab.root = key then
+                        { tab with
+                            gitWriteRequestId = None
+                            checkedFiles =
+                                match result with
+                                | Ok _ -> Set.empty
+                                | Error _ -> tab.checkedFiles
+                            historyInvalidated = true
+                            statusInvalidated = true
+                            selection =
+                                tab.selection
+                                |> Option.map (fun selection ->
+                                    if selection.commit.IsNone then
+                                        { selection with requestId = None }
+                                    else
+                                        selection)
+                        }
+                    else
+                        tab)
+
+            { next with
+                pendingGitWrites = Map.remove key next.pendingGitWrites
+                repositoryTabs = tabs
+            },
+            Cmd.batch
+                [
+                    Cmd.ofMsg (GitChanged(endpoint, root, true, true))
+                    for tab in tabs do
+                        if GitProtocol.repositoryKey tab.endpoint tab.root = key then
+                            Cmd.ofMsg (RefreshWatchedRepository tab.id)
+                    Cmd.ofMsg ContinueWindowClose
+                ]
+        | _ -> state, Cmd.none
+
     | ChangeIndex(id, target, paths) ->
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
         | Some tab when canChangeIndex tab && not state.isWindowClosePending ->
@@ -767,7 +968,7 @@ let rec private updateCore msg state =
 
             if
                 paths.Length = 0
-                || Map.containsKey key state.pendingIndexChanges
+                || Map.containsKey key state.pendingGitWrites
                 || (paths
                     |> Array.exists (fun path -> files |> Array.exists (fun file -> file.path = path) |> not))
             then
@@ -794,7 +995,7 @@ let rec private updateCore msg state =
                     |> List.map (fun item ->
                         if GitProtocol.repositoryKey item.endpoint item.root = key then
                             { item with
-                                indexRequestId = Some requestId
+                                gitWriteRequestId = Some requestId
                                 indexError = None
                                 selection =
                                     item.selection
@@ -812,7 +1013,7 @@ let rec private updateCore msg state =
                             item)
 
                 { state with
-                    pendingIndexChanges = Map.add key requestId state.pendingIndexChanges
+                    pendingGitWrites = Map.add key requestId state.pendingGitWrites
                     repositoryTabs = tabs
                 },
                 Cmd.OfPromise.either
@@ -825,7 +1026,7 @@ let rec private updateCore msg state =
     | OnIndexChanged(endpoint, root, requestId, target, paths, result) ->
         let key = GitProtocol.repositoryKey endpoint root
 
-        if Map.tryFind key state.pendingIndexChanges <> Some requestId then
+        if Map.tryFind key state.pendingGitWrites <> Some requestId then
             state, Cmd.none
         else
             let tabs =
@@ -862,7 +1063,7 @@ let rec private updateCore msg state =
                                 : Workspace.File))
 
                         { tab with
-                            indexRequestId = None
+                            gitWriteRequestId = None
                             indexError =
                                 match result with
                                 | Ok true -> None
@@ -883,12 +1084,13 @@ let rec private updateCore msg state =
                         })
 
             { state with
-                pendingIndexChanges = Map.remove key state.pendingIndexChanges
+                pendingGitWrites = Map.remove key state.pendingGitWrites
                 repositoryTabs = tabs
             },
             Cmd.batch
                 [
                     Cmd.ofMsg (GitChanged(endpoint, root, false, true))
+                    Cmd.ofMsg ContinueWindowClose
                     // Explicit refresh also works when this tab is inactive or newly reopened.
                     for tab in tabs do
                         if GitProtocol.repositoryKey tab.endpoint tab.root = key then
@@ -1142,7 +1344,7 @@ let rec private updateCore msg state =
             match tab.selection with
             | Some selection when
                 selection.requestId.IsNone
-                && (selection.commit.IsSome || tab.indexRequestId.IsNone)
+                && (selection.commit.IsSome || tab.gitWriteRequestId.IsNone)
                 && (selection.commit
                     |> Option.forall (fun commit -> commit.parents.Length <= 1 || selection.parent.IsSome))
                 ->
@@ -1296,7 +1498,7 @@ let rec private updateCore msg state =
             | Some selection when
                 selection.hasLoaded
                 && selection.requestId.IsNone
-                && (selection.commit.IsSome || tab.indexRequestId.IsNone)
+                && (selection.commit.IsSome || tab.gitWriteRequestId.IsNone)
                 ->
                 let requested =
                     match msg with
@@ -1548,7 +1750,7 @@ let rec private updateCore msg state =
                             && (tab.historyInvalidated || tab.statusInvalidated)
                             && (tab.history.hasLoaded || tab.history.error.IsSome)
                             && tab.history.requestId.IsNone
-                            && tab.indexRequestId.IsNone
+                            && tab.gitWriteRequestId.IsNone
                             && not tab.restoringHistory
                             && tab.commitNavigation.IsNone
                             && (tab.selection
@@ -1575,7 +1777,7 @@ let rec private updateCore msg state =
         match state.repositoryTabs |> List.tryFind (fun tab -> tab.id = id) with
         | Some tab when
             tab.history.requestId.IsNone
-            && tab.indexRequestId.IsNone
+            && tab.gitWriteRequestId.IsNone
             && (not append || (tab.history.repoId.IsSome && tab.history.nextCursor.IsSome))
             ->
             let requestId = Guid.NewGuid().ToString()
@@ -2333,6 +2535,7 @@ let rec private updateCore msg state =
             || state.workspaceLoading
             || state.workspaceSaving.IsSome
             || state.isProjectDeleting
+            || not (Map.isEmpty state.pendingGitWrites)
         then
             state, Cmd.none
         elif
@@ -2350,6 +2553,7 @@ let rec private updateCore msg state =
     | OnWindowSaveSuccess ->
         if
             state.isProjectDeleting
+            || not (Map.isEmpty state.pendingGitWrites)
             || state.workspaceSaving.IsSome
             || (not (isStorageReadOnly state)
                 && state.workspaceReady

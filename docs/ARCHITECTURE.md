@@ -53,6 +53,16 @@ mutations are not retried automatically. Both successful and failed writes
 trigger fresh status/files/diff reads. This transient state adds no database
 migration or workspace JSON fields.
 
+Ordinary commits use typed `git_commit` IPC / `git.commit` RPC with the message
+and reviewed HEAD/branch, returning a commit OID. They share the per-worktree
+write gate with staging, including across tab closure. Message drafts and outcomes
+are session-only and keyed by endpoint/worktree. Successful and failed commits
+invalidate history as well as status; refreshed pages retain the loaded depth and
+scroll anchor. The server uses `git commit --no-edit --cleanup=whitespace --file=-`
+without a shell or pathspec, preserving Git identity, hooks, signing and locks.
+Integration-operation markers are checked in the actual worktree Git directory.
+The HEAD/branch comparison is a preflight check, not a lock against external clients.
+
 Detailed UI behavior, Git subscriptions and workspace restoration are described
 in the [user guide](USER-GUIDE.md). WSL/SSH installation and transport are covered
 in [remote repositories](REMOTE-REPOSITORIES.md).

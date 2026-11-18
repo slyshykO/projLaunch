@@ -68,7 +68,7 @@ let private FileRow (tab: RepositoryTab) (selection: CommitFiles) target (file: 
                 prop.ariaPressed selected
                 prop.disabled (
                     selection.commit.IsNone
-                    && (tab.indexRequestId.IsSome || selection.requestId.IsSome)
+                    && (tab.gitWriteRequestId.IsSome || selection.requestId.IsSome)
                 )
                 prop.ariaControls $"diff-panel-{tab.id}"
                 prop.onClick (fun _ ->
@@ -145,6 +145,77 @@ let targetLabel =
     | GitProtocol.Untracked -> "Untracked · new files"
     | GitProtocol.Commit _ -> "Commit"
 
+let private CommitComposer (tab: RepositoryTab) dispatch =
+    let destination =
+        match tab.workingTree with
+        | Some(Ok status) ->
+            match status.branch, status.head with
+            | Some branch, None -> $"First commit on {branch}"
+            | Some branch, Some _ -> $"Commit to {branch}"
+            | None, Some head -> $"Detached HEAD at {head.Substring(0, min 8 head.Length)} — no branch will advance"
+            | _ -> "Create commit"
+        | _ -> "Load repository status before committing"
+
+    Html.div
+        [
+            prop.className "mb-4 rounded border border-base-300 p-3 space-y-2"
+            prop.ariaLabel "Create commit"
+            prop.children
+                [
+                    Html.h3 [ prop.className "font-semibold text-sm break-words"; prop.text destination ]
+                    Html.p
+                        [
+                            prop.className "text-xs text-base-content/60"
+                            prop.text
+                                $"Includes all Staged changes ({stagedFileCount tab} files), regardless of checkboxes. Review their diffs below."
+                        ]
+                    Html.label
+                        [
+                            prop.htmlFor $"commit-message-{tab.id}"
+                            prop.className "block text-sm"
+                            prop.text "Commit message"
+                        ]
+                    Html.textarea
+                        [
+                            prop.id $"commit-message-{tab.id}"
+                            prop.className "textarea textarea-bordered w-full min-h-24 font-mono text-sm"
+                            prop.placeholder "Summary\n\nOptional description"
+                            prop.value tab.commitDraft.message
+                            prop.disabled tab.commitDraft.requestId.IsSome
+                            prop.onChange (fun (value: string) -> dispatch (EditCommitMessage(tab.id, value)))
+                        ]
+                    Html.button
+                        [
+                            prop.type' "button"
+                            prop.className "btn btn-sm btn-primary"
+                            prop.disabled (not (canCreateCommit tab))
+                            prop.ariaBusy tab.commitDraft.requestId.IsSome
+                            prop.text (
+                                if tab.commitDraft.requestId.IsSome then
+                                    "Committing…"
+                                else
+                                    $"Commit staged ({stagedFileCount tab})"
+                            )
+                            prop.onClick (fun _ -> dispatch (CreateCommit tab.id))
+                        ]
+                    if stagedFileCount tab = 0 then
+                        Html.p
+                            [
+                                prop.className "text-xs text-base-content/60"
+                                prop.text "Stage changes to create a commit."
+                            ]
+                    match tab.workingTree with
+                    | Some(Ok status) when status.entries |> Array.exists (fun entry -> entry.kind = "conflict") ->
+                        Html.p
+                            [
+                                prop.role "alert"
+                                prop.className "text-sm text-warning"
+                                prop.text "Resolve all conflicts before committing."
+                            ]
+                    | _ -> Html.none
+                ]
+        ]
+
 [<ReactMemoComponent>]
 let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
     let headerContent =
@@ -207,7 +278,7 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                     [
                         prop.type' "button"
                         prop.className "btn btn-xs btn-outline mt-2"
-                        prop.disabled (tab.history.requestId.IsSome || tab.indexRequestId.IsSome)
+                        prop.disabled (tab.history.requestId.IsSome || tab.gitWriteRequestId.IsSome)
                         prop.text "Refresh changes"
                         prop.onClick (fun _ -> dispatch (RefreshRepositoryHistory tab.id))
                     ]
@@ -217,15 +288,36 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                         prop.className "mt-2 text-xs text-base-content/60"
                         prop.text "Stage / unstage whole files. Unstage keeps working files intact."
                     ]
-            if tab.indexRequestId.IsSome then
+            if tab.gitWriteRequestId.IsSome then
                 Html.p
                     [
                         prop.role "status"
                         prop.className "mt-2 text-sm"
-                        prop.text "Updating index…"
+                        prop.text (
+                            if tab.commitDraft.requestId.IsSome then
+                                "Creating commit…"
+                            else
+                                "Updating index…"
+                        )
                     ]
             match tab.indexError with
             | Some error ->
+                Html.p
+                    [
+                        prop.role "alert"
+                        prop.className "mt-2 text-sm text-error whitespace-pre-wrap break-words"
+                        prop.text error
+                    ]
+            | None -> Html.none
+            match tab.commitDraft.outcome with
+            | Some(Ok result) ->
+                Html.p
+                    [
+                        prop.role "status"
+                        prop.className "mt-2 text-sm text-success break-all"
+                        prop.text $"Created commit {result.oid}"
+                    ]
+            | Some(Error error) ->
                 Html.p
                     [
                         prop.role "alert"
@@ -268,6 +360,9 @@ let Panel (tab: RepositoryTab) (dispatch: Msg -> unit) =
                         prop.text "Select a commit or uncommitted changes to view changed files."
                     ]
             | Some selection ->
+                if selection.commit.IsNone then
+                    CommitComposer tab dispatch
+
                 let isLoading =
                     selection.requestId.IsSome
                     || (not selection.hasLoaded && selection.error.IsNone)

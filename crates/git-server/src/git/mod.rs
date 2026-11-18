@@ -1,4 +1,5 @@
 mod branches;
+mod commit;
 mod diff;
 mod history;
 mod index;

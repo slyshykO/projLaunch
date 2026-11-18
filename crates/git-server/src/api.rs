@@ -38,6 +38,7 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
     let patch = session.clone();
     let stage = session.clone();
     let unstage = session.clone();
+    let commit = session.clone();
     let subscribe = session.clone();
     let unsubscribe = session.clone();
     JsonRpc::new()
@@ -70,6 +71,7 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                         "git.diff",
                         "git.stage",
                         "git.unstage",
+                        "git.commit",
                         "git.cancel",
                     ]
                     .into_iter()
@@ -215,6 +217,15 @@ pub fn git_api(session: Arc<Session>) -> JsonRpc {
                 async {
                     let operation = session.operation(&params.operation_id)?;
                     session.repo(&params.repo_id)?.change_index(false, &params.target, &params.paths, &operation.cancel).await
+                }.await.map_err(rpc_error)
+            }
+        })
+        .add("git.commit", move |params: CommitParams| {
+            let session = commit.clone();
+            async move {
+                async {
+                    let operation = session.operation(&params.operation_id)?;
+                    session.repo(&params.repo_id)?.commit(&params, &operation.cancel).await
                 }.await.map_err(rpc_error)
             }
         })

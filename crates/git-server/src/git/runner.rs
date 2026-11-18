@@ -148,6 +148,7 @@ impl GitRunner {
         let mut stderr = child.stderr.take().unwrap();
         let stdin = child.stdin.take();
         let mut input_done = input.is_none();
+        let mut input_error = None;
         let write_input = async move {
             if let Some(input) = input {
                 let mut stdin = stdin.context("Git stdin is not piped")?;
@@ -174,7 +175,15 @@ impl GitRunner {
                     _ = cancel.cancelled() => bail!("Operation cancelled"),
                     _ = &mut deadline => bail!("Git command timed out"),
                     result = &mut write_input, if !input_done => {
-                        result?;
+                        match result {
+                            Err(error) if error.downcast_ref::<std::io::Error>()
+                                .is_some_and(|error| error.kind() == std::io::ErrorKind::BrokenPipe) => {
+                                // Git can reject an index lock or identity before reading stdin.
+                                // Drain stderr and report that error instead of a pipe race.
+                                input_error = Some(error);
+                            }
+                            result => result?,
+                        }
                         input_done = true;
                     },
                     n = stdout.read(&mut out), if !out_done => {
@@ -230,6 +239,9 @@ impl GitRunner {
                 String::from_utf8_lossy(&errors).trim()
             );
         }
+        if let Some(error) = input_error {
+            return Err(error);
+        }
         Ok(Output {
             bytes,
             truncated,
@@ -255,6 +267,10 @@ mod tests {
             return;
         };
         let mode = std::env::var("PROJLAUNCH_TEST_MODE").unwrap();
+        if mode == "reject-input" {
+            eprintln!("Rejected before reading stdin");
+            std::process::exit(1);
+        }
         let mut heartbeat = fs::File::create(marker).unwrap();
         for _ in 0..3000 {
             heartbeat.write_all(b".").unwrap();
@@ -300,6 +316,28 @@ mod tests {
         })
         .await
         .unwrap();
+    }
+
+    #[tokio::test]
+    async fn early_failure_preserves_stderr_when_stdin_pipe_closes() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut command = fixture(&dir.path().join("unused"), "reject-input");
+        command.stdin(Stdio::piped());
+        let error = GitRunner::default()
+            .execute(
+                command,
+                Some(&vec![b'x'; 1024 * 1024]),
+                &CancellationToken::new(),
+                8192,
+                false,
+                false,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("Rejected before reading stdin"),
+            "{error}"
+        );
     }
 
     async fn assert_stopped(marker: &Path) {

@@ -135,6 +135,8 @@ type LogPage =
         nextCursor: string option
     }
 
+type CommitResult = { oid: string }
+
 type DiffTarget =
     | Unstaged
     | Staged

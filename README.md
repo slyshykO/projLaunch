@@ -13,11 +13,12 @@ WSL and SSH repositories from one interface.
 - Find local and remote branches and inspect their latest commits.
 - View changed files, unified diffs and staged, unstaged or untracked changes.
 - Stage or unstage whole files individually, by selection or by file group.
+- Create commits from staged changes with a message and clear success/error feedback.
 - Work with several repositories in separate tabs and resize the file panels.
 - Receive automatic Git updates while keeping your selection and scroll position.
 - Restore tabs, selected commits, open diffs, file-panel sizes and loaded history after restarting.
 
 Git functionality currently covers viewing, monitoring and staging changes.
-Creating commits, switching branches and remote synchronization are planned.
+Switching branches and remote synchronization are planned.
 
 [Documentation](docs/README.md) · [Development and plans](AGENTS.md)

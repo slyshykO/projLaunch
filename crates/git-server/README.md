@@ -189,6 +189,7 @@ notifications have no side effects. Batch requests return `-32005`.
 | `git.log` | `repoId`, `operationId`, optional `cursor`, `limit` | commits and optional `nextCursor` |
 | `git.diffFiles` | `repoId`, `operationId`, `target` | paths, rename source and status |
 | `git.diff` | `repoId`, `operationId`, `target`, `path` | text, binary/truncated/untracked flags |
+| `git.commit` | `repoId`, `operationId`, `message`, `expectedHead`, `expectedBranch` | `{ "oid": "..." }` |
 | `git.cancel` | `operationId` | whether an active operation was found |
 
 `operationId` is a caller-generated unique string (1–128 bytes), independent of
@@ -274,6 +275,30 @@ Directory expansion into other changed paths is rejected. No shell, `--force`,
 
 See the official [git-add](https://git-scm.com/docs/git-add) and
 [git-reset](https://git-scm.com/docs/git-reset) pathspec documentation.
+
+## Creating commits
+
+Additive protocol v1 capability `git.commit` accepts a message and the reviewed
+`expectedHead`/`expectedBranch` (null for unborn HEAD / detached branch), plus
+`repoId` and `operationId`. It creates an ordinary commit from the entire index
+with `git commit --no-edit --cleanup=whitespace --file=-`. Message text travels
+through stdin; no shell, automatic staging, pathspec, amend, empty-commit option,
+hook bypass or signing override is used. Message validation requires nonblank
+text, no NUL and at most 65536 UTF-8 bytes. Comment lines beginning with `#` remain.
+
+The server rejects an empty staged diff, unresolved conflicts, changed HEAD/branch,
+and merge/rebase/cherry-pick/revert/sequencer markers in the worktree's actual Git
+directory (including linked worktrees). The check does not lock external Git clients;
+index/HEAD can still change afterwards, and configured hooks retain normal Git
+semantics. The result reads HEAD's full OID after Git reports success; concurrent
+external commits or hooks that move HEAD can affect this observed OID.
+
+Reopen by root after reconnect. Refresh history, branches, status and working
+diffs after **both** success and failure; never retry automatically. Cancellation,
+the normal 30-second command timeout, disconnect or a failed post-commit HEAD
+read can leave a created commit without a successful response. Git owns locks;
+the server never deletes an existing lock file. Hooks and signing run on the
+endpoint and must work without an interactive editor/terminal.
 
 ## Repository subscriptions
 

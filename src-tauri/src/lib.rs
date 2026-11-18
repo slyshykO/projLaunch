@@ -256,6 +256,7 @@ pub fn run() {
             git_host::git_diff,
             git_host::git_stage,
             git_host::git_unstage,
+            git_host::git_commit,
             git_host::git_cancel,
             git_host::git_disconnect
         ])

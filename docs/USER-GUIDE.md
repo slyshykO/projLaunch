@@ -177,6 +177,37 @@ than silently including other files. In particular, replacing a file with a
 directory can require handling that transition outside this whole-file UI.
 Submodule staging updates its recorded commit only, not files inside it.
 
+### Creating commits
+
+Select **Uncommitted changes**, review the **Staged** file list and open individual
+diffs, then enter a **Commit message** and click **Commit staged**. The first line
+is the summary; additional lines can hold a description. The commit includes the
+entire index, regardless of the stage/unstage checkboxes. Unstaged changes and
+untracked files are not added. The form shows the current branch, the first-commit
+state or a detached HEAD warning. The server rejects a changed HEAD/branch so you
+can review the refreshed destination before trying again.
+
+A nonblank message and staged changes are required. Unresolved conflicts and
+ongoing merge, rebase, cherry-pick or revert operations must be handled with Git
+outside the app first. Commits use the identity, hooks and signing configuration
+on the selected local/WSL/SSH endpoint. Failures such as missing identity, hook
+rejection, signing failure or an index lock are displayed in the panel.
+
+During a commit, further writes and refreshes wait for its response. On success,
+the panel shows the commit OID and clears the message. History, branches, status,
+file groups and any remaining working diff refresh after either success or error.
+On error the message stays available; check history before retrying because a
+timeout or lost response can occur after Git has created the commit. Writes are
+never automatically retried. Normal window closing waits for pending Git writes.
+
+Drafts and commit feedback survive switching, closing and reopening repository
+tabs during the current app session. They are not saved across app restarts.
+Messages are limited to 65536 UTF-8 bytes and cannot contain NUL. Git trims excess
+whitespace while preserving lines beginning with `#`. External Git clients and
+hooks can change the index after review; the commit uses the index Git sees when
+it executes. Amend, empty commits and integration-operation continuation are not
+available in this form.
+
 When a project is opened, the app updates only its `lastOpened` value. A late
 launch completion cannot recreate a deleted project or overwrite edited fields.
 
@@ -199,7 +230,7 @@ Failed checks are shown as unavailable, never as clean.
 
 ## Current Limitations
 
-- Git supports viewing, observing and whole-file stage/unstage. Commits, branch changes, remote synchronization and partial staging are not implemented yet.
+- Git supports viewing, observing, whole-file stage/unstage and ordinary commits. Branch changes, remote synchronization, integration-operation continuation and partial staging are not implemented yet.
 - Remote launch options are only wired up for VS Code.
 - Remote Git supports x86_64 Linux with glibc (Ubuntu 22.04 or compatible); remote Windows, macOS and ARM64 binaries are not supported.
 - Visual Studio launch paths are currently hard-coded for Windows installs.

@@ -72,6 +72,7 @@ node scripts/tests/test-repository-history.mjs
 node scripts/tests/test-commit-graph.mjs
 node scripts/tests/test-commit-files.mjs
 node scripts/tests/test-commit-diff.mjs
+node scripts/tests/test-create-commit.mjs
 node scripts/tests/test-working-tree.mjs
 node scripts/tests/test-index-changes.mjs
 node scripts/tests/test-workspace-state.mjs
@@ -100,6 +101,15 @@ and HEAD contents for partial changes, deletions, new/binary/literal files,
 unborn HEAD, renames, conflicts, invalid/stale selections and external index locks.
 The opt-in WSL integration test also stages/unstages a Unicode path and verifies
 that its working contents remain intact.
+Commit-creation checks cover message validation, all-index scope, local/WSL/SSH
+routing, shared write exclusion, stale diffs, history/branch refresh, retained
+drafts and errors across tab closure. Real Git/RPC tests verify exact commit trees,
+parents and messages, unborn/detached HEAD, partial/untracked changes, stale HEAD
+and branch, operation markers, index locks, identity, hooks and signing failures.
+The runner also tests stderr preservation when Git exits before reading stdin.
+If the environment places a `.git` entry directly in `/tmp`, use a separate
+temporary root, for example `TMPDIR=/var/tmp`, for Rust tests; discovery fixtures
+otherwise see that ancestor as an extra repository.
 History checks cover paging, duplicate requests, independent tabs, late replies
 after closing a tab, empty repositories, failed reads and session recovery.
 Commit file checks cover selection races, initial/merge commits, parent changes,

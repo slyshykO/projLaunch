@@ -188,6 +188,24 @@ module Git =
                 "paths" ==> paths
             ]
 
+    let commit
+        endpoint
+        repoId
+        operationId
+        (message: string)
+        (status: GitProtocol.Status)
+        : JS.Promise<GitProtocol.CommitResult> =
+        invoke
+            endpoint
+            "git_commit"
+            [
+                "repoId" ==> repoId
+                "operationId" ==> operationId
+                "message" ==> message
+                "expectedHead" ==> status.head
+                "expectedBranch" ==> status.branch
+            ]
+
     let cancel (endpoint: GitProtocol.Endpoint option) (operationId: string) : JS.Promise<bool> =
         invoke endpoint "git_cancel" [ "operationId" ==> operationId ]
 
