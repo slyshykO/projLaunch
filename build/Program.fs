@@ -333,7 +333,7 @@ module Build =
             let npmRes =
                 BuildUtils.runCmd (Config.shell ()) [ Config.shellCmdArg (); "npm"; "update" ]
 
-            let cargoRes =
+            let tauriSrcRes =
                 BuildUtils.runCmd
                     (Config.shell ())
                     [
@@ -342,6 +342,17 @@ module Build =
                         "update"
                         "--manifest-path"
                         "./src-tauri/Cargo.toml"
+                    ]
+
+            let cratesRes =
+                BuildUtils.runCmd
+                    (Config.shell ())
+                    [
+                        Config.shellCmdArg ()
+                        "cargo"
+                        "update"
+                        "--manifest-path"
+                        "./crates/Cargo.toml"
                     ]
 
             let dotnetRes =
@@ -359,7 +370,7 @@ module Build =
                             "--outdated"
                         ]
 
-            npmRes + cargoRes + dotnetRes
+            npmRes + tauriSrcRes + dotnetRes + cratesRes
         with ex ->
             Print.printlnRed $"Error during update: {ex.Message}"
             AppResult.Failure
