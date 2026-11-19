@@ -2,6 +2,32 @@
 
 [Documentation index](README.md) · [Project overview](../README.md) · [Development entry point](../AGENTS.md)
 
+## Updating A Linux Installation
+
+If ProjLaunch is already installed in `~/bin/projLaunch/`, close the app and
+extract the new Linux release into that same directory. Replace the archive path
+and `VERSION` below with the release you downloaded:
+
+```bash
+tar -xzf /path/to/projLaunch-VERSION-linux-x64.tar.gz -C ~/bin/projLaunch
+```
+
+This overwrites the previous version. Keep the extracted `binaries/` directory
+beside the executable; it contains the Git server. An existing desktop shortcut
+pointing to this installation continues to work without reinstalling it.
+
+To launch manually:
+
+```bash
+~/bin/projLaunch/projLaunch
+```
+
+If you have not registered the desktop shortcut yet, run:
+
+```bash
+~/bin/projLaunch/install-desktop.sh
+```
+
 ## What The App Does
 
 The app currently lets you:
