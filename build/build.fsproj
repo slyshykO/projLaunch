@@ -11,6 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="obj/hashes.fs" />
+    <Compile Include="AppResult.fs" />
     <Compile Include="SelfBuild.fs" />
     <Compile Include="Print.fs" />
     <Compile Include="Versioning.fs" />

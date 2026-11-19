@@ -189,10 +189,10 @@ let private runLinux buildApplication =
         Print.printlnGreen $"Release archive: {archive}"
         0
 
-let run buildApplication distribution =
+let run buildApplication wslDistro =
     try
         if OperatingSystem.IsLinux() then
-            if Option.isSome distribution then
+            if Option.isSome wslDistro then
                 failwith "--wsl-distro is only used on Windows"
 
             runLinux buildApplication
@@ -213,14 +213,14 @@ let run buildApplication distribution =
                 failwith "Publishing requires the x86_64-pc-windows-msvc Tauri target"
 
             // Fail early if WSL/toolchains are unavailable. The app build also builds the native sidecar.
-            if GitServer.build true (GitServer.Ubuntu22 distribution) <> 0 then
-                1
+            if GitServer.build true (GitServer.Ubuntu22 wslDistro) <> 0 then
+                AppResult.Failure
             elif buildApplication () <> 0 then
-                1
+                AppResult.Failure
             else
                 let archive = createArchive Versioning.projectRoot
                 Print.printlnGreen $"Release archive: {archive}"
-                0
+                AppResult.Success
     with ex ->
         Print.printlnRed $"Publish failed: {ex.Message}"
-        1
+        AppResult.Failure

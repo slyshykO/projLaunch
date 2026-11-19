@@ -1,11 +1,4 @@
-﻿module AppResult =
-    [<Literal>]
-    let Success = 0
-
-    [<Literal>]
-    let Failure = 1
-
-module Args =
+﻿module Args =
     type SubCommand =
         | Build = 0
         | Clean = 1
@@ -440,7 +433,7 @@ module Main =
         match SelfBuild.selfCheck () with
         | SelfBuild.NeedToRebuild ->
             Print.printlnRed "Self-build is required. Run build.bat to rebuild the helper."
-            42
+            AppResult.NeedToRebuild
         | SelfBuild.AllGood ->
             if Args.subCommand argv = Some Args.SubCommand.Version then
                 printVersion argv
