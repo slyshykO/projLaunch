@@ -110,9 +110,11 @@ What these do:
   Add `--release` for optimized output. See the [Git server guide](../crates/git-server/README.md)
   for prerequisites and output paths. This is an explicit build target; ordinary
   app/native sidecar builds do not require WSL.
-- `set-version X.Y.Z` updates project versions, creates a `Release vX.Y.Z` commit,
-  and creates the local Git tag `vX.Y.Z`. The version must exceed every existing
-  local release tag (`vX.Y.Z` or `X.Y.Z`), compared numerically. It does not push.
+- `set-version X.Y.Z` requires a clean checkout on `main`, updates project versions,
+  creates a `Release vX.Y.Z` commit and Git tag `vX.Y.Z`, then runs `git push`
+  followed by `git push --tags` using the repository's Git push configuration.
+  All local tags are pushed. The version must exceed every existing local release
+  tag (`vX.Y.Z` or `X.Y.Z`), compared numerically.
 - `version` prints the current Git version as one line, using the same format as
   About (`X.Y.Z`, optional commit distance/hash, and `+` for tracked changes).
   It does not synchronize manifests, commit or tag. Extra arguments are rejected.
@@ -226,8 +228,17 @@ version fields can have stricter rules: for MSI, `bundle.windows.wix.version`
 requires a numeric `major.minor.patch.build` value and may need an explicit override
 when enabling installer bundling (currently disabled).
 
-Before `set-version`, commit or stash changes other than project-version updates.
-Version-only changes left by a build are accepted. Existing tags (with or without
+Before `set-version`, check out `main` and commit or stash all changes, including
+version-only updates left by a build and untracked files (use `git stash -u` to
+include them). Staged and unstaged changes are both rejected; ignored build outputs
+are allowed. Detached HEAD and other branches are rejected before writing files.
+Configure the remote/upstream so `git push` from `main` works. If either push fails,
+the command reports failure and keeps the local release commit and tag. The branch
+may already be pushed when pushing tags fails. Resolve the reported Git error,
+then retry `git push` and `git push --tags`; do not rerun `set-version` for the same
+release or force-push conflicting tags.
+
+Existing tags (with or without
 `v`), invalid release numbers and versions no higher than the maximum existing
 release tag are rejected before writing files. All local release tags are checked,
 including tags on other branches; the first release is allowed if none exist.

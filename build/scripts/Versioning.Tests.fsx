@@ -42,6 +42,8 @@ let read path =
     File.ReadAllText(Path.Combine(fixture, path))
 
 let run args = git fixture args
+let remote = Path.Combine(fixture, ".git", "release-remote.git")
+let remoteGit args = git remote args
 
 let commit () =
     run [ "add"; "." ] |> ignore
@@ -65,7 +67,7 @@ let snapshot () =
             path, File.ReadAllBytes fullPath, File.GetLastWriteTimeUtc fullPath)
 
     run [ "rev-parse"; "HEAD" ],
-    run [ "show-ref"; "--tags" ],
+    run [ "for-each-ref"; "--format=%(refname) %(objectname)"; "refs/tags" ],
     run [ "status"; "--porcelain" ],
     File.ReadAllBytes(Path.Combine(fixture, ".git", "index")),
     files
@@ -82,6 +84,26 @@ let expectDowngradeRejected version latest =
 
     check (error.Contains $"must be greater than the latest release {latest}") $"Wrong rejection for {version}: {error}"
     check (snapshot () = before) "Rejected version changed files, index, timestamps, HEAD or tags"
+
+let expectReleaseRejected (expectedMessage: string) =
+    let before = snapshot ()
+    let remoteBefore = remoteGit [ "show-ref" ]
+
+    let error =
+        try
+            Versioning.setVersion fixture "2.0.0"
+            ""
+        with ex ->
+            ex.Message
+
+    check (error.Contains expectedMessage) $"Wrong release rejection: {error}"
+    check (snapshot () = before) "Rejected release changed files, index, timestamps, HEAD or tags"
+    check (remoteGit [ "show-ref" ] = remoteBefore) "Rejected release changed remote refs"
+
+let checkPushed version =
+    let head = run [ "rev-parse"; "HEAD" ]
+    check (remoteGit [ "rev-parse"; "refs/heads/main" ] = head) "Release commit was not pushed"
+    check (remoteGit [ "rev-parse"; "refs/tags/v" + version ] = head) "Release tag was not pushed"
 
 let rootVersion path =
     use json = JsonDocument.Parse(read path)
@@ -133,13 +155,39 @@ try
 
     write "nested/package.json" nested
     write "notes.txt" "original"
-    run [ "init" ] |> ignore
+    run [ "init"; "--initial-branch=main" ] |> ignore
     run [ "config"; "user.name"; "Versioning Test" ] |> ignore
     run [ "config"; "user.email"; "versioning-test@example.invalid" ] |> ignore
     run [ "config"; "commit.gpgsign"; "false" ] |> ignore
     run [ "config"; "core.autocrlf"; "false" ] |> ignore
     run [ "config"; "core.hooksPath"; Path.Combine(fixture, "no-hooks") ] |> ignore
     commit ()
+    run [ "init"; "--bare"; remote ] |> ignore
+
+    remoteGit [ "config"; "core.hooksPath"; Path.Combine(remote, "no-hooks") ]
+    |> ignore
+
+    run [ "remote"; "add"; "origin"; remote ] |> ignore
+    run [ "config"; "push.default"; "simple" ] |> ignore
+    run [ "push"; "--set-upstream"; "origin"; "main" ] |> ignore
+
+    run [ "checkout"; "-b"; "feature" ] |> ignore
+    expectReleaseRejected "requires the main branch"
+    run [ "checkout"; "--detach" ] |> ignore
+    expectReleaseRejected "requires the main branch"
+    run [ "checkout"; "main" ] |> ignore
+    write "untracked.txt" "untracked release input"
+    // The release guard must override a user's hidden-untracked preference.
+    run [ "config"; "status.showUntrackedFiles"; "no" ] |> ignore
+    expectReleaseRejected "requires a clean Git checkout"
+    check (read "untracked.txt" = "untracked release input") "Rejected release altered untracked files"
+    run [ "config"; "--unset"; "status.showUntrackedFiles" ] |> ignore
+    File.Delete(Path.Combine(fixture, "untracked.txt"))
+    write "notes.txt" "unstaged change"
+    expectReleaseRejected "requires a clean Git checkout"
+    run [ "add"; "notes.txt" ] |> ignore
+    expectReleaseRejected "requires a clean Git checkout"
+    run [ "restore"; "--source=HEAD"; "--staged"; "--worktree"; "." ] |> ignore
     expectFailure (fun () -> Versioning.sync fixture |> ignore) "Missing tags should fail"
 
     for invalid in [ "v1.2.3"; "1.2"; "1.2.3-beta"; "01.2.3"; "1.2.3\n"; "-1.2.3" ] do
@@ -150,6 +198,7 @@ try
     let initial = run [ "rev-parse"; "HEAD" ]
     Versioning.setVersion fixture "1.2.3"
     checkVersions "1.2.3"
+    checkPushed "1.2.3"
 
     check
         (read "nested/package.json" = nested.Replace("0.0.1", "1.2.3"))
@@ -232,9 +281,19 @@ try
     check ((Versioning.manifestVersion fixture).EndsWith(".dirty")) "Hidden staged edits must mark the build dirty"
     expectFailure (fun () -> Versioning.setVersion fixture "2.0.0") "Hidden staged manifest changes accepted"
     run [ "add"; "package.json" ] |> ignore
-    // Version-only drift left by a build is safe to include in the release.
+    // Even version-only drift must be committed before releasing.
     write "package.json" (originalPackage.Replace(cleanSnapshot, "2.0.0"))
+    expectReleaseRejected "requires a clean Git checkout"
+    run [ "add"; "." ] |> ignore
+    expectReleaseRejected "requires a clean Git checkout"
+    commit ()
     Versioning.setVersion fixture "2.0.0"
+    checkPushed "2.0.0"
+
+    check
+        (remoteGit [ "rev-parse"; "refs/tags/unrelated-tag" ] = run [ "rev-parse"; "unrelated-tag" ])
+        "Other tags were not pushed"
+
     checkVersions "2.0.0"
     check (run [ "status"; "--porcelain" ] = "") "Version-only drift was not committed"
 
@@ -244,6 +303,7 @@ try
     check (Versioning.gitVersion fixture = "2.0.0") "Legacy tag not supported"
     expectFailure (fun () -> Versioning.setVersion fixture "2.0.0") "Legacy tag collision accepted"
     run [ "tag"; "-d"; "2.0.0" ] |> ignore
+    remoteGit [ "tag"; "-d"; "v2.0.0" ] |> ignore
     let beforeEmptyRelease = run [ "rev-parse"; "HEAD" ]
     Versioning.setVersion fixture "2.0.0"
 
@@ -272,6 +332,10 @@ try
 
     // A failed automatic commit restores the clean checkout and can be retried.
     write ".git/test-hooks/pre-commit" "#!/bin/sh\nexit 1\n"
+
+    if not (OperatingSystem.IsWindows()) then
+        let hook = Path.Combine(fixture, ".git", "test-hooks", "pre-commit")
+        File.SetUnixFileMode(hook, File.GetUnixFileMode(hook) ||| UnixFileMode.UserExecute)
 
     run [ "config"; "core.hooksPath"; Path.Combine(fixture, ".git", "test-hooks") ]
     |> ignore
@@ -354,6 +418,48 @@ try
 
     run [ "tag"; "v11.0.0"; otherHistory ] |> ignore
     expectDowngradeRejected "10.0.1" "11.0.0"
+
+    // A failed branch push preserves the local release and skips pushing tags.
+    run [ "config"; "push.default"; "nothing" ] |> ignore
+    let remoteBeforeFailure = remoteGit [ "show-ref" ]
+
+    let pushError =
+        try
+            Versioning.setVersion fixture "12.0.0"
+            ""
+        with ex ->
+            ex.Message
+
+    check (pushError.Contains "git push failed") $"Branch push failure was not reported: {pushError}"
+    check (pushError.Contains "Do not rerun set-version") "Missing push recovery guidance"
+    check (run [ "rev-parse"; "HEAD" ] = run [ "rev-parse"; "v12.0.0" ]) "Failed push lost local release"
+    check (run [ "status"; "--porcelain" ] = "") "Failed push dirtied checkout"
+    check (remoteGit [ "show-ref" ] = remoteBeforeFailure) "Tags were pushed after a failed branch push"
+    run [ "config"; "push.default"; "simple" ] |> ignore
+    run [ "push" ] |> ignore
+    run [ "push"; "--tags" ] |> ignore
+    checkPushed "12.0.0"
+
+    // A tag collision can fail after the branch push has already succeeded.
+    let oldRemoteHead = remoteGit [ "rev-parse"; "refs/heads/main" ]
+    remoteGit [ "tag"; "v13.0.0"; oldRemoteHead ] |> ignore
+
+    let tagPushError =
+        try
+            Versioning.setVersion fixture "13.0.0"
+            ""
+        with ex ->
+            ex.Message
+
+    check (tagPushError.Contains "git push --tags failed") $"Tag push failure was not reported: {tagPushError}"
+    check (tagPushError.Contains "exist locally") "Tag push failure lost local-state guidance"
+
+    check
+        (remoteGit [ "rev-parse"; "refs/heads/main" ] = run [ "rev-parse"; "HEAD" ])
+        "Branch push did not precede tags"
+
+    check (run [ "rev-parse"; "v13.0.0" ] = run [ "rev-parse"; "HEAD" ]) "Failed tag push lost local tag"
+    check (remoteGit [ "rev-parse"; "refs/tags/v13.0.0" ] = oldRemoteHead) "Existing remote tag was overwritten"
 
     printfn "Versioning regression checks passed."
 finally

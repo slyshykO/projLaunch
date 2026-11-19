@@ -333,6 +333,26 @@ let sync root =
 
 let setVersion root version =
     validateVersion version
+
+    let branch = git root [ "rev-parse"; "--abbrev-ref"; "HEAD" ]
+
+    if branch <> "main" then
+        failwith "set-version requires the main branch. Check out main before creating a release."
+
+    if
+        git
+            root
+            [
+                "status"
+                "--porcelain=v1"
+                "--untracked-files=all"
+                "--ignore-submodules=none"
+            ]
+        <> ""
+    then
+        failwith
+            "set-version requires a clean Git checkout. Commit or stash all changes, including untracked files and version updates."
+
     let tag = "v" + version
     let existingTags = tags root
 
@@ -356,17 +376,9 @@ let setVersion root version =
     git root [ "var"; "GIT_AUTHOR_IDENT" ] |> ignore
     git root [ "var"; "GIT_COMMITTER_IDENT" ] |> ignore
     let transforms = transformations root version
-    // Build synchronization may already have changed versions. Accept only those
-    // changes, never silently include other edits (even in a manifest) in a release.
-    let dirtyPaths = dirtyPaths root
-
-    for path in dirtyPaths do
-        if hasNonVersionChanges root transforms path then
-            failwith $"Commit or stash non-version changes in {path} before set-version."
-
     let edits = changes root transforms
     apply root edits
-    let paths = (edits |> List.map fst) @ dirtyPaths |> List.distinct
+    let paths = edits |> List.map fst
 
     if not (List.isEmpty paths) then
         git root ([ "add"; "--" ] @ paths) |> ignore
@@ -376,3 +388,12 @@ let setVersion root version =
 
     git root [ "tag"; tag ] |> ignore
     Console.WriteLine $"Created release commit and tag {tag}"
+
+    try
+        git root [ "push" ] |> Console.WriteLine
+        git root [ "push"; "--tags" ] |> Console.WriteLine
+    with ex ->
+        failwith
+            $"Release commit and tag {tag} exist locally, but pushing failed. Resolve the Git error, then retry git push and git push --tags. Do not rerun set-version for this release.\n{ex.Message}"
+
+    Console.WriteLine $"Pushed release commit and tags for {tag}"

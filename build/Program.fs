@@ -49,7 +49,8 @@ module Help =
             "  publish       Build a release archive (Windows: ZIP with both Git servers via WSL; Linux: tar.gz with the native server)"
 
         Print.println "                --wsl-distro NAME selects the Linux build distribution"
-        Print.println "  set-version X.Y.Z  Increase the release version, commit and tag vX.Y.Z"
+        Print.println "  set-version X.Y.Z  Increase the release version, commit, tag vX.Y.Z and push commit/tags"
+        Print.println "                     Requires main and a clean Git checkout"
         Print.println "  version       Print the current Git version without changing files"
         Print.println "  clean         Clean all projects/configurations, including the helper (via build.bat)"
         Print.println "  test          Reserved for test workflow"

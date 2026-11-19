@@ -52,6 +52,12 @@ dotnet fsi --exec build/scripts/GitServerProcess.Tests.fsx
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/test-clean.ps1
 ```
 
+The versioning checks create an isolated repository and a local bare remote. They
+cover release guards (`main`, clean index/worktree, untracked and version-only
+changes), commit/tag publication, and recovery from branch or tag push failures.
+They never publish to the project's remote. Commit-hook fixtures are executable
+on Unix as well as Windows.
+
 ## Frontend Regression Scripts
 
 Generate the current display version and compile the frontend before running
