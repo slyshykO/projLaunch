@@ -46,7 +46,7 @@ NUGET
     Fable.ReactDom.Types (18.2)
       Fable.React.Types (>= 18.3)
       FSharp.Core (>= 4.7.2)
-    Feliz (3.3.3)
+    Feliz (3.4)
       Fable.Core (>= 4.5)
       Fable.React.Types (>= 18.4)
       Fable.ReactDom.Types (>= 18.2)
